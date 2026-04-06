@@ -1,0 +1,21 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{.PageTitle}}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <a class="brand" href="/">Olympiad Standings</a>
+      </div>
+    </header>
+    <main class="container">
+      {{template "content" .}}
+    </main>
+  </body>
+</html>
+{{end}}

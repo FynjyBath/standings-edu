@@ -1,0 +1,18 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Группы</h1>
+</section>
+
+{{if .Groups}}
+<div class="group-list">
+  {{range .Groups}}
+  <a class="group-card" href="/standings/{{.Slug}}">
+    <span class="group-title">{{.Title}}</span>
+    <span class="group-slug">/{{.Slug}}</span>
+  </a>
+  {{end}}
+</div>
+{{else}}
+<p class="empty-hint">Что-то пошло не так.</p>
+{{end}}
+{{end}}

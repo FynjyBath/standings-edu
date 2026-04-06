@@ -1,0 +1,67 @@
+package storage
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"standings-edu/internal/domain"
+)
+
+type GeneratedLoader struct {
+	OutDir string
+}
+
+var ErrInvalidGroupSlug = errors.New("invalid group slug")
+
+func NewGeneratedLoader(outDir string) *GeneratedLoader {
+	return &GeneratedLoader{OutDir: outDir}
+}
+
+func (l *GeneratedLoader) LoadGroups() ([]domain.GeneratedGroupMeta, error) {
+	path := filepath.Join(l.OutDir, "groups.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var groups []domain.GeneratedGroupMeta
+	if err := json.Unmarshal(b, &groups); err != nil {
+		return nil, fmt.Errorf("decode groups json: %w", err)
+	}
+	return groups, nil
+}
+
+func (l *GeneratedLoader) LoadGroupStandings(slug string) (domain.GeneratedGroupStandings, error) {
+	if !isValidSlug(slug) {
+		return domain.GeneratedGroupStandings{}, ErrInvalidGroupSlug
+	}
+
+	path := filepath.Join(l.OutDir, "standings", slug+".json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return domain.GeneratedGroupStandings{}, err
+	}
+
+	var standings domain.GeneratedGroupStandings
+	if err := json.Unmarshal(b, &standings); err != nil {
+		return domain.GeneratedGroupStandings{}, fmt.Errorf("decode standings json: %w", err)
+	}
+	return standings, nil
+}
+
+func isValidSlug(slug string) bool {
+	if strings.TrimSpace(slug) == "" {
+		return false
+	}
+	if strings.Contains(slug, "/") || strings.Contains(slug, "\\") {
+		return false
+	}
+	if strings.Contains(slug, "..") {
+		return false
+	}
+	return true
+}

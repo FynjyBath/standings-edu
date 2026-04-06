@@ -1,0 +1,194 @@
+:root {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --text: #1f2937;
+  --muted: #667085;
+  --line: #d0d7e2;
+  --accent: #0b6bcb;
+  --solved-bg: #e9f9ee;
+  --solved-text: #1d7a35;
+  --attempt-bg: #fff5e8;
+  --attempt-text: #a05a00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Noto Sans", sans-serif;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef3fa 100%);
+  color: var(--text);
+}
+
+.container {
+  width: min(1240px, 100% - 2rem);
+  margin: 0 auto;
+}
+
+.site-header {
+  background: #0f172a;
+  color: #fff;
+  border-bottom: 2px solid #0b6bcb;
+}
+
+.brand {
+  display: inline-block;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0.9rem 0;
+}
+
+.page-head {
+  margin: 1.2rem 0 1rem;
+}
+
+.page-head h1 {
+  margin: 0 0 0.35rem;
+}
+
+.page-head p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.group-list {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.group-card {
+  display: block;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.group-card:hover {
+  border-color: var(--accent);
+}
+
+.group-title {
+  display: block;
+  font-weight: 700;
+}
+
+.group-slug {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+}
+
+.contest-block {
+  margin: 1.5rem 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.contest-block h2 {
+  margin: 0 0 0.8rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.standings-table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  background: #fff;
+}
+
+.standings-table th,
+.standings-table td {
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.55rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.standings-table thead th {
+  background: #f1f6ff;
+  font-weight: 700;
+}
+
+.student-col,
+.student-name {
+  text-align: left !important;
+  min-width: 260px;
+  position: sticky;
+  left: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.standings-table thead .student-col {
+  background: #eaf2ff;
+  z-index: 2;
+}
+
+.count-col,
+.solved-count {
+  min-width: 72px;
+}
+
+.subcontest-head {
+  font-size: 0.92rem;
+}
+
+.task-col a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.task-col a:hover {
+  text-decoration: underline;
+}
+
+.status-cell {
+  font-weight: 700;
+  min-width: 44px;
+}
+
+.status-cell.solved {
+  background: var(--solved-bg);
+  color: var(--solved-text);
+}
+
+.status-cell.attempted {
+  background: var(--attempt-bg);
+  color: var(--attempt-text);
+}
+
+.status-cell.none {
+  background: #fff;
+}
+
+.empty-hint {
+  color: var(--muted);
+  margin: 0.7rem 0 0;
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: calc(100% - 1rem);
+  }
+
+  .contest-block {
+    padding: 0.65rem;
+  }
+
+  .student-col,
+  .student-name {
+    min-width: 200px;
+  }
+}

@@ -1,0 +1,45 @@
+[
+  {
+    "id": "stu_1",
+    "full_name": "Иванов Иван Иванович",
+    "accounts": [
+      {
+        "site": "informatics",
+        "account_id": "436037"
+      },
+      {
+        "site": "codeforces",
+        "account_id": "tourist"
+      }
+    ]
+  },
+  {
+    "id": "stu_2",
+    "full_name": "Петров Пётр Петрович",
+    "accounts": [
+      {
+        "site": "informatics",
+        "account_id": "100500"
+      }
+    ]
+  },
+  {
+    "id": "stu_3",
+    "full_name": "Сидоров Сидор Сидорович",
+    "accounts": [
+      {
+        "site": "codeforces",
+        "account_id": "schoolboy"
+      },
+      {
+        "site": "unknown_site",
+        "account_id": "u-1"
+      }
+    ]
+  },
+  {
+    "id": "stu_4",
+    "full_name": "Смирнова Анна Сергеевна",
+    "accounts": []
+  }
+]

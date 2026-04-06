@@ -1,0 +1,61 @@
+[
+  {
+    "id": "contest_graphs",
+    "title": "Графы",
+    "subcontests": [
+      {
+        "title": "DFS и BFS",
+        "tasks": [
+          "https://site1.example/problem/1",
+          "https://site1.example/problem/2"
+        ]
+      },
+      {
+        "title": "Кратчайшие пути",
+        "tasks": [
+          "https://site2.example/tasks/abc",
+          "https://site2.example/tasks/def",
+          "https://site2.example/tasks/ghi"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "contest_dp",
+    "title": "Динамическое программирование",
+    "subcontests": [
+      {
+        "title": "Базовые задачи",
+        "tasks": [
+          "https://site4.example/dp/a",
+          "https://site4.example/dp/b"
+        ]
+      },
+      {
+        "title": "Рюкзак",
+        "tasks": [
+          "https://site4.example/dp/c"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "contest_strings",
+    "title": "Строки",
+    "subcontests": [
+      {
+        "title": "Префикс-функция",
+        "tasks": [
+          "https://site3.example/olymp/str/1",
+          "https://site3.example/olymp/str/2"
+        ]
+      },
+      {
+        "title": "Хеши",
+        "tasks": [
+          "https://site3.example/olymp/str/3"
+        ]
+      }
+    ]
+  }
+]

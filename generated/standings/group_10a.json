@@ -1,0 +1,196 @@
+{
+  "group_slug": "group_10a",
+  "group_title": "Группа 10А",
+  "contests": [
+    {
+      "id": "contest_graphs",
+      "title": "Графы",
+      "subcontests": [
+        {
+          "title": "DFS и BFS",
+          "task_count": 2,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://site1.example/problem/1",
+              "normalized_url": "https://site1.example/problem/1"
+            },
+            {
+              "label": "B",
+              "url": "https://site1.example/problem/2",
+              "normalized_url": "https://site1.example/problem/2"
+            }
+          ]
+        },
+        {
+          "title": "Кратчайшие пути",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://site2.example/tasks/abc",
+              "normalized_url": "https://site2.example/tasks/abc"
+            },
+            {
+              "label": "B",
+              "url": "https://site2.example/tasks/def",
+              "normalized_url": "https://site2.example/tasks/def"
+            },
+            {
+              "label": "C",
+              "url": "https://site2.example/tasks/ghi",
+              "normalized_url": "https://site2.example/tasks/ghi"
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "label": "A",
+          "url": "https://site1.example/problem/1",
+          "normalized_url": "https://site1.example/problem/1"
+        },
+        {
+          "label": "B",
+          "url": "https://site1.example/problem/2",
+          "normalized_url": "https://site1.example/problem/2"
+        },
+        {
+          "label": "A",
+          "url": "https://site2.example/tasks/abc",
+          "normalized_url": "https://site2.example/tasks/abc"
+        },
+        {
+          "label": "B",
+          "url": "https://site2.example/tasks/def",
+          "normalized_url": "https://site2.example/tasks/def"
+        },
+        {
+          "label": "C",
+          "url": "https://site2.example/tasks/ghi",
+          "normalized_url": "https://site2.example/tasks/ghi"
+        }
+      ],
+      "rows": [
+        {
+          "student_id": "stu_1",
+          "full_name": "Иванов Иван Иванович",
+          "solved_count": 1,
+          "statuses": [
+            "solved",
+            "attempted",
+            "none",
+            "attempted",
+            "none"
+          ]
+        },
+        {
+          "student_id": "stu_2",
+          "full_name": "Петров Пётр Петрович",
+          "solved_count": 1,
+          "statuses": [
+            "none",
+            "solved",
+            "none",
+            "none",
+            "attempted"
+          ]
+        },
+        {
+          "student_id": "stu_3",
+          "full_name": "Сидоров Сидор Сидорович",
+          "solved_count": 1,
+          "statuses": [
+            "solved",
+            "none",
+            "none",
+            "none",
+            "attempted"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contest_dp",
+      "title": "Динамическое программирование",
+      "subcontests": [
+        {
+          "title": "Базовые задачи",
+          "task_count": 2,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://site4.example/dp/a",
+              "normalized_url": "https://site4.example/dp/a"
+            },
+            {
+              "label": "B",
+              "url": "https://site4.example/dp/b",
+              "normalized_url": "https://site4.example/dp/b"
+            }
+          ]
+        },
+        {
+          "title": "Рюкзак",
+          "task_count": 1,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://site4.example/dp/c",
+              "normalized_url": "https://site4.example/dp/c"
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "label": "A",
+          "url": "https://site4.example/dp/a",
+          "normalized_url": "https://site4.example/dp/a"
+        },
+        {
+          "label": "B",
+          "url": "https://site4.example/dp/b",
+          "normalized_url": "https://site4.example/dp/b"
+        },
+        {
+          "label": "A",
+          "url": "https://site4.example/dp/c",
+          "normalized_url": "https://site4.example/dp/c"
+        }
+      ],
+      "rows": [
+        {
+          "student_id": "stu_1",
+          "full_name": "Иванов Иван Иванович",
+          "solved_count": 2,
+          "statuses": [
+            "solved",
+            "solved",
+            "none"
+          ]
+        },
+        {
+          "student_id": "stu_2",
+          "full_name": "Петров Пётр Петрович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none"
+          ]
+        },
+        {
+          "student_id": "stu_3",
+          "full_name": "Сидоров Сидор Сидорович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none"
+          ]
+        }
+      ]
+    }
+  ]
+}

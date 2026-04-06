@@ -1,0 +1,59 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>{{.Standings.GroupTitle}}</h1>
+  <p>Slug: <code>{{.Standings.GroupSlug}}</code></p>
+</section>
+
+{{if .Standings.Contests}}
+  {{range .Standings.Contests}}
+  <section class="contest-block">
+    <h2>{{.Title}}</h2>
+    <div class="table-wrap">
+      <table class="standings-table">
+        <thead>
+          <tr>
+            <th rowspan="2" class="student-col">Ученик</th>
+            <th rowspan="2" class="count-col">Решено</th>
+            {{if .Subcontests}}
+              {{range .Subcontests}}
+              <th colspan="{{.TaskCount}}" class="subcontest-head">{{.Title}}</th>
+              {{end}}
+            {{end}}
+          </tr>
+          <tr>
+            {{if .Subcontests}}
+              {{range .Subcontests}}
+                {{range .Tasks}}
+                <th class="task-col">
+                  <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>
+                </th>
+                {{end}}
+              {{end}}
+            {{end}}
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Rows}}
+          <tr>
+            <td class="student-name">{{.FullName}}</td>
+            <td class="solved-count">{{.SolvedCount}}</td>
+            {{range .Statuses}}
+            <td class="status-cell {{statusClass .}}">{{statusSymbol .}}</td>
+            {{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if not .Rows}}
+    <p class="empty-hint">В группе нет учеников.</p>
+    {{end}}
+    {{if not .Tasks}}
+    <p class="empty-hint">В контесте нет задач.</p>
+    {{end}}
+  </section>
+  {{end}}
+{{else}}
+<p class="empty-hint">Для этой группы не назначены контесты.</p>
+{{end}}
+{{end}}

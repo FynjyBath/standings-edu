@@ -4,21 +4,73 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>{{.PageTitle}}</title>
+    <script>
+      (function () {
+        var storageKey = "nemalo-theme";
+        var theme = null;
+        try {
+          theme = localStorage.getItem(storageKey);
+        } catch (e) {}
+        if (theme !== "light" && theme !== "dark") {
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          theme = prefersDark ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css" />
 
-    <link rel="icon" href="/static/favicon.png" sizes="any">
-    <link rel="shortcut icon" href="/static/favicon.png">
+    <link rel="icon" href="/static/favicon.png" sizes="any" />
+    <link rel="shortcut icon" href="/static/favicon.png" />
   </head>
   <body>
     <header class="site-header">
-      <div class="container">
+      <div class="container header-inner">
         <a class="brand" href="/standings">Nemalo Standings</a>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Переключить тему" aria-pressed="false">
+          <span class="theme-toggle__label">Тема</span>
+          <span class="theme-toggle__state">Светлая</span>
+        </button>
       </div>
     </header>
     <main class="container">
       {{template "content" .}}
     </main>
+    <script>
+      (function () {
+        var storageKey = "nemalo-theme";
+        var root = document.documentElement;
+        var button = document.getElementById("theme-toggle");
+        if (!button) {
+          return;
+        }
+
+        var stateNode = button.querySelector(".theme-toggle__state");
+
+        function updateButton() {
+          var isDark = root.getAttribute("data-theme") === "dark";
+          button.setAttribute("aria-pressed", isDark ? "true" : "false");
+          if (stateNode) {
+            stateNode.textContent = isDark ? "Тёмная" : "Светлая";
+          }
+        }
+
+        button.addEventListener("click", function () {
+          var nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+          root.setAttribute("data-theme", nextTheme);
+          try {
+            localStorage.setItem(storageKey, nextTheme);
+          } catch (e) {}
+          updateButton();
+        });
+
+        updateButton();
+      })();
+    </script>
   </body>
 </html>
 {{end}}

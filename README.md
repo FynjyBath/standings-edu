@@ -19,8 +19,12 @@ go run ./cmd/generate
 Расширенный запуск:
 
 ```bash
-go run ./cmd/generate -data ./data -out ./generated -group group_10a -parallel 8 -cache-ttl 5m -informatics-creds ./data/sites/informatics_credentials.json
+go run ./cmd/generate -data ./data -out ./generated -group group_10a -parallel 8 -cache-ttl 5m -informatics-creds ./data/sites/informatics_credentials.json -informatics-state ./generated/cache/informatics_runs_state.json
 ```
+
+Примечание:
+- `-informatics-state` хранит persisted state по `run_id` для инкрементальной синхронизации Informatics между запусками;
+- по умолчанию путь: `<out>/cache/informatics_runs_state.json`.
 
 ### 2. HTTP сервер
 
@@ -61,7 +65,7 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 - `internal/sites/acmp.go`
 
 Примечания:
-- `informatics` использует вход через Moodle (`/login/index.php`) и получает посылки через `/py/problem/0/filter-runs` (без UI-пагинации);
+- `informatics` использует вход через Moodle (`/login/index.php`) и получает посылки через `/py/problem/0/filter-runs`; реализована инкрементальная синхронизация по `run_id` между запусками;
 - `codeforces` использует API `user.status`;
 - `acmp` парсит страницу пользователя `index.asp?main=user&id=...`.
 

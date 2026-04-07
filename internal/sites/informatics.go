@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 
 const defaultInformaticsBaseURL = "https://informatics.msk.ru"
 const informaticsRunsPageSize = "1000"
+const informaticsRunsParallelism = 8
 
 var errInformaticsNotAuthorized = errors.New("informatics: not authorized")
 
@@ -63,17 +65,30 @@ type InformaticsAPIClient struct {
 	loginMu   sync.Mutex
 	loggedIn  bool
 	lastLogin time.Time
+
+	statePath    string
+	stateMu      sync.Mutex
+	stateLoaded  bool
+	accountState map[string]informaticsAccountState
 }
 
 func NewInformaticsAPIClientFromFile(path string) (*InformaticsAPIClient, error) {
+	return NewInformaticsAPIClientFromFileWithState(path, "")
+}
+
+func NewInformaticsAPIClientFromFileWithState(path string, statePath string) (*InformaticsAPIClient, error) {
 	creds, err := LoadInformaticsCredentials(path)
 	if err != nil {
 		return nil, err
 	}
-	return NewInformaticsAPIClient(creds)
+	return NewInformaticsAPIClientWithState(creds, statePath)
 }
 
 func NewInformaticsAPIClient(creds InformaticsCredentials) (*InformaticsAPIClient, error) {
+	return NewInformaticsAPIClientWithState(creds, "")
+}
+
+func NewInformaticsAPIClientWithState(creds InformaticsCredentials, statePath string) (*InformaticsAPIClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(creds.BaseURL), "/")
 	if baseURL == "" {
 		baseURL = defaultInformaticsBaseURL
@@ -95,6 +110,8 @@ func NewInformaticsAPIClient(creds InformaticsCredentials) (*InformaticsAPIClien
 			Timeout: 20 * time.Second,
 			Jar:     jar,
 		},
+		statePath:    strings.TrimSpace(statePath),
+		accountState: make(map[string]informaticsAccountState),
 	}, nil
 }
 
@@ -111,40 +128,288 @@ func (c *InformaticsAPIClient) FetchUserStatuses(ctx context.Context, accountID 
 		return nil, nil, err
 	}
 
-	solvedSet := make(map[string]struct{})
-	attemptedSet := make(map[string]struct{})
-
-	page := 1
-	for {
-		resp, err := c.fetchRunsPage(ctx, accountID, page)
-		if errors.Is(err, errInformaticsNotAuthorized) {
-			if loginErr := c.ensureLoggedIn(ctx, true); loginErr != nil {
-				return nil, nil, loginErr
-			}
-			resp, err = c.fetchRunsPage(ctx, accountID, page)
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-
-		for _, run := range resp.Data {
-			if run.Problem.ID <= 0 {
-				continue
-			}
-			taskURL := c.buildTaskURL(run.Problem.ID)
-			attemptedSet[taskURL] = struct{}{}
-			if run.EjudgeStatus == 0 {
-				solvedSet[taskURL] = struct{}{}
-			}
-		}
-
-		if resp.Metadata.PageCount <= page || len(resp.Data) == 0 {
-			break
-		}
-		page++
+	state, hasState, err := c.getAccountState(accountID)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return setKeysSorted(solvedSet), setKeysSorted(attemptedSet), nil
+	solvedSet := make(map[string]struct{})
+	attemptedSet := make(map[string]struct{})
+	if hasState {
+		mergeURLsIntoSet(solvedSet, state.Solved)
+		mergeURLsIntoSet(attemptedSet, state.Attempted)
+	}
+
+	lastKnownRunID := 0
+	if hasState {
+		lastKnownRunID = state.MaxRunID
+	}
+	maxRunID := lastKnownRunID
+
+	firstPage, err := c.fetchRunsPageWithRelogin(ctx, accountID, 1)
+	if err != nil {
+		return nil, nil, err
+	}
+	stopOnKnownRunID := lastKnownRunID > 0
+	staleReached := mergeRunsIntoSetsSinceRunID(firstPage.Data, lastKnownRunID, stopOnKnownRunID, solvedSet, attemptedSet, c.buildTaskURL, &maxRunID)
+
+	pageCount := firstPage.Metadata.PageCount
+	if pageCount > 1 && len(firstPage.Data) > 0 && !staleReached {
+		if stopOnKnownRunID {
+			for page := 2; page <= pageCount; page++ {
+				resp, pageErr := c.fetchRunsPageWithRelogin(ctx, accountID, page)
+				if pageErr != nil {
+					return nil, nil, pageErr
+				}
+				if mergeRunsIntoSetsSinceRunID(resp.Data, lastKnownRunID, true, solvedSet, attemptedSet, c.buildTaskURL, &maxRunID) {
+					break
+				}
+			}
+		} else {
+			otherPages, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
+			if pageErr != nil {
+				return nil, nil, pageErr
+			}
+			for _, page := range otherPages {
+				mergeRunsIntoSetsSinceRunID(page.Data, 0, false, solvedSet, attemptedSet, c.buildTaskURL, &maxRunID)
+			}
+		}
+	}
+
+	solved = setKeysSorted(solvedSet)
+	attempted = setKeysSorted(attemptedSet)
+
+	if maxRunID > lastKnownRunID || !hasState {
+		newState := informaticsAccountState{
+			MaxRunID:  maxRunID,
+			Solved:    solved,
+			Attempted: attempted,
+			UpdatedAt: time.Now().UTC(),
+		}
+		if saveErr := c.saveAccountState(accountID, newState); saveErr != nil {
+			return nil, nil, saveErr
+		}
+	}
+
+	return solved, attempted, nil
+}
+
+func (c *InformaticsAPIClient) fetchRunsPageWithRelogin(ctx context.Context, accountID string, page int) (informaticsRunsResponse, error) {
+	resp, err := c.fetchRunsPage(ctx, accountID, page)
+	if !errors.Is(err, errInformaticsNotAuthorized) {
+		return resp, err
+	}
+
+	if loginErr := c.ensureLoggedIn(ctx, true); loginErr != nil {
+		return informaticsRunsResponse{}, loginErr
+	}
+	return c.fetchRunsPage(ctx, accountID, page)
+}
+
+func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, accountID string, pageCount int) ([]informaticsRunsResponse, error) {
+	if pageCount <= 1 {
+		return nil, nil
+	}
+
+	type pageResult struct {
+		page int
+		resp informaticsRunsResponse
+		err  error
+	}
+
+	fetchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	pages := make(chan int)
+	results := make(chan pageResult, pageCount-1)
+
+	workers := informaticsRunsParallelism
+	if workers > pageCount-1 {
+		workers = pageCount - 1
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for page := range pages {
+				resp, err := c.fetchRunsPageWithRelogin(fetchCtx, accountID, page)
+				select {
+				case results <- pageResult{page: page, resp: resp, err: err}:
+				case <-fetchCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(pages)
+		for page := 2; page <= pageCount; page++ {
+			select {
+			case pages <- page:
+			case <-fetchCtx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	out := make([]informaticsRunsResponse, 0, pageCount-1)
+	var firstErr error
+	for res := range results {
+		if res.err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("fetch informatics runs page=%d: %w", res.page, res.err)
+				cancel()
+			}
+			continue
+		}
+		out = append(out, res.resp)
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	return out, nil
+}
+
+func mergeRunsIntoSetsSinceRunID(runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool, solvedSet map[string]struct{}, attemptedSet map[string]struct{}, buildTaskURL func(problemID int) string, maxRunID *int) (staleReached bool) {
+	for _, run := range runs {
+		if run.ID <= 0 {
+			continue
+		}
+
+		if run.ID > *maxRunID {
+			*maxRunID = run.ID
+		}
+
+		if lastKnownRunID > 0 && run.ID <= lastKnownRunID {
+			if stopOnKnownRunID {
+				return true
+			}
+			continue
+		}
+
+		taskURL := buildTaskURL(run.Problem.ID)
+		if taskURL == "" {
+			continue
+		}
+		attemptedSet[taskURL] = struct{}{}
+		if run.EjudgeStatus == 0 {
+			solvedSet[taskURL] = struct{}{}
+		}
+	}
+	return false
+}
+
+func mergeURLsIntoSet(dst map[string]struct{}, values []string) {
+	for _, v := range values {
+		normalized := strings.TrimSpace(v)
+		if normalized == "" {
+			continue
+		}
+		dst[normalized] = struct{}{}
+	}
+}
+
+func (c *InformaticsAPIClient) getAccountState(accountID string) (informaticsAccountState, bool, error) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if err := c.loadStateLocked(); err != nil {
+		return informaticsAccountState{}, false, err
+	}
+
+	state, ok := c.accountState[accountID]
+	return state, ok, nil
+}
+
+func (c *InformaticsAPIClient) saveAccountState(accountID string, state informaticsAccountState) error {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if err := c.loadStateLocked(); err != nil {
+		return err
+	}
+
+	c.accountState[accountID] = state
+	return c.persistStateLocked()
+}
+
+func (c *InformaticsAPIClient) loadStateLocked() error {
+	if c.stateLoaded {
+		return nil
+	}
+	c.stateLoaded = true
+
+	if c.statePath == "" {
+		return nil
+	}
+
+	b, err := os.ReadFile(c.statePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read informatics state %q: %w", c.statePath, err)
+	}
+
+	var decoded informaticsStateFile
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return fmt.Errorf("decode informatics state %q: %w", c.statePath, err)
+	}
+	if decoded.Accounts == nil {
+		decoded.Accounts = make(map[string]informaticsAccountState)
+	}
+
+	c.accountState = decoded.Accounts
+	return nil
+}
+
+func (c *InformaticsAPIClient) persistStateLocked() error {
+	if c.statePath == "" {
+		return nil
+	}
+
+	state := informaticsStateFile{
+		Accounts: c.accountState,
+	}
+	b, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal informatics state: %w", err)
+	}
+	b = append(b, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(c.statePath), 0o755); err != nil {
+		return fmt.Errorf("mkdir informatics state dir: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(c.statePath), "informatics-state-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp state file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(b); err != nil {
+		tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("write temp state file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp state file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, c.statePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename state file: %w", err)
+	}
+	return nil
 }
 
 func (c *InformaticsAPIClient) ensureLoggedIn(ctx context.Context, force bool) error {
@@ -297,10 +562,22 @@ type informaticsMeta struct {
 }
 
 type informaticsRun struct {
+	ID           int                `json:"id"`
 	EjudgeStatus int                `json:"ejudge_status"`
 	Problem      informaticsProblem `json:"problem"`
 }
 
 type informaticsProblem struct {
 	ID int `json:"id"`
+}
+
+type informaticsStateFile struct {
+	Accounts map[string]informaticsAccountState `json:"accounts"`
+}
+
+type informaticsAccountState struct {
+	MaxRunID  int       `json:"max_run_id"`
+	Solved    []string  `json:"solved"`
+	Attempted []string  `json:"attempted"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

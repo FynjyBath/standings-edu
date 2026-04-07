@@ -21,25 +21,33 @@
 }
 
 html[data-theme="dark"] {
-  --bg-0: #021714;
-  --bg-1: #082b25;
-  --surface: #0b322c;
-  --surface-strong: #145145;
-  --text: #d6f0cb;
-  --muted: #90b9a0;
-  --line: #357b6b;
-  --line-soft: #8ac7b133;
-  --accent: #35b9a0;
-  --accent-strong: #9bdb7f;
-  --header-bg: #000f0d;
-  --header-line: #1b7968;
-  --table-head: #17584b;
-  --sticky: #104138;
+  --bg-0: #010a08;
+  --bg-1: #010a08;
+  --surface: #041a16;
+  --surface-strong: #06231e;
+  --text: #eefcf3;
+  --muted: #c1dccd;
+  --line: #1f4a41;
+  --line-soft: transparent;
+  --accent: #1f6d5f;
+  --accent-strong: #92dfb0;
+  --header-bg: #000805;
+  --header-line: #0f493e;
+  --table-head: #0a2f28;
+  --sticky: #07251f;
   --solved-bg: #2f7b57;
   --solved-text: #e3ffd8;
   --attempt-bg: #1f6155;
   --attempt-text: #c8f5e8;
-  --shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+  --shadow: 0 18px 36px rgba(0, 0, 0, 0.46);
+}
+
+html[data-theme="dark"] body {
+  background: #010a08;
+}
+
+html[data-theme="dark"] body::before {
+  display: none;
 }
 
 * {

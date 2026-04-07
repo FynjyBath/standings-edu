@@ -14,7 +14,6 @@
   --table-head: #d8e5f8;
   --sticky: #edf3fc;
   --solved-bg: #92d8aa;
-  --solved-rgb: 146, 216, 170;
   --solved-text: #123622;
   --attempt-bg: #f8d7d7;
   --attempt-text: #7b2323;
@@ -37,7 +36,6 @@ html[data-theme="dark"] {
   --table-head: #263446;
   --sticky: #202b39;
   --solved-bg: #2f7b57;
-  --solved-rgb: 47, 123, 87;
   --solved-text: #e3ffd8;
   --attempt-bg: #6a3434;
   --attempt-text: #ffe0e0;
@@ -390,17 +388,12 @@ main.container {
   min-width: 44px;
   font-weight: 700;
   --score-alpha: 0;
-  background: rgba(var(--solved-rgb), var(--score-alpha)) !important;
+  background: rgba(80, 180, 110, var(--score-alpha)) !important;
   color: color-mix(in srgb, var(--text) 86%, #0f2f16 14%);
 }
 
 .standings-table tbody tr:hover td.score-cell {
   box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.score-cell.score-max {
-  background: var(--solved-bg) !important;
-  color: var(--solved-text);
 }
 
 .status-cell.solved {

@@ -23,7 +23,6 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"statusClass":  statusClass,
 			"scoreText":    scoreText,
 			"scoreAlpha":   scoreAlpha,
-			"scoreClass":   scoreClass,
 			"siteTitle":    siteTitle,
 		},
 	}
@@ -101,18 +100,4 @@ func scoreAlpha(score *int) string {
 	}
 	alpha := float64(v) / 100.0
 	return strconv.FormatFloat(alpha, 'f', 2, 64)
-}
-
-func scoreClass(score *int) string {
-	if score == nil {
-		return "score-none"
-	}
-	v := *score
-	if v <= 0 {
-		return "score-zero"
-	}
-	if v >= 100 {
-		return "score-max"
-	}
-	return "score-partial"
 }

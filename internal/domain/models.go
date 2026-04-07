@@ -25,12 +25,14 @@ type Contest struct {
 
 type GroupFile struct {
 	Title      string   `json:"title"`
+	Update     *bool    `json:"update,omitempty"`
 	StudentIDs []string `json:"student_ids"`
 }
 
 type GroupDefinition struct {
 	Slug       string
 	Title      string
+	Update     bool
 	StudentIDs []string
 	ContestIDs []string
 }

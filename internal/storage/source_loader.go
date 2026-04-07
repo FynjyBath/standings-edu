@@ -101,9 +101,15 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 			return nil, fmt.Errorf("load group contests %q: %w", slug, err)
 		}
 
+		update := true
+		if gf.Update != nil {
+			update = *gf.Update
+		}
+
 		groups = append(groups, domain.GroupDefinition{
 			Slug:       slug,
 			Title:      gf.Title,
+			Update:     update,
 			StudentIDs: gf.StudentIDs,
 			ContestIDs: contestIDs,
 		})

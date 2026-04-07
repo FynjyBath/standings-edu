@@ -17,11 +17,12 @@ import (
 
 func main() {
 	var (
-		dataDir     = flag.String("data", "./data", "path to source data directory")
-		outDir      = flag.String("out", "./generated", "path to generated output directory")
-		onlyGroup   = flag.String("group", "", "optional group slug to generate")
-		parallelism = flag.Int("parallel", 8, "max concurrent account fetches")
-		cacheTTL    = flag.Duration("cache-ttl", 5*time.Minute, "TTL for account status cache")
+		dataDir          = flag.String("data", "./data", "path to source data directory")
+		outDir           = flag.String("out", "./generated", "path to generated output directory")
+		onlyGroup        = flag.String("group", "", "optional group slug to generate")
+		parallelism      = flag.Int("parallel", 8, "max concurrent account fetches")
+		cacheTTL         = flag.Duration("cache-ttl", 5*time.Minute, "TTL for account status cache")
+		informaticsCreds = flag.String("informatics-creds", "./data/sites/informatics_credentials.json", "path to informatics credentials JSON")
 	)
 	flag.Parse()
 
@@ -29,8 +30,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	infClient, err := sites.NewInformaticsAPIClientFromFile(*informaticsCreds)
+	if err != nil {
+		logger.Fatalf("failed to init informatics client: %v", err)
+	}
+
 	registry := sites.NewRegistry()
-	registry.Register("informatics", sites.NewInformaticsStubClient())
+	registry.Register("informatics", infClient)
 	registry.Register("codeforces", sites.NewCodeforcesAPIClient())
 
 	loader := storage.NewSourceLoader(*dataDir)

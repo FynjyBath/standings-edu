@@ -55,10 +55,10 @@
         {
           "student_id": "stu_2",
           "full_name": "Петров Пётр Петрович",
-          "solved_count": 1,
+          "solved_count": 0,
           "statuses": [
-            "solved",
-            "attempted",
+            "none",
+            "none",
             "none"
           ]
         },
@@ -147,13 +147,13 @@
         {
           "student_id": "stu_2",
           "full_name": "Петров Пётр Петрович",
-          "solved_count": 1,
+          "solved_count": 0,
           "statuses": [
             "none",
-            "solved",
             "none",
             "none",
-            "attempted"
+            "none",
+            "none"
           ]
         },
         {

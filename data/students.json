@@ -1,11 +1,11 @@
 [
   {
     "id": "stu_1",
-    "full_name": "Иванов Иван Иванович (FynjyBath)",
+    "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
     "accounts": [
       {
         "site": "informatics",
-        "account_id": "436037"
+        "account_id": "878047"
       },
       {
         "site": "codeforces",

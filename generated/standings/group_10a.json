@@ -3,6 +3,127 @@
   "group_title": "Группа 10А",
   "contests": [
     {
+      "id": "contest_informatics_live",
+      "title": "Informatics (реальные данные)",
+      "subcontests": [
+        {
+          "title": "Решено 878047",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2937#1",
+              "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2937"
+            },
+            {
+              "label": "B",
+              "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2959#1",
+              "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2959"
+            },
+            {
+              "label": "C",
+              "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=292#1",
+              "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=292"
+            }
+          ]
+        },
+        {
+          "title": "Были попытки",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2#1",
+              "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2"
+            },
+            {
+              "label": "B",
+              "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=54#1",
+              "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=54"
+            },
+            {
+              "label": "C",
+              "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=294#1",
+              "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=294"
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "label": "A",
+          "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2937#1",
+          "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2937"
+        },
+        {
+          "label": "B",
+          "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2959#1",
+          "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2959"
+        },
+        {
+          "label": "C",
+          "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=292#1",
+          "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=292"
+        },
+        {
+          "label": "A",
+          "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2#1",
+          "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2"
+        },
+        {
+          "label": "B",
+          "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=54#1",
+          "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=54"
+        },
+        {
+          "label": "C",
+          "url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=294#1",
+          "normalized_url": "https://informatics.msk.ru/mod/statements/view.php?chapterid=294"
+        }
+      ],
+      "rows": [
+        {
+          "student_id": "stu_1",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+          "solved_count": 3,
+          "statuses": [
+            "solved",
+            "solved",
+            "solved",
+            "attempted",
+            "attempted",
+            "attempted"
+          ]
+        },
+        {
+          "student_id": "stu_2",
+          "full_name": "Петров Пётр Петрович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none",
+            "none",
+            "none",
+            "none"
+          ]
+        },
+        {
+          "student_id": "stu_3",
+          "full_name": "Сидоров Сидор Сидорович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none",
+            "none",
+            "none",
+            "none"
+          ]
+        }
+      ]
+    },
+    {
       "id": "contest_cf_live",
       "title": "Codeforces (реальные данные)",
       "subcontests": [
@@ -84,7 +205,7 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath)",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
           "solved_count": 3,
           "statuses": [
             "solved",
@@ -195,26 +316,26 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath)",
-          "solved_count": 1,
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+          "solved_count": 0,
           "statuses": [
-            "solved",
-            "attempted",
             "none",
-            "attempted",
+            "none",
+            "none",
+            "none",
             "none"
           ]
         },
         {
           "student_id": "stu_2",
           "full_name": "Петров Пётр Петрович",
-          "solved_count": 1,
+          "solved_count": 0,
           "statuses": [
             "none",
-            "solved",
             "none",
             "none",
-            "attempted"
+            "none",
+            "none"
           ]
         },
         {
@@ -283,7 +404,7 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath)",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
           "solved_count": 0,
           "statuses": [
             "none",

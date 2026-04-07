@@ -79,5 +79,27 @@
         ]
       }
     ]
+  },
+  {
+    "id": "contest_informatics_live",
+    "title": "Informatics (реальные данные)",
+    "subcontests": [
+      {
+        "title": "Решено 878047",
+        "tasks": [
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=2937#1",
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=2959#1",
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=292#1"
+        ]
+      },
+      {
+        "title": "Были попытки",
+        "tasks": [
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=2#1",
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=54#1",
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=294#1"
+        ]
+      }
+    ]
   }
 ]

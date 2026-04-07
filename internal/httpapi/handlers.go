@@ -143,7 +143,7 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
 func (h *Handlers) buildFooterInfo() FooterInfo {
 	now := time.Now()
 	footer := FooterInfo{
-		Copyright:      "Anton Niikin",
+		Contact:        "t.me/fynjybath",
 		ServerTime:     now.Format("02.01.2006 15:04:05 MST"),
 		LastUpdatedMSK: "—",
 	}
@@ -172,7 +172,7 @@ func writeJSON(w http.ResponseWriter, statusCode int, v any) {
 }
 
 type FooterInfo struct {
-	Copyright      string
+	Contact        string
 	LastUpdatedMSK string
 	ServerTime     string
 }

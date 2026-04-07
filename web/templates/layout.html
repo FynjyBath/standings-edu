@@ -42,9 +42,9 @@
     </main>
     <footer class="site-footer">
       <div class="container footer-inner">
-        <span>&copy; {{.Footer.Copyright}}</span>
-        <span>Обновлено (МСК): {{.Footer.LastUpdatedMSK}}</span>
-        <span>Время сервера: {{.Footer.ServerTime}}</span>
+        <div class="footer-line">Контакт: <a href="https://{{.Footer.Contact}}" target="_blank" rel="noopener noreferrer">{{.Footer.Contact}}</a></div>
+        <div class="footer-line">Обновлено (МСК): {{.Footer.LastUpdatedMSK}}</div>
+        <div class="footer-line">Время сервера: {{.Footer.ServerTime}}</div>
       </div>
     </footer>
     <script>

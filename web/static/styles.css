@@ -1,23 +1,23 @@
 :root {
-  --bg-0: #d7d9d7;
-  --bg-1: #c8d6c8;
-  --surface: #edf5e6;
-  --surface-strong: #d4e7c4;
-  --text: #08211c;
-  --muted: #2f5f55;
-  --line: #2f7365;
-  --line-soft: #2f736544;
-  --accent: #0f8c79;
-  --accent-strong: #01443d;
-  --header-bg: #012b26;
-  --header-line: #88be75;
-  --table-head: #b9d8a5;
-  --sticky: #e5f0dc;
-  --solved-bg: #8fc673;
-  --solved-text: #032118;
-  --attempt-bg: #f4caca;
-  --attempt-text: #6c1f1f;
-  --shadow: 0 12px 30px rgba(1, 29, 26, 0.16);
+  --bg-0: #f2f6fc;
+  --bg-1: #e8f0fb;
+  --surface: #ffffff;
+  --surface-strong: #eaf1fb;
+  --text: #1c2a3d;
+  --muted: #5d718c;
+  --line: #9eb3cc;
+  --line-soft: #7f96b640;
+  --accent: #2f87ea;
+  --accent-strong: #0f4f9f;
+  --header-bg: #1f2f46;
+  --header-line: #6e8fbd;
+  --table-head: #d8e5f8;
+  --sticky: #edf3fc;
+  --solved-bg: #92d8aa;
+  --solved-text: #123622;
+  --attempt-bg: #f8d7d7;
+  --attempt-text: #7b2323;
+  --shadow: 0 14px 32px rgba(20, 46, 82, 0.12);
 }
 
 html[data-theme="dark"] {
@@ -74,6 +74,30 @@ html[data-theme="dark"] .theme-toggle[aria-pressed="true"] .theme-icon--moon {
   background: #aac8ff2e;
 }
 
+html[data-theme="light"] .site-header {
+  color: #edf4ff;
+  box-shadow: 0 4px 14px rgba(18, 36, 65, 0.24);
+}
+
+html[data-theme="light"] .theme-toggle {
+  color: #e5efff;
+  border-color: #7f9fc8;
+  background: #314767;
+}
+
+html[data-theme="light"] .theme-toggle:hover {
+  border-color: #aac3e9;
+}
+
+html[data-theme="light"] .theme-toggle:focus-visible {
+  outline-color: #9fc5fb;
+}
+
+html[data-theme="light"] .theme-toggle[aria-pressed="false"] .theme-icon--sun,
+html[data-theme="light"] .theme-toggle[aria-pressed="true"] .theme-icon--moon {
+  background: #bfd5f83d;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -88,7 +112,7 @@ body {
   font-family: "Trebuchet MS", "Verdana", "DejaVu Sans", sans-serif;
   line-height: 1.35;
   color: var(--text);
-  background: var(--bg-0);
+  background: linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
 }
 
 .container {
@@ -279,11 +303,11 @@ main.container {
 }
 
 .standings-table tbody tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--surface) 84%, var(--surface-strong) 16%);
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-strong) 12%);
 }
 
 .standings-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--surface-strong) 58%, var(--accent) 42%);
+  background: color-mix(in srgb, var(--surface-strong) 74%, var(--accent) 26%);
 }
 
 .student-col,

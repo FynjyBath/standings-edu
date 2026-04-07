@@ -1,11 +1,11 @@
 [
   {
-    "id": "stu_1",
-    "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
+    "id": "admin",
+    "full_name": "Ныйкин Антон Игоревич",
     "accounts": [
       {
         "site": "informatics",
-        "account_id": "878047"
+        "account_id": "436037"
       },
       {
         "site": "codeforces",

@@ -28,6 +28,10 @@
       {
         "site": "codeforces",
         "account_id": "sunsh1ne"
+      },
+      {
+        "site": "acmp",
+        "account_id": "437878"
       }
     ]
   },
@@ -42,16 +46,21 @@
       {
         "site": "informatics",
         "account_id": "400869"
-      },
-      {
-        "site": "unknown_site",
-        "account_id": "u-1"
       }
     ]
   },
   {
-    "id": "stu_4",
-    "full_name": "Смирнова Анна Сергеевна",
-    "accounts": []
+    "id": "msayk",
+    "full_name": "Сайк М. А.",
+    "accounts": [
+      {
+        "site": "codeforces",
+        "account_id": "charlyk"
+      },
+      {
+        "site": "informatics",
+        "account_id": "659575"
+      }
+    ]
   }
 ]

@@ -32,12 +32,16 @@
     ]
   },
   {
-    "id": "stu_3",
-    "full_name": "Сидоров Сидор Сидорович",
+    "id": "agaliaviev",
+    "full_name": "Галявиев А.Р.",
     "accounts": [
       {
         "site": "codeforces",
-        "account_id": "schoolboy"
+        "account_id": "will_be_fine"
+      },
+      {
+        "site": "informatics",
+        "account_id": "400869"
       },
       {
         "site": "unknown_site",

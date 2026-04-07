@@ -66,6 +66,20 @@ func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, standings)
 }
 
+func (h *Handlers) APISummary(w http.ResponseWriter, _ *http.Request) {
+	summary, err := h.loader.LoadOverallStandings()
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "summary not generated yet", http.StatusNotFound)
+			return
+		}
+		h.logger.Printf("ERROR load summary: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
 	standings, err := h.loader.LoadGroupStandings(slug)
@@ -93,20 +107,20 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
-	groups, err := h.loader.LoadGroups()
+	summary, err := h.loader.LoadOverallStandings()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			groups = []domain.GeneratedGroupMeta{}
+			summary = domain.GeneratedOverallStandings{}
 		} else {
-			h.logger.Printf("ERROR load groups for index: %v", err)
+			h.logger.Printf("ERROR load summary for index: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 	}
 
 	page := IndexPageData{
-		PageTitle: "Olympiad Standings",
-		Groups:    groups,
+		PageTitle: "Olympiad Standings: Summary",
+		Summary:   summary,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "index.html", page); err != nil {
 		h.logger.Printf("ERROR render index: %v", err)
@@ -126,7 +140,7 @@ func writeJSON(w http.ResponseWriter, statusCode int, v any) {
 
 type IndexPageData struct {
 	PageTitle string
-	Groups    []domain.GeneratedGroupMeta
+	Summary   domain.GeneratedOverallStandings
 }
 
 type GroupPageData struct {

@@ -41,6 +41,14 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		return fmt.Errorf("group %q not found", onlyGroup)
 	}
 
+	overall, err := g.builder.BuildOverallStandings(ctx, source, groups)
+	if err != nil {
+		return fmt.Errorf("build overall standings: %w", err)
+	}
+	if err := g.writer.WriteOverallStandings(overall); err != nil {
+		return fmt.Errorf("write overall standings: %w", err)
+	}
+
 	metas := make([]domain.GeneratedGroupMeta, 0, len(groups))
 	generatedCount := 0
 	for _, group := range groups {

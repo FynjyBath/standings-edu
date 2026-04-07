@@ -1,18 +1,34 @@
 {{define "content"}}
 <section class="page-head">
-  <h1>Группы</h1>
+  <h1>Сводка по участникам</h1>
 </section>
 
-{{if .Groups}}
-<div class="group-list">
-  {{range .Groups}}
-  <a class="group-card" href="/standings/{{.Slug}}">
-    <span class="group-title">{{.Title}}</span>
-    <span class="group-slug">/{{.Slug}}</span>
-  </a>
-  {{end}}
+{{if .Summary.Rows}}
+<div class="table-wrap summary-wrap">
+  <table class="standings-table summary-table">
+    <thead>
+      <tr>
+        <th class="student-col">Участник</th>
+        {{range .Summary.Sites}}
+        <th>{{siteTitle .}}</th>
+        {{end}}
+        <th class="total-col">Всего</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Summary.Rows}}
+      <tr>
+        <td class="student-name">{{.FullName}}</td>
+        {{range .SolvedBySite}}
+        <td class="site-solved">{{.}}</td>
+        {{end}}
+        <td class="total-cell">{{.TotalSolved}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
 </div>
 {{else}}
-<p class="empty-hint">Что-то пошло не так.</p>
+<p class="empty-hint">Сводка пока не сгенерирована.</p>
 {{end}}
 {{end}}

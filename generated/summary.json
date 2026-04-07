@@ -1,0 +1,49 @@
+{
+  "sites": [
+    "acmp",
+    "codeforces",
+    "informatics"
+  ],
+  "rows": [
+    {
+      "student_id": "stu_1",
+      "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
+      "solved_by_site": [
+        0,
+        0,
+        0
+      ],
+      "total_solved": 0
+    },
+    {
+      "student_id": "stu_2",
+      "full_name": "Петров Пётр Петрович",
+      "solved_by_site": [
+        0,
+        0,
+        0
+      ],
+      "total_solved": 0
+    },
+    {
+      "student_id": "stu_3",
+      "full_name": "Сидоров Сидор Сидорович",
+      "solved_by_site": [
+        0,
+        0,
+        0
+      ],
+      "total_solved": 0
+    },
+    {
+      "student_id": "stu_4",
+      "full_name": "Смирнова Анна Сергеевна",
+      "solved_by_site": [
+        0,
+        0,
+        0
+      ],
+      "total_solved": 0
+    }
+  ]
+}

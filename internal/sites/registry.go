@@ -1,6 +1,7 @@
 package sites
 
 import (
+	"sort"
 	"strings"
 	"sync"
 )
@@ -30,4 +31,16 @@ func (r *Registry) Get(site string) (SiteClient, bool) {
 	c, ok := r.clients[site]
 	r.mu.RUnlock()
 	return c, ok
+}
+
+func (r *Registry) Sites() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]string, 0, len(r.clients))
+	for site := range r.clients {
+		out = append(out, site)
+	}
+	sort.Strings(out)
+	return out
 }

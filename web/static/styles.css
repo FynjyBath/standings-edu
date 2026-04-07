@@ -101,6 +101,10 @@ body {
   overflow-x: auto;
 }
 
+.summary-wrap {
+  margin-bottom: 1rem;
+}
+
 .standings-table {
   border-collapse: collapse;
   width: max-content;
@@ -139,6 +143,16 @@ body {
 .count-col,
 .solved-count {
   min-width: 72px;
+}
+
+.total-col,
+.total-cell {
+  min-width: 80px;
+  font-weight: 700;
+}
+
+.site-solved {
+  min-width: 74px;
 }
 
 .subcontest-head {

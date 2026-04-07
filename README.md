@@ -1,59 +1,73 @@
-# Olympiad Standings MVP (Go)
+# Olympiad Standings
 
-Веб-приложение для создания мониторов решения задач по олимпиадному программированию по группам с различных сайтов.
+Веб-приложение для мониторинга решения олимпиадных задач школьниками.
+
+Ключевая идея архитектуры:
+- `cmd/generate` — офлайн генерация всех standings в `generated/`;
+- `cmd/server` — только чтение готовых файлов и отдача HTML/API, без обращений к сайтам.
 
 ## Запуск
 
 Требуется Go 1.22+.
 
-### 0. Данные участников и групп
-
-В `data/students.json` содержится описание логинов/id каждого участника. Каждому участнику присваивается внутренний id.
-
-В `data/contests.json` содержится описание контестов. Каждому контесту присваивается внутренний id.
-
-В `data/groups/...` для каждой группы создаётся отдельная папка, в которой лежат списки участников и контестов этой группы.
-
-### 1. Скрипт генерации табличек
+### 1. Генерация данных
 
 ```bash
 go run ./cmd/generate
 ```
 
-Для Informatics нужен файл с логином/паролем (`data/sites/informatics_credentials.json`).
+Расширенный запуск:
 
 ```bash
 go run ./cmd/generate -data ./data -out ./generated -group group_10a -parallel 8 -cache-ttl 5m -informatics-creds ./data/sites/informatics_credentials.json
 ```
 
-### 2. Сервер
+### 2. HTTP сервер
 
 ```bash
 go run ./cmd/server
 ```
+
+Расширенный запуск:
 
 ```bash
 go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/templates -static ./web/static
 ```
 
 После запуска:
-- `http://localhost:8080/standings` — список групп;
-- `http://localhost:8080/standings/group_10a` — HTML standings группы.
+- `http://localhost:8080/standings` — сводная таблица по всем участникам: solved по сайтам + total;
+- `http://localhost:8080/standings/group_10a` — standings конкретной группы;
+- `http://localhost:8080/` — `404 Not Found`.
 
-## Уже реализованные интеграции
+## Форматы generated
 
-Текущие клиенты:
+Генератор пишет:
+- `generated/summary.json` — сводка по участникам для страницы `/standings`;
+- `generated/groups.json` — список групп;
+- `generated/standings/{group}.json` — готовые standings групп.
+
+## API
+
+- `GET /healthz`
+- `GET /api/summary`
+- `GET /api/groups`
+- `GET /api/groups/{group_name}/standings`
+
+## Интеграции сайтов
+
+Реализованы клиенты:
 - `internal/sites/informatics.go`
 - `internal/sites/codeforces.go`
 - `internal/sites/acmp.go`
 
-Примечание:
-- `informatics` использует логин в Moodle (`/login/index.php`) и получает все посылки через backend endpoint `/py/problem/0/filter-runs`, обходя UI-пагинацию;
-- `codeforces` использует реальный API `user.status` по `https://codeforces.com/apiHelp` (логин не требуется).
-- `acmp` получает решенные и нерешенные задачи со страницы пользователя `index.asp?main=user&id=...` (логин не требуется).
+Примечания:
+- `informatics` использует вход через Moodle (`/login/index.php`) и получает посылки через `/py/problem/0/filter-runs` (без UI-пагинации);
+- `codeforces` использует API `user.status`;
+- `acmp` парсит страницу пользователя `index.asp?main=user&id=...`.
 
-## Как добавить интеграцию сайта?
+## Как добавить новый сайт
 
-Чтобы добавить новый сайт:
-1. Создать файл `internal/sites/<site>.go` с реализацией `SiteClient`.
+1. Добавить реализацию `SiteClient` в `internal/sites/<site>.go`.
 2. Зарегистрировать клиент в `cmd/generate/main.go`.
+3. Добавить аккаунты сайта в `data/students.json`.
+4. Перезапустить `go run ./cmd/generate`.

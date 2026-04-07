@@ -83,3 +83,15 @@ type GeneratedGroupStandings struct {
 	GroupTitle string                      `json:"group_title"`
 	Contests   []GeneratedContestStandings `json:"contests"`
 }
+
+type GeneratedOverallRow struct {
+	StudentID    string `json:"student_id"`
+	FullName     string `json:"full_name"`
+	SolvedBySite []int  `json:"solved_by_site"`
+	TotalSolved  int    `json:"total_solved"`
+}
+
+type GeneratedOverallStandings struct {
+	Sites []string              `json:"sites"`
+	Rows  []GeneratedOverallRow `json:"rows"`
+}

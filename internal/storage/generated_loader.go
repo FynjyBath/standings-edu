@@ -53,6 +53,20 @@ func (l *GeneratedLoader) LoadGroupStandings(slug string) (domain.GeneratedGroup
 	return standings, nil
 }
 
+func (l *GeneratedLoader) LoadOverallStandings() (domain.GeneratedOverallStandings, error) {
+	path := filepath.Join(l.OutDir, "summary.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return domain.GeneratedOverallStandings{}, err
+	}
+
+	var standings domain.GeneratedOverallStandings
+	if err := json.Unmarshal(b, &standings); err != nil {
+		return domain.GeneratedOverallStandings{}, fmt.Errorf("decode summary json: %w", err)
+	}
+	return standings, nil
+}
+
 func isValidSlug(slug string) bool {
 	if strings.TrimSpace(slug) == "" {
 		return false

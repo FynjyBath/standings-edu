@@ -1,7 +1,7 @@
 [
   {
     "id": "admin",
-    "full_name": "Ныйкин Антон Игоревич",
+    "full_name": "Ныйкин А. И.",
     "accounts": [
       {
         "site": "informatics",
@@ -18,12 +18,16 @@
     ]
   },
   {
-    "id": "stu_2",
-    "full_name": "Петров Пётр Петрович",
+    "id": "bibragimov",
+    "full_name": "Ибрагимов Б. А.",
     "accounts": [
       {
         "site": "informatics",
-        "account_id": "100500"
+        "account_id": "949797"
+      },
+      {
+        "site": "codeforces",
+        "account_id": "sunsh1ne"
       }
     ]
   },

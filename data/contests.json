@@ -57,5 +57,27 @@
         ]
       }
     ]
+  },
+  {
+    "id": "contest_cf_live",
+    "title": "Codeforces (реальные данные)",
+    "subcontests": [
+      {
+        "title": "Решено FynjyBath",
+        "tasks": [
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/problemset/problem/290/B",
+          "https://codeforces.com/problemset/problem/171/H"
+        ]
+      },
+      {
+        "title": "Были попытки",
+        "tasks": [
+          "https://codeforces.com/problemset/problem/290/C",
+          "https://codeforces.com/problemset/problem/1729/E",
+          "https://codeforces.com/gym/105122/problem/A"
+        ]
+      }
+    ]
   }
 ]

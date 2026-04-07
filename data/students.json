@@ -1,7 +1,7 @@
 [
   {
     "id": "stu_1",
-    "full_name": "Иванов Иван Иванович",
+    "full_name": "Иванов Иван Иванович (FynjyBath)",
     "accounts": [
       {
         "site": "informatics",
@@ -9,7 +9,7 @@
       },
       {
         "site": "codeforces",
-        "account_id": "tourist"
+        "account_id": "FynjyBath"
       }
     ]
   },

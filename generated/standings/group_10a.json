@@ -3,6 +3,127 @@
   "group_title": "Группа 10А",
   "contests": [
     {
+      "id": "contest_cf_live",
+      "title": "Codeforces (реальные данные)",
+      "subcontests": [
+        {
+          "title": "Решено FynjyBath",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://codeforces.com/problemset/problem/290/A",
+              "normalized_url": "https://codeforces.com/problemset/problem/290/A"
+            },
+            {
+              "label": "B",
+              "url": "https://codeforces.com/problemset/problem/290/B",
+              "normalized_url": "https://codeforces.com/problemset/problem/290/B"
+            },
+            {
+              "label": "C",
+              "url": "https://codeforces.com/problemset/problem/171/H",
+              "normalized_url": "https://codeforces.com/problemset/problem/171/H"
+            }
+          ]
+        },
+        {
+          "title": "Были попытки",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://codeforces.com/problemset/problem/290/C",
+              "normalized_url": "https://codeforces.com/problemset/problem/290/C"
+            },
+            {
+              "label": "B",
+              "url": "https://codeforces.com/problemset/problem/1729/E",
+              "normalized_url": "https://codeforces.com/problemset/problem/1729/E"
+            },
+            {
+              "label": "C",
+              "url": "https://codeforces.com/gym/105122/problem/A",
+              "normalized_url": "https://codeforces.com/gym/105122/problem/A"
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "label": "A",
+          "url": "https://codeforces.com/problemset/problem/290/A",
+          "normalized_url": "https://codeforces.com/problemset/problem/290/A"
+        },
+        {
+          "label": "B",
+          "url": "https://codeforces.com/problemset/problem/290/B",
+          "normalized_url": "https://codeforces.com/problemset/problem/290/B"
+        },
+        {
+          "label": "C",
+          "url": "https://codeforces.com/problemset/problem/171/H",
+          "normalized_url": "https://codeforces.com/problemset/problem/171/H"
+        },
+        {
+          "label": "A",
+          "url": "https://codeforces.com/problemset/problem/290/C",
+          "normalized_url": "https://codeforces.com/problemset/problem/290/C"
+        },
+        {
+          "label": "B",
+          "url": "https://codeforces.com/problemset/problem/1729/E",
+          "normalized_url": "https://codeforces.com/problemset/problem/1729/E"
+        },
+        {
+          "label": "C",
+          "url": "https://codeforces.com/gym/105122/problem/A",
+          "normalized_url": "https://codeforces.com/gym/105122/problem/A"
+        }
+      ],
+      "rows": [
+        {
+          "student_id": "stu_1",
+          "full_name": "Иванов Иван Иванович (FynjyBath)",
+          "solved_count": 3,
+          "statuses": [
+            "solved",
+            "solved",
+            "solved",
+            "attempted",
+            "attempted",
+            "attempted"
+          ]
+        },
+        {
+          "student_id": "stu_2",
+          "full_name": "Петров Пётр Петрович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none",
+            "none",
+            "none",
+            "none"
+          ]
+        },
+        {
+          "student_id": "stu_3",
+          "full_name": "Сидоров Сидор Сидорович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none",
+            "none",
+            "none",
+            "none"
+          ]
+        }
+      ]
+    },
+    {
       "id": "contest_graphs",
       "title": "Графы",
       "subcontests": [
@@ -74,7 +195,7 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович",
+          "full_name": "Иванов Иван Иванович (FynjyBath)",
           "solved_count": 1,
           "statuses": [
             "solved",
@@ -99,13 +220,13 @@
         {
           "student_id": "stu_3",
           "full_name": "Сидоров Сидор Сидорович",
-          "solved_count": 1,
+          "solved_count": 0,
           "statuses": [
-            "solved",
             "none",
             "none",
             "none",
-            "attempted"
+            "none",
+            "none"
           ]
         }
       ]
@@ -162,11 +283,11 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович",
-          "solved_count": 2,
+          "full_name": "Иванов Иван Иванович (FynjyBath)",
+          "solved_count": 0,
           "statuses": [
-            "solved",
-            "solved",
+            "none",
+            "none",
             "none"
           ]
         },

@@ -31,7 +31,7 @@ func main() {
 
 	registry := sites.NewRegistry()
 	registry.Register("informatics", sites.NewInformaticsStubClient())
-	registry.Register("codeforces", sites.NewCodeforcesStubClient())
+	registry.Register("codeforces", sites.NewCodeforcesAPIClient())
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)

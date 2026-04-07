@@ -1,4 +1,4 @@
-# Edu Standings
+# Olympiad Standings MVP (Go)
 
 Веб-приложение для создания мониторов решения задач по олимпиадному программированию по группам с различных сайтов.
 
@@ -37,7 +37,7 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 ```
 
 После запуска:
-- `http://localhost:8080/` — список групп;
+- `http://localhost:8080/standings` — список групп;
 - `http://localhost:8080/standings/group_10a` — HTML standings группы.
 
 ## Уже реализованные интеграции

@@ -8,8 +8,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.HandleFunc("GET /api/groups", handlers.APIGroups)
 	mux.HandleFunc("GET /api/groups/{group_name}/standings", handlers.APIGroupStandings)
+	mux.HandleFunc("GET /standings", handlers.IndexPage)
 	mux.HandleFunc("GET /standings/{group_name}", handlers.GroupStandingsPage)
-	mux.HandleFunc("GET /", handlers.IndexPage)
 
 	staticFS := http.FileServer(http.Dir(staticDir))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticFS))

@@ -38,6 +38,7 @@ func main() {
 	registry := sites.NewRegistry()
 	registry.Register("informatics", infClient)
 	registry.Register("codeforces", sites.NewCodeforcesAPIClient())
+	registry.Register("acmp", sites.NewACMPClient())
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)

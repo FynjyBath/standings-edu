@@ -84,7 +84,128 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
+          "solved_count": 3,
+          "statuses": [
+            "solved",
+            "solved",
+            "solved",
+            "attempted",
+            "attempted",
+            "attempted"
+          ]
+        },
+        {
+          "student_id": "stu_2",
+          "full_name": "Петров Пётр Петрович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none",
+            "none",
+            "none",
+            "none"
+          ]
+        },
+        {
+          "student_id": "stu_3",
+          "full_name": "Сидоров Сидор Сидорович",
+          "solved_count": 0,
+          "statuses": [
+            "none",
+            "none",
+            "none",
+            "none",
+            "none",
+            "none"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contest_acmp_live",
+      "title": "ACMP (реальные данные)",
+      "subcontests": [
+        {
+          "title": "Решено 268673",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://acmp.ru/?main=task\u0026id_task=224",
+              "normalized_url": "https://acmp.ru/?main=task\u0026id_task=224"
+            },
+            {
+              "label": "B",
+              "url": "https://acmp.ru/?main=task\u0026id_task=203",
+              "normalized_url": "https://acmp.ru/?main=task\u0026id_task=203"
+            },
+            {
+              "label": "C",
+              "url": "https://acmp.ru/?main=task\u0026id_task=395",
+              "normalized_url": "https://acmp.ru/?main=task\u0026id_task=395"
+            }
+          ]
+        },
+        {
+          "title": "Были попытки",
+          "task_count": 3,
+          "tasks": [
+            {
+              "label": "A",
+              "url": "https://acmp.ru/?main=task\u0026id_task=41",
+              "normalized_url": "https://acmp.ru/?main=task\u0026id_task=41"
+            },
+            {
+              "label": "B",
+              "url": "https://acmp.ru/?main=task\u0026id_task=104",
+              "normalized_url": "https://acmp.ru/?main=task\u0026id_task=104"
+            },
+            {
+              "label": "C",
+              "url": "https://acmp.ru/?main=task\u0026id_task=531",
+              "normalized_url": "https://acmp.ru/?main=task\u0026id_task=531"
+            }
+          ]
+        }
+      ],
+      "tasks": [
+        {
+          "label": "A",
+          "url": "https://acmp.ru/?main=task\u0026id_task=224",
+          "normalized_url": "https://acmp.ru/?main=task\u0026id_task=224"
+        },
+        {
+          "label": "B",
+          "url": "https://acmp.ru/?main=task\u0026id_task=203",
+          "normalized_url": "https://acmp.ru/?main=task\u0026id_task=203"
+        },
+        {
+          "label": "C",
+          "url": "https://acmp.ru/?main=task\u0026id_task=395",
+          "normalized_url": "https://acmp.ru/?main=task\u0026id_task=395"
+        },
+        {
+          "label": "A",
+          "url": "https://acmp.ru/?main=task\u0026id_task=41",
+          "normalized_url": "https://acmp.ru/?main=task\u0026id_task=41"
+        },
+        {
+          "label": "B",
+          "url": "https://acmp.ru/?main=task\u0026id_task=104",
+          "normalized_url": "https://acmp.ru/?main=task\u0026id_task=104"
+        },
+        {
+          "label": "C",
+          "url": "https://acmp.ru/?main=task\u0026id_task=531",
+          "normalized_url": "https://acmp.ru/?main=task\u0026id_task=531"
+        }
+      ],
+      "rows": [
+        {
+          "student_id": "stu_1",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
           "solved_count": 3,
           "statuses": [
             "solved",
@@ -205,7 +326,7 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
           "solved_count": 3,
           "statuses": [
             "solved",
@@ -316,7 +437,7 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
           "solved_count": 0,
           "statuses": [
             "none",
@@ -404,7 +525,7 @@
       "rows": [
         {
           "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
           "solved_count": 0,
           "statuses": [
             "none",

@@ -1,7 +1,7 @@
 [
   {
     "id": "stu_1",
-    "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047)",
+    "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
     "accounts": [
       {
         "site": "informatics",
@@ -10,6 +10,10 @@
       {
         "site": "codeforces",
         "account_id": "FynjyBath"
+      },
+      {
+        "site": "acmp",
+        "account_id": "268673"
       }
     ]
   },

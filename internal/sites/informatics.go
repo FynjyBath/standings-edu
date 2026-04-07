@@ -211,11 +211,11 @@ func (c *InformaticsAPIClient) loginLocked(ctx context.Context) error {
 	}
 
 	bodyText := string(postBody)
-	if strings.Contains(bodyText, "loginerrors") || strings.Contains(bodyText, "Вы не вошли в систему") {
-		return errors.New("informatics login failed: bad credentials or blocked account")
+	if strings.Contains(bodyText, "logout.php") {
+		return nil
 	}
-	if !strings.Contains(bodyText, "logout.php") && !strings.Contains(bodyText, "Вы зашли под именем") {
-		return errors.New("informatics login failed: cannot confirm authorized session")
+	if strings.Contains(bodyText, "name=\"logintoken\"") || strings.Contains(bodyText, "action=\"https://informatics.msk.ru/login/index.php\"") || strings.Contains(bodyText, "loginerrors") {
+		return errors.New("informatics login failed: bad credentials or blocked account")
 	}
 	return nil
 }

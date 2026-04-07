@@ -101,5 +101,27 @@
         ]
       }
     ]
+  },
+  {
+    "id": "contest_acmp_live",
+    "title": "ACMP (реальные данные)",
+    "subcontests": [
+      {
+        "title": "Решено 268673",
+        "tasks": [
+          "https://acmp.ru/?main=task&id_task=224",
+          "https://acmp.ru/?main=task&id_task=203",
+          "https://acmp.ru/?main=task&id_task=395"
+        ]
+      },
+      {
+        "title": "Были попытки",
+        "tasks": [
+          "https://acmp.ru/?main=task&id_task=41",
+          "https://acmp.ru/?main=task&id_task=104",
+          "https://acmp.ru/?main=task&id_task=531"
+        ]
+      }
+    ]
   }
 ]

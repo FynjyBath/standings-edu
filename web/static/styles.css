@@ -64,19 +64,7 @@ body {
   font-family: "Trebuchet MS", "Verdana", "DejaVu Sans", sans-serif;
   line-height: 1.35;
   color: var(--text);
-  background: linear-gradient(150deg, var(--bg-0) 0%, var(--bg-1) 46%, var(--bg-0) 100%);
-  position: relative;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 9% 6%, var(--line-soft) 0, transparent 22%),
-    radial-gradient(circle at 87% 18%, var(--line-soft) 0, transparent 20%),
-    radial-gradient(circle at 70% 82%, var(--line-soft) 0, transparent 24%);
+  background: var(--bg-0);
 }
 
 .container {
@@ -116,14 +104,13 @@ body::before {
   background: color-mix(in srgb, var(--header-bg) 78%, var(--accent) 22%);
   color: #d8f7cb;
   border-radius: 999px;
-  padding: 0.34rem 0.65rem;
-  min-width: 136px;
+  padding: 0.2rem 0.3rem;
+  min-width: 74px;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  font-size: 0.84rem;
-  font-weight: 700;
+  justify-content: center;
+  gap: 0.2rem;
+  font-size: 1rem;
   cursor: pointer;
 }
 
@@ -136,12 +123,26 @@ body::before {
   outline-offset: 2px;
 }
 
-.theme-toggle__label {
-  opacity: 0.9;
+.theme-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  line-height: 1;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.55;
 }
 
-.theme-toggle__state {
-  color: #a6f1cf;
+.theme-toggle[aria-pressed="false"] .theme-icon--sun {
+  background: #d8f7cb33;
+  opacity: 1;
+}
+
+.theme-toggle[aria-pressed="true"] .theme-icon--moon {
+  background: #d8f7cb33;
+  opacity: 1;
 }
 
 main.container {
@@ -314,9 +315,8 @@ main.container {
   }
 
   .theme-toggle {
-    min-width: 122px;
-    font-size: 0.78rem;
-    padding: 0.3rem 0.55rem;
+    min-width: 68px;
+    font-size: 0.95rem;
   }
 
   .contest-block {

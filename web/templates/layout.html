@@ -9,16 +9,13 @@
     <script>
       (function () {
         var storageKey = "nemalo-theme";
-        var theme = null;
+        var theme = "light";
         try {
-          theme = localStorage.getItem(storageKey);
+          var saved = localStorage.getItem(storageKey);
+          if (saved === "light" || saved === "dark") {
+            theme = saved;
+          }
         } catch (e) {}
-        if (theme !== "light" && theme !== "dark") {
-          var prefersDark =
-            window.matchMedia &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches;
-          theme = prefersDark ? "dark" : "light";
-        }
         document.documentElement.setAttribute("data-theme", theme);
       })();
     </script>
@@ -32,8 +29,8 @@
       <div class="container header-inner">
         <a class="brand" href="/standings">Nemalo Standings</a>
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Переключить тему" aria-pressed="false">
-          <span class="theme-toggle__label">Тема</span>
-          <span class="theme-toggle__state">Светлая</span>
+          <span class="theme-icon theme-icon--sun" aria-hidden="true">☀</span>
+          <span class="theme-icon theme-icon--moon" aria-hidden="true">☾</span>
         </button>
       </div>
     </header>
@@ -49,14 +46,10 @@
           return;
         }
 
-        var stateNode = button.querySelector(".theme-toggle__state");
-
         function updateButton() {
           var isDark = root.getAttribute("data-theme") === "dark";
           button.setAttribute("aria-pressed", isDark ? "true" : "false");
-          if (stateNode) {
-            stateNode.textContent = isDark ? "Тёмная" : "Светлая";
-          }
+          button.setAttribute("title", isDark ? "Тёмная тема" : "Светлая тема");
         }
 
         button.addEventListener("click", function () {

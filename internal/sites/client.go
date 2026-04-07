@@ -2,6 +2,15 @@ package sites
 
 import "context"
 
+type TaskResult struct {
+	TaskURL   string
+	Attempted bool
+	Solved    bool
+	Score     *int
+}
+
 type SiteClient interface {
-	FetchUserStatuses(ctx context.Context, accountID string) (solved []string, attempted []string, err error)
+	FetchUserResults(ctx context.Context, accountID string) ([]TaskResult, error)
+	SupportsTaskScores() bool
+	MatchTaskURL(taskURL string) bool
 }

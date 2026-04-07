@@ -33,6 +33,22 @@ func (r *Registry) Get(site string) (SiteClient, bool) {
 	return c, ok
 }
 
+func (r *Registry) ResolveByTaskURL(taskURL string) (string, SiteClient, bool) {
+	taskURL = strings.TrimSpace(taskURL)
+	if taskURL == "" {
+		return "", nil, false
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for site, client := range r.clients {
+		if client.MatchTaskURL(taskURL) {
+			return site, client, true
+		}
+	}
+	return "", nil, false
+}
+
 func (r *Registry) Sites() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

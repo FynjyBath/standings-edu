@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -30,24 +31,27 @@ func NewCodeforcesAPIClient() *CodeforcesAPIClient {
 	}
 }
 
-func (c *CodeforcesAPIClient) FetchUserStatuses(ctx context.Context, accountID string) (solved []string, attempted []string, err error) {
+func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID string) ([]TaskResult, error) {
 	handle := strings.TrimSpace(accountID)
 	if handle == "" {
-		return nil, nil, nil
+		return nil, nil
 	}
 
-	solvedSet := make(map[string]struct{})
-	attemptedSet := make(map[string]struct{})
+	type aggregate struct {
+		attempted bool
+		solved    bool
+		score     int
+		hasScore  bool
+	}
+	aggByTask := make(map[string]aggregate)
 
-	const (
-		maxPages = 30
-	)
+	const maxPages = 30
 	from := 1
 
 	for page := 0; page < maxPages; page++ {
 		resp, err := c.fetchPage(ctx, handle, from, codeforcesPageSize)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 
 		for _, submission := range resp.Result {
@@ -55,10 +59,19 @@ func (c *CodeforcesAPIClient) FetchUserStatuses(ctx context.Context, accountID s
 			if taskURL == "" {
 				continue
 			}
-			attemptedSet[taskURL] = struct{}{}
+
+			a := aggByTask[taskURL]
+			a.attempted = true
 			if submission.Verdict == "OK" {
-				solvedSet[taskURL] = struct{}{}
+				a.solved = true
 			}
+
+			score := codeforcesSubmissionScore(submission)
+			if !a.hasScore || score > a.score {
+				a.score = score
+				a.hasScore = true
+			}
+			aggByTask[taskURL] = a
 		}
 
 		if len(resp.Result) < codeforcesPageSize {
@@ -67,9 +80,38 @@ func (c *CodeforcesAPIClient) FetchUserStatuses(ctx context.Context, accountID s
 		from += codeforcesPageSize
 	}
 
-	solved = mapKeysSorted(solvedSet)
-	attempted = mapKeysSorted(attemptedSet)
-	return solved, attempted, nil
+	out := make([]TaskResult, 0, len(aggByTask))
+	for taskURL, a := range aggByTask {
+		score := a.score
+		out = append(out, TaskResult{
+			TaskURL:   taskURL,
+			Attempted: a.attempted,
+			Solved:    a.solved,
+			Score:     &score,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TaskURL < out[j].TaskURL
+	})
+	return out, nil
+}
+
+func (c *CodeforcesAPIClient) SupportsTaskScores() bool {
+	return true
+}
+
+func (c *CodeforcesAPIClient) MatchTaskURL(taskURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(taskURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host != "codeforces.com" && host != "www.codeforces.com" {
+		return false
+	}
+	path := strings.ToLower(strings.TrimSpace(u.Path))
+	return strings.HasPrefix(path, "/problemset/problem/") || strings.HasPrefix(path, "/gym/") || strings.Contains(path, "/problem/")
 }
 
 func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from int, count int) (codeforcesAPIResponse, error) {
@@ -122,13 +164,24 @@ func buildCodeforcesProblemURL(p codeforcesProblem) string {
 	return fmt.Sprintf("https://codeforces.com/problemset/problem/%d/%s", p.ContestID, url.PathEscape(p.Index))
 }
 
-func mapKeysSorted(m map[string]struct{}) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+func codeforcesSubmissionScore(sub codeforcesSubmission) int {
+	if sub.Points != nil {
+		return clampScore(int(math.Round(*sub.Points)), 0, 100)
 	}
-	sort.Strings(out)
-	return out
+	if sub.Verdict == "OK" {
+		return 100
+	}
+	return 0
+}
+
+func clampScore(v int, min int, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 type codeforcesAPIResponse struct {
@@ -139,6 +192,7 @@ type codeforcesAPIResponse struct {
 
 type codeforcesSubmission struct {
 	Verdict string            `json:"verdict"`
+	Points  *float64          `json:"points"`
 	Problem codeforcesProblem `json:"problem"`
 }
 

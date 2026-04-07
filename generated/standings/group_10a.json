@@ -5,6 +5,7 @@
     {
       "id": "contest_informatics_live",
       "title": "Informatics (реальные данные)",
+      "olympiad": true,
       "subcontests": [
         {
           "title": "Решено 878047",
@@ -83,16 +84,25 @@
       ],
       "rows": [
         {
-          "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
-          "solved_count": 3,
+          "student_id": "admin",
+          "full_name": "Ныйкин Антон Игоревич",
+          "solved_count": 5,
+          "total_score": 600,
           "statuses": [
             "solved",
             "solved",
             "solved",
+            "solved",
             "attempted",
-            "attempted",
-            "attempted"
+            "solved"
+          ],
+          "scores": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
           ]
         },
         {
@@ -106,6 +116,14 @@
             "none",
             "none",
             "none"
+          ],
+          "scores": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ]
         },
         {
@@ -119,6 +137,14 @@
             "none",
             "none",
             "none"
+          ],
+          "scores": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ]
         }
       ]
@@ -126,6 +152,7 @@
     {
       "id": "contest_acmp_live",
       "title": "ACMP (реальные данные)",
+      "olympiad": true,
       "subcontests": [
         {
           "title": "Решено 268673",
@@ -204,9 +231,10 @@
       ],
       "rows": [
         {
-          "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
+          "student_id": "admin",
+          "full_name": "Ныйкин Антон Игоревич",
           "solved_count": 3,
+          "total_score": 3,
           "statuses": [
             "solved",
             "solved",
@@ -214,6 +242,14 @@
             "attempted",
             "attempted",
             "attempted"
+          ],
+          "scores": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
           ]
         },
         {
@@ -227,6 +263,14 @@
             "none",
             "none",
             "none"
+          ],
+          "scores": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ]
         },
         {
@@ -240,6 +284,14 @@
             "none",
             "none",
             "none"
+          ],
+          "scores": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ]
         }
       ]
@@ -247,6 +299,7 @@
     {
       "id": "contest_cf_live",
       "title": "Codeforces (реальные данные)",
+      "olympiad": true,
       "subcontests": [
         {
           "title": "Решено FynjyBath",
@@ -325,16 +378,25 @@
       ],
       "rows": [
         {
-          "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
-          "solved_count": 3,
+          "student_id": "admin",
+          "full_name": "Ныйкин Антон Игоревич",
+          "solved_count": 4,
+          "total_score": 400,
           "statuses": [
             "solved",
             "solved",
             "solved",
-            "attempted",
+            "solved",
             "attempted",
             "attempted"
+          ],
+          "scores": [
+            100,
+            100,
+            100,
+            100,
+            0,
+            0
           ]
         },
         {
@@ -348,6 +410,14 @@
             "none",
             "none",
             "none"
+          ],
+          "scores": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ]
         },
         {
@@ -361,6 +431,14 @@
             "none",
             "none",
             "none"
+          ],
+          "scores": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ]
         }
       ]
@@ -368,6 +446,7 @@
     {
       "id": "contest_graphs",
       "title": "Графы",
+      "olympiad": false,
       "subcontests": [
         {
           "title": "DFS и BFS",
@@ -436,8 +515,8 @@
       ],
       "rows": [
         {
-          "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
+          "student_id": "admin",
+          "full_name": "Ныйкин Антон Игоревич",
           "solved_count": 0,
           "statuses": [
             "none",
@@ -476,6 +555,7 @@
     {
       "id": "contest_dp",
       "title": "Динамическое программирование",
+      "olympiad": false,
       "subcontests": [
         {
           "title": "Базовые задачи",
@@ -524,8 +604,8 @@
       ],
       "rows": [
         {
-          "student_id": "stu_1",
-          "full_name": "Иванов Иван Иванович (FynjyBath, inf:878047, acmp:268673)",
+          "student_id": "admin",
+          "full_name": "Ныйкин Антон Игоревич",
           "solved_count": 0,
           "statuses": [
             "none",

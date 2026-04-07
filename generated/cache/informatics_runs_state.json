@@ -1,0 +1,5222 @@
+{
+  "accounts": {
+    "100500": {
+      "max_run_id": 0,
+      "updated_at": "2026-04-07T13:22:01.378407564Z"
+    },
+    "436037": {
+      "max_run_id": 41425032,
+      "results": [
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=100#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1001#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 47
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1002#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1004#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1005#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1006#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1007#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1014#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=102#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1024#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1025#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1028#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1030#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1037#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1040#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 80
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1042#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1043#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=106#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1085#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1087#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1093#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1111#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111121#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111163#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111182#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111253#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111313#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111316#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111317#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111320#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 39
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111321#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111333#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111334#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111364#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111370#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111373#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111375#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111385#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111402#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111403#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111404#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111410#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 60
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111505#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111514#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111519#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111522#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111527#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111538#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111539#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111540#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111541#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111582#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111589#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111595#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111599#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111601#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111623#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111624#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 58
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111639#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111640#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111641#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111642#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111647#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111648#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111649#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111665#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111689#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111698#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111701#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111722#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111728#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111729#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111730#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111732#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 97
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111744#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111749#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111759#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111766#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111768#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 15
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111778#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111788#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111789#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111790#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 16
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111795#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111798#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111800#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111801#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111812#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111819#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111830#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111839#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111841#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111853#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111856#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111857#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=111858#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1119#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1120#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112005#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112058#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112092#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 20
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112099#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1121#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112136#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 90
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112173#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112191#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112194#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112228#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112241#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112242#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112245#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112250#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112274#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112319#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112334#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 12
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112391#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112392#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112393#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112394#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112395#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112398#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1124#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112403#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112404#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112432#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112496#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112533#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112534#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 95
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112541#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 34
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112542#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112560#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112577#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112595#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112599#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112603#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112605#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112606#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 17
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112610#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112612#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112623#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112669#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112670#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112671#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112708#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 36
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112735#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112736#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112743#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112745#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112749#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112769#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 20
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112770#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 75
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112773#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112776#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 50
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112812#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112819#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112822#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 16
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112829#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112922#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112980#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=112984#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113015#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113017#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113073#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113074#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113075#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113076#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 60
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113077#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113081#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 5
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113088#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113092#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113097#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113102#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113104#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113300#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 30
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113337#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113454#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113466#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113507#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 60
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113556#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113567#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113573#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113632#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113737#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113738#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113739#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113740#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113741#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113785#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113813#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113888#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 60
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113893#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 40
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113895#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113897#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 19
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113899#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 58
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113901#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 44
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113909#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113910#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113982#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113986#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113995#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=113999#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114000#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114001#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 30
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114008#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114031#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 30
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114055#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 25
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114058#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114072#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114073#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114074#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 38
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114075#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 3
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114076#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114077#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 66
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114078#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 32
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114079#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 7
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114080#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114084#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 17
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114085#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114086#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114088#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 23
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114102#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114107#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114108#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114117#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 21
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114122#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 73
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114123#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 34
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114144#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114199#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114301#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114320#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 10
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114339#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114376#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114389#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 23
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114393#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114412#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 70
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114436#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 9
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114448#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 3
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114518#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114519#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114520#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 28
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114522#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114523#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 30
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114524#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 50
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114533#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 90
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114534#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 10
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114543#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114544#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 40
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114545#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114546#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114547#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 31
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114655#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 25
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114901#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 20
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114902#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 17
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114903#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 10
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114905#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114907#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 36
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114908#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 15
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114909#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114911#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114912#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114914#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 15
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114915#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 12
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114916#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114917#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 27
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114918#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114919#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114922#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114925#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114940#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114941#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 9
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114942#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114943#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114944#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114945#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 25
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114946#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114947#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 5
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114948#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114949#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 68
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114951#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 30
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114952#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 10
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114978#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=114979#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 25
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115000#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115013#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 54
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115056#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115062#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115352#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 13
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115468#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 46
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=115469#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 26
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1188#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1190#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=120#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 8
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1204#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 60
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1209#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=121#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1216#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=122#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1222#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 25
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=123#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1232#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 52
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1236#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 14
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=124#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=125#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=126#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=127#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1272#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1273#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=128#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=129#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1316#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1323#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1324#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1326#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 70
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1327#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 35
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1333#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1336#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1337#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1353#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 11
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1362#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1370#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1376#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1404#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1406#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1409#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1411#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1415#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1424#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1426#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1436#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1440#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1441#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1442#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1446#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1447#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1448#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1451#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1457#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1459#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=146#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1460#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1461#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 10
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1466#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1467#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=147#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1472#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1474#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1475#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1476#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1477#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1479#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1480#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1481#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1483#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1484#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1485#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1487#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1488#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1489#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1490#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1494#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1495#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1496#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1498#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1499#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=15#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1500#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1501#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1502#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1503#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1504#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1505#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1506#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1507#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1509#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 37
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1513#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1514#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1516#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1517#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1520#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1523#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1524#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1527#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1528#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1529#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1532#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1533#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1535#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1537#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1538#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1543#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1559#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1561#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1562#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1563#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1566#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=157#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1570#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1571#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1572#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1573#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=158#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1580#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1581#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1584#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1589#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1596#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1598#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=160#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1609#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=161#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1619#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=162#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 9
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=164#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=165#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=166#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1667#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1678#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1679#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1680#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1681#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=169#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 66
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1693#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=170#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1704#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=171#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1717#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 8
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1720#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 89
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=173#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=174#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1745#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1748#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=175#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1755#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=176#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1763#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=177#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1790#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1791#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1792#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1793#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=180#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1802#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1817#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=182#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1837#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=185#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1880#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1896#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 14
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=190#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1912#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1915#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=192#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1928#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1935#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1939#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1967#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1972#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1981#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1982#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1985#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=199#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1991#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=1993#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=200#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2001#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=202#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=203#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=204#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=205#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=206#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=207#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=210#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=212#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=213#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=229#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=230#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=231#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=232#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=233#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=242#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=253#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2530#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 96
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2532#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 60
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=254#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=255#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 36
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=256#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2598#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=260#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=261#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=264#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=266#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=27#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2772#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2782#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2786#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2793#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2796#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=28#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=280#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2805#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2806#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2812#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2817#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2820#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2824#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2825#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2826#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=283#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=285#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=286#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2868#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=287#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=288#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2883#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 65
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=290#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2911#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2918#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=292#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=293#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2936#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2937#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2938#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2939#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=294#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2940#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2941#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2942#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2943#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2944#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2945#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2947#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2949#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2950#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2951#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2952#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2953#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2954#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2955#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2956#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2957#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2958#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2959#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=296#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2960#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2961#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2962#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2968#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2976#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2983#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2992#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=2998#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=30#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 82
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3014#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3017#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=303#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3036#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3039#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3050#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=306#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=307#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3073#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3074#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3078#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=308#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3086#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3087#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 10
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3089#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=309#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3090#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3092#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3093#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3098#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3099#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=310#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3106#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3116#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3117#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3118#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 3
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3119#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=312#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3120#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3121#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3122#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3124#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3125#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3127#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=315#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=316#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=317#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=318#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=319#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=32#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=320#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3204#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3208#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=321#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=325#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3284#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3285#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3286#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3287#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3288#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3292#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3299#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=330#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3302#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3308#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3312#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3316#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3317#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3318#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=332#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3321#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3323#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3324#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3325#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3327#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=333#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3335#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3341#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3342#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3344#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3345#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3356#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3360#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3369#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3373#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 46
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3374#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 90
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=338#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=341#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3443#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3444#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3448#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3453#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3473#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3482#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 7
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3486#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3494#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3503#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=351#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3511#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=352#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3525#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=353#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3537#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=354#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=355#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3558#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3559#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=356#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3568#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3572#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3573#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3586#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3587#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3612#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3643#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3648#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 4
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=366#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=369#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=371#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3711#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3721#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3735#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=374#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3740#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3749#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3750#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3751#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3752#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3753#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3754#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3755#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3757#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3759#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3760#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3761#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3762#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 6
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3764#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3765#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3766#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3767#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3768#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3769#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3772#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3785#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3791#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3797#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=38#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3800#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3801#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3803#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3804#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3805#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3806#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3807#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3808#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3812#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3814#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3846#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3847#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3848#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3849#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3850#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3851#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3853#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3871#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3879#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3882#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3883#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=389#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3894#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 0
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=390#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3903#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=3906#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=4#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=404#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=411#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=413#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=417#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=4188#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=4189#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=4192#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=42#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 22
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=4204#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=425#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=433#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=435#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=440#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=441#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=442#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=443#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=444#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=446#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=449#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=450#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=451#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=456#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=460#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=461#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=464#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=465#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=468#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=470#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=471#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=474#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=475#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=476#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=478#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=479#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=481#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=485#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=486#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=487#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=490#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=492#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=5#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=50#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=501#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=506#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=507#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=509#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=51#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=510#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=515#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=516#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=518#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=52#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=527#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=54#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=55#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=550#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=565#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=57#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=58#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=580#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=586#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=587#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=59#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=592#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=595#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=596#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=597#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=6#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=604#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=605#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=61#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=611#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=618#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=623#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=63#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=636#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=639#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=64#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=641#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=648#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=649#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=65#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=652#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=66#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=666#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 20
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=67#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=675#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=68#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=69#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=7#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=70#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=715#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=72#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=723#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=73#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=733#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 4
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=736#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=74#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=744#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=745#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=746#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=755#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=756#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=757#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=758#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=759#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=760#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=761#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=762#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=763#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=764#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=765#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=766#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=767#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=775#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=776#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=791#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=797#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=80#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=82#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=83#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=84#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=842#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=843#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=846#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=85#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=855#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=857#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=858#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=87#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=88#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=89#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=898#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=90#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=912#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=913#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=914#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=915#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=93#1",
+          "Attempted": true,
+          "Solved": false,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=933#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=944#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=945#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=96#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=97#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=973#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=98#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        },
+        {
+          "TaskURL": "https://informatics.msk.ru/mod/statements/view.php?chapterid=99#1",
+          "Attempted": true,
+          "Solved": true,
+          "Score": 100
+        }
+      ],
+      "updated_at": "2026-04-07T13:22:06.529017046Z"
+    }
+  }
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -115,29 +116,27 @@ func NewInformaticsAPIClientWithState(creds InformaticsCredentials, statePath st
 	}, nil
 }
 
-func (c *InformaticsAPIClient) FetchUserStatuses(ctx context.Context, accountID string) (solved []string, attempted []string, err error) {
+func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID string) ([]TaskResult, error) {
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
-		return nil, nil, nil
+		return nil, nil
 	}
 	if _, err := strconv.Atoi(accountID); err != nil {
-		return nil, nil, fmt.Errorf("informatics account_id must be numeric: %w", err)
+		return nil, fmt.Errorf("informatics account_id must be numeric: %w", err)
 	}
 
 	if err := c.ensureLoggedIn(ctx, false); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	state, hasState, err := c.getAccountState(accountID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	solvedSet := make(map[string]struct{})
-	attemptedSet := make(map[string]struct{})
+	aggByTask := make(map[string]informaticsTaskAggregate)
 	if hasState {
-		mergeURLsIntoSet(solvedSet, state.Solved)
-		mergeURLsIntoSet(attemptedSet, state.Attempted)
+		mergeStateIntoAggregates(aggByTask, state)
 	}
 
 	lastKnownRunID := 0
@@ -148,10 +147,10 @@ func (c *InformaticsAPIClient) FetchUserStatuses(ctx context.Context, accountID 
 
 	firstPage, err := c.fetchRunsPageWithRelogin(ctx, accountID, 1)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	stopOnKnownRunID := lastKnownRunID > 0
-	staleReached := mergeRunsIntoSetsSinceRunID(firstPage.Data, lastKnownRunID, stopOnKnownRunID, solvedSet, attemptedSet, c.buildTaskURL, &maxRunID)
+	staleReached := mergeRunsIntoAggregatesSinceRunID(firstPage.Data, lastKnownRunID, stopOnKnownRunID, aggByTask, c.buildTaskURL, &maxRunID)
 
 	pageCount := firstPage.Metadata.PageCount
 	if pageCount > 1 && len(firstPage.Data) > 0 && !staleReached {
@@ -159,39 +158,53 @@ func (c *InformaticsAPIClient) FetchUserStatuses(ctx context.Context, accountID 
 			for page := 2; page <= pageCount; page++ {
 				resp, pageErr := c.fetchRunsPageWithRelogin(ctx, accountID, page)
 				if pageErr != nil {
-					return nil, nil, pageErr
+					return nil, pageErr
 				}
-				if mergeRunsIntoSetsSinceRunID(resp.Data, lastKnownRunID, true, solvedSet, attemptedSet, c.buildTaskURL, &maxRunID) {
+				if mergeRunsIntoAggregatesSinceRunID(resp.Data, lastKnownRunID, true, aggByTask, c.buildTaskURL, &maxRunID) {
 					break
 				}
 			}
 		} else {
 			otherPages, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
 			if pageErr != nil {
-				return nil, nil, pageErr
+				return nil, pageErr
 			}
 			for _, page := range otherPages {
-				mergeRunsIntoSetsSinceRunID(page.Data, 0, false, solvedSet, attemptedSet, c.buildTaskURL, &maxRunID)
+				mergeRunsIntoAggregatesSinceRunID(page.Data, 0, false, aggByTask, c.buildTaskURL, &maxRunID)
 			}
 		}
 	}
 
-	solved = setKeysSorted(solvedSet)
-	attempted = setKeysSorted(attemptedSet)
+	results := aggregatesToTaskResults(aggByTask)
 
 	if maxRunID > lastKnownRunID || !hasState {
 		newState := informaticsAccountState{
 			MaxRunID:  maxRunID,
-			Solved:    solved,
-			Attempted: attempted,
+			Results:   results,
 			UpdatedAt: time.Now().UTC(),
 		}
 		if saveErr := c.saveAccountState(accountID, newState); saveErr != nil {
-			return nil, nil, saveErr
+			return nil, saveErr
 		}
 	}
 
-	return solved, attempted, nil
+	return results, nil
+}
+
+func (c *InformaticsAPIClient) SupportsTaskScores() bool {
+	return true
+}
+
+func (c *InformaticsAPIClient) MatchTaskURL(taskURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(taskURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host != "informatics.msk.ru" && host != "www.informatics.msk.ru" {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(u.Path), "/mod/statements/view.php")
 }
 
 func (c *InformaticsAPIClient) fetchRunsPageWithRelogin(ctx context.Context, accountID string, page int) (informaticsRunsResponse, error) {
@@ -279,7 +292,7 @@ func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, acco
 	return out, nil
 }
 
-func mergeRunsIntoSetsSinceRunID(runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool, solvedSet map[string]struct{}, attemptedSet map[string]struct{}, buildTaskURL func(problemID int) string, maxRunID *int) (staleReached bool) {
+func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string, maxRunID *int) (staleReached bool) {
 	for _, run := range runs {
 		if run.ID <= 0 {
 			continue
@@ -300,22 +313,140 @@ func mergeRunsIntoSetsSinceRunID(runs []informaticsRun, lastKnownRunID int, stop
 		if taskURL == "" {
 			continue
 		}
-		attemptedSet[taskURL] = struct{}{}
+
+		agg := aggByTask[taskURL]
+		agg.attempted = true
 		if run.EjudgeStatus == 0 {
-			solvedSet[taskURL] = struct{}{}
+			agg.solved = true
 		}
+
+		score := inferInformaticsScore(run)
+		if !agg.hasScore || score > agg.score {
+			agg.score = score
+			agg.hasScore = true
+		}
+
+		aggByTask[taskURL] = agg
 	}
 	return false
 }
 
-func mergeURLsIntoSet(dst map[string]struct{}, values []string) {
-	for _, v := range values {
-		normalized := strings.TrimSpace(v)
-		if normalized == "" {
+func inferInformaticsScore(run informaticsRun) int {
+	if run.EjudgeScore.Valid {
+		return clampInformaticsScore(run.EjudgeScore.Value)
+	}
+	if run.Score.Valid {
+		return clampInformaticsScore(run.Score.Value)
+	}
+	if run.EjudgeStatus == 0 {
+		return 100
+	}
+	return 0
+}
+
+func clampInformaticsScore(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
+}
+
+func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, state informaticsAccountState) {
+	for _, task := range state.Solved {
+		url := strings.TrimSpace(task)
+		if url == "" {
 			continue
 		}
-		dst[normalized] = struct{}{}
+		agg := aggByTask[url]
+		agg.attempted = true
+		agg.solved = true
+		if !agg.hasScore || 100 > agg.score {
+			agg.score = 100
+			agg.hasScore = true
+		}
+		aggByTask[url] = agg
 	}
+
+	for _, task := range state.Attempted {
+		url := strings.TrimSpace(task)
+		if url == "" {
+			continue
+		}
+		agg := aggByTask[url]
+		agg.attempted = true
+		if !agg.hasScore {
+			agg.score = 0
+			agg.hasScore = true
+		}
+		aggByTask[url] = agg
+	}
+
+	for _, result := range state.Results {
+		url := strings.TrimSpace(result.TaskURL)
+		if url == "" {
+			continue
+		}
+
+		agg := aggByTask[url]
+		attempted := result.Attempted || result.Solved || result.Score != nil
+		if attempted {
+			agg.attempted = true
+		}
+		if result.Solved {
+			agg.solved = true
+		}
+
+		if result.Score != nil {
+			score := clampInformaticsScore(*result.Score)
+			if !agg.hasScore || score > agg.score {
+				agg.score = score
+				agg.hasScore = true
+			}
+		}
+		aggByTask[url] = agg
+	}
+
+	for taskURL, agg := range aggByTask {
+		if agg.attempted && !agg.hasScore {
+			if agg.solved {
+				agg.score = 100
+			} else {
+				agg.score = 0
+			}
+			agg.hasScore = true
+			aggByTask[taskURL] = agg
+		}
+	}
+}
+
+func aggregatesToTaskResults(aggByTask map[string]informaticsTaskAggregate) []TaskResult {
+	out := make([]TaskResult, 0, len(aggByTask))
+	for taskURL, agg := range aggByTask {
+		if !agg.attempted && !agg.solved {
+			continue
+		}
+
+		var score *int
+		if agg.hasScore {
+			value := clampInformaticsScore(agg.score)
+			score = &value
+		}
+
+		out = append(out, TaskResult{
+			TaskURL:   taskURL,
+			Attempted: agg.attempted,
+			Solved:    agg.solved,
+			Score:     score,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TaskURL < out[j].TaskURL
+	})
+	return out
 }
 
 func (c *InformaticsAPIClient) getAccountState(accountID string) (informaticsAccountState, bool, error) {
@@ -338,6 +469,8 @@ func (c *InformaticsAPIClient) saveAccountState(accountID string, state informat
 		return err
 	}
 
+	state.Solved = nil
+	state.Attempted = nil
 	c.accountState[accountID] = state
 	return c.persistStateLocked()
 }
@@ -377,9 +510,7 @@ func (c *InformaticsAPIClient) persistStateLocked() error {
 		return nil
 	}
 
-	state := informaticsStateFile{
-		Accounts: c.accountState,
-	}
+	state := informaticsStateFile{Accounts: c.accountState}
 	b, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal informatics state: %w", err)
@@ -537,16 +668,10 @@ func (c *InformaticsAPIClient) fetchRunsPage(ctx context.Context, accountID stri
 }
 
 func (c *InformaticsAPIClient) buildTaskURL(problemID int) string {
-	return fmt.Sprintf("%s/mod/statements/view.php?chapterid=%d#1", c.baseURL, problemID)
-}
-
-func setKeysSorted(set map[string]struct{}) []string {
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
+	if problemID <= 0 {
+		return ""
 	}
-	sort.Strings(out)
-	return out
+	return fmt.Sprintf("%s/mod/statements/view.php?chapterid=%d#1", c.baseURL, problemID)
 }
 
 type informaticsRunsResponse struct {
@@ -564,6 +689,8 @@ type informaticsMeta struct {
 type informaticsRun struct {
 	ID           int                `json:"id"`
 	EjudgeStatus int                `json:"ejudge_status"`
+	EjudgeScore  maybeInt           `json:"ejudge_score"`
+	Score        maybeInt           `json:"score"`
 	Problem      informaticsProblem `json:"problem"`
 }
 
@@ -571,13 +698,67 @@ type informaticsProblem struct {
 	ID int `json:"id"`
 }
 
+type maybeInt struct {
+	Value int
+	Valid bool
+}
+
+func (m *maybeInt) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	if s == "" || s == "null" {
+		m.Valid = false
+		m.Value = 0
+		return nil
+	}
+
+	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") {
+		unquoted, err := strconv.Unquote(s)
+		if err != nil {
+			m.Valid = false
+			m.Value = 0
+			return nil
+		}
+		s = strings.TrimSpace(unquoted)
+	}
+
+	if s == "" {
+		m.Valid = false
+		m.Value = 0
+		return nil
+	}
+
+	if i, err := strconv.Atoi(s); err == nil {
+		m.Valid = true
+		m.Value = i
+		return nil
+	}
+
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		m.Valid = true
+		m.Value = int(math.Round(f))
+		return nil
+	}
+
+	m.Valid = false
+	m.Value = 0
+	return nil
+}
+
+type informaticsTaskAggregate struct {
+	attempted bool
+	solved    bool
+	score     int
+	hasScore  bool
+}
+
 type informaticsStateFile struct {
 	Accounts map[string]informaticsAccountState `json:"accounts"`
 }
 
 type informaticsAccountState struct {
-	MaxRunID  int       `json:"max_run_id"`
-	Solved    []string  `json:"solved"`
-	Attempted []string  `json:"attempted"`
-	UpdatedAt time.Time `json:"updated_at"`
+	MaxRunID  int          `json:"max_run_id"`
+	Results   []TaskResult `json:"results,omitempty"`
+	Solved    []string     `json:"solved,omitempty"`
+	Attempted []string     `json:"attempted,omitempty"`
+	UpdatedAt time.Time    `json:"updated_at"`
 }

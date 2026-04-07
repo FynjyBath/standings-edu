@@ -5,6 +5,7 @@
     {
       "id": "contest_strings",
       "title": "Строки",
+      "olympiad": false,
       "subcontests": [
         {
           "title": "Префикс-функция",
@@ -77,6 +78,7 @@
     {
       "id": "contest_graphs",
       "title": "Графы",
+      "olympiad": false,
       "subcontests": [
         {
           "title": "DFS и BFS",

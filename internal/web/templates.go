@@ -20,6 +20,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 		funcMap: template.FuncMap{
 			"statusSymbol": statusSymbol,
 			"statusClass":  statusClass,
+			"scoreText":    scoreText,
 			"siteTitle":    siteTitle,
 		},
 	}
@@ -75,4 +76,11 @@ func siteTitle(site string) string {
 	default:
 		return site
 	}
+}
+
+func scoreText(score *int) string {
+	if score == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", *score)
 }

@@ -286,6 +286,11 @@ main.container {
   font-size: 1rem;
 }
 
+.score-cell {
+  min-width: 44px;
+  font-weight: 700;
+}
+
 .status-cell.solved {
   background: var(--solved-bg) !important;
   color: var(--solved-text);

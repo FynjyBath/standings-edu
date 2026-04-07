@@ -2,6 +2,7 @@
   {
     "id": "contest_graphs",
     "title": "Графы",
+    "olympiad": false,
     "subcontests": [
       {
         "title": "DFS и BFS",
@@ -23,6 +24,7 @@
   {
     "id": "contest_dp",
     "title": "Динамическое программирование",
+    "olympiad": false,
     "subcontests": [
       {
         "title": "Базовые задачи",
@@ -42,6 +44,7 @@
   {
     "id": "contest_strings",
     "title": "Строки",
+    "olympiad": false,
     "subcontests": [
       {
         "title": "Префикс-функция",
@@ -61,6 +64,7 @@
   {
     "id": "contest_cf_live",
     "title": "Codeforces (реальные данные)",
+    "olympiad": true,
     "subcontests": [
       {
         "title": "Решено FynjyBath",
@@ -83,6 +87,7 @@
   {
     "id": "contest_informatics_live",
     "title": "Informatics (реальные данные)",
+    "olympiad": true,
     "subcontests": [
       {
         "title": "Решено 878047",
@@ -105,6 +110,7 @@
   {
     "id": "contest_acmp_live",
     "title": "ACMP (реальные данные)",
+    "olympiad": true,
     "subcontests": [
       {
         "title": "Решено 268673",

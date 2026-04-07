@@ -43,12 +43,41 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 - `http://localhost:8080/standings/group_10a` — standings конкретной группы;
 - `http://localhost:8080/` — `404 Not Found`.
 
+## Olympiad-режим контестов
+
+В `data/contests.json` у каждого контеста есть флаг:
+
+```json
+{
+  "id": "contest_cf_live",
+  "title": "Codeforces (реальные данные)",
+  "olympiad": true,
+  "subcontests": []
+}
+```
+
+Поведение:
+- `olympiad: false` — классический режим: `+`, `×`, пусто;
+- `olympiad: true` — в ячейке задачи показывается балл:
+  - для `codeforces` и `informatics` берётся реальный score;
+  - для сайтов без score-поддержки (например, `acmp`) используется fallback: `1` для solved, `0` для attempted-only;
+  - при отсутствии попыток ячейка пустая.
+
+Сортировка строк в контесте:
+- `olympiad: false` — по `solved_count desc`, затем по ФИО;
+- `olympiad: true` — по `total_score desc`, затем `solved_count desc`, затем по ФИО.
+
 ## Форматы generated
 
 Генератор пишет:
 - `generated/summary.json` — сводка по участникам для страницы `/standings`;
 - `generated/groups.json` — список групп;
 - `generated/standings/{group}.json` — готовые standings групп.
+
+Для `olympiad: true` в `generated/standings/{group}.json` дополнительно заполняются:
+- `contest.olympiad`;
+- `row.total_score`;
+- `row.scores` (массив `int|null` в порядке задач контеста).
 
 ## API
 
@@ -72,9 +101,18 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 ## Как добавить новый сайт
 
 1. Добавить реализацию `SiteClient` в `internal/sites/<site>.go`.
-2. Убедиться, что клиент возвращает URL задач в стабильном формате для корректной нормализации (`NormalizeTaskURL`) и совпадения с URL в `data/contests.json`.
-3. Зарегистрировать клиент в `cmd/generate/main.go`.
-4. Добавить аккаунты сайта в `data/students.json` (`site` + `account_id`).
-5. Если интеграции нужен логин/токен, добавить загрузку конфига/секретов в `cmd/generate/main.go` (по аналогии с `-informatics-creds`).
-6. Опционально: добавить читаемое название сайта для сводной таблицы в `internal/web/templates.go` (`siteTitle`).
-7. Перезапустить `go run ./cmd/generate`.
+2. Реализовать методы интерфейса:
+   - `FetchUserResults(ctx, accountID) ([]TaskResult, error)`;
+   - `MatchTaskURL(taskURL string) bool`;
+   - `SupportsTaskScores() bool`.
+3. В `FetchUserResults` возвращать:
+   - `TaskURL` (сырой URL задачи на сайте),
+   - `Attempted`,
+   - `Solved`,
+   - `Score` (`nil`, если сайт не отдаёт score).
+4. Убедиться, что URL задач стабильно нормализуются (`NormalizeTaskURL`) и совпадают с URL в `data/contests.json`.
+5. Зарегистрировать клиент в `cmd/generate/main.go`.
+6. Добавить аккаунты сайта в `data/students.json` (`site` + `account_id`).
+7. Если интеграции нужен логин/токен, добавить загрузку конфига/секретов в `cmd/generate/main.go` (по аналогии с `-informatics-creds`).
+8. Опционально: добавить читаемое название сайта для сводной таблицы в `internal/web/templates.go` (`siteTitle`).
+9. Перезапустить `go run ./cmd/generate`.

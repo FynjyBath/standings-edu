@@ -19,6 +19,7 @@ type Subcontest struct {
 type Contest struct {
 	ID          string       `json:"id"`
 	Title       string       `json:"title"`
+	Olympiad    bool         `json:"olympiad"`
 	Subcontests []Subcontest `json:"subcontests"`
 }
 
@@ -67,12 +68,15 @@ type GeneratedRow struct {
 	StudentID   string   `json:"student_id"`
 	FullName    string   `json:"full_name"`
 	SolvedCount int      `json:"solved_count"`
+	TotalScore  int      `json:"total_score,omitempty"`
 	Statuses    []string `json:"statuses"`
+	Scores      []*int   `json:"scores,omitempty"`
 }
 
 type GeneratedContestStandings struct {
 	ID          string                `json:"id"`
 	Title       string                `json:"title"`
+	Olympiad    bool                  `json:"olympiad"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`

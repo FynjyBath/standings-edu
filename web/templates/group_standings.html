@@ -6,6 +6,7 @@
 
 {{if .Standings.Contests}}
   {{range .Standings.Contests}}
+  {{$contest := .}}
   <section class="contest-block">
     <h2>{{.Title}}</h2>
     <div class="table-wrap">
@@ -13,7 +14,7 @@
         <thead>
           <tr>
             <th rowspan="2" class="student-col">Ученик</th>
-            <th rowspan="2" class="count-col">Решено</th>
+            <th rowspan="2" class="count-col">{{if .Olympiad}}Баллы{{else}}Решено{{end}}</th>
             {{if .Subcontests}}
               {{range .Subcontests}}
               <th colspan="{{.TaskCount}}" class="subcontest-head">{{.Title}}</th>
@@ -36,9 +37,15 @@
           {{range .Rows}}
           <tr>
             <td class="student-name">{{.FullName}}</td>
-            <td class="solved-count">{{.SolvedCount}}</td>
-            {{range .Statuses}}
-            <td class="status-cell {{statusClass .}}">{{statusSymbol .}}</td>
+            <td class="solved-count">{{if $contest.Olympiad}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
+            {{if $contest.Olympiad}}
+              {{range .Scores}}
+              <td class="score-cell">{{scoreText .}}</td>
+              {{end}}
+            {{else}}
+              {{range .Statuses}}
+              <td class="status-cell {{statusClass .}}">{{statusSymbol .}}</td>
+              {{end}}
             {{end}}
           </tr>
           {{end}}

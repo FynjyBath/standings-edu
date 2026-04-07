@@ -17,6 +17,7 @@ import (
 type accountStatuses struct {
 	solved    map[string]struct{}
 	attempted map[string]struct{}
+	scores    map[string]int
 }
 
 type inflightCall struct {
@@ -238,11 +239,13 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
+		Olympiad:    contest.Olympiad,
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
 	}
 
+	taskUsesSiteScores := make([]bool, 0)
 	for _, sc := range contest.Subcontests {
 		genSub := domain.GeneratedSubcontest{
 			Title: sc.Title,
@@ -257,6 +260,15 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 			}
 			genSub.Tasks = append(genSub.Tasks, task)
 			out.Tasks = append(out.Tasks, task)
+
+			useRealScores := false
+			if contest.Olympiad {
+				_, client, ok := b.registry.ResolveByTaskURL(normalized)
+				if ok && client != nil && client.SupportsTaskScores() {
+					useRealScores = true
+				}
+			}
+			taskUsesSiteScores = append(taskUsesSiteScores, useRealScores)
 		}
 		genSub.TaskCount = len(genSub.Tasks)
 		out.Subcontests = append(out.Subcontests, genSub)
@@ -271,8 +283,11 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 		row := domain.GeneratedRow{
 			StudentID:   student.ID,
 			FullName:    student.FullName,
-			Statuses:    make([]string, len(out.Tasks)),
 			SolvedCount: 0,
+			Statuses:    make([]string, len(out.Tasks)),
+		}
+		if contest.Olympiad {
+			row.Scores = make([]*int, len(out.Tasks))
 		}
 
 		for i, task := range out.Tasks {
@@ -284,12 +299,31 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 				status = domain.TaskStatusAttempted
 			}
 			row.Statuses[i] = status
+
+			if contest.Olympiad {
+				score, ok := resolveTaskScore(status, combined, task.NormalizedURL, taskUsesSiteScores[i])
+				if ok {
+					value := score
+					row.Scores[i] = &value
+					row.TotalScore += score
+				}
+			}
 		}
 
 		out.Rows = append(out.Rows, row)
 	}
 
 	sort.Slice(out.Rows, func(i, j int) bool {
+		if contest.Olympiad {
+			if out.Rows[i].TotalScore != out.Rows[j].TotalScore {
+				return out.Rows[i].TotalScore > out.Rows[j].TotalScore
+			}
+			if out.Rows[i].SolvedCount != out.Rows[j].SolvedCount {
+				return out.Rows[i].SolvedCount > out.Rows[j].SolvedCount
+			}
+			return strings.ToLower(out.Rows[i].FullName) < strings.ToLower(out.Rows[j].FullName)
+		}
+
 		if out.Rows[i].SolvedCount != out.Rows[j].SolvedCount {
 			return out.Rows[i].SolvedCount > out.Rows[j].SolvedCount
 		}
@@ -297,6 +331,37 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 	})
 
 	return out
+}
+
+func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskURL string, useRealScores bool) (int, bool) {
+	if status == domain.TaskStatusNone {
+		return 0, false
+	}
+
+	if useRealScores {
+		if score, ok := combined.scores[normalizedTaskURL]; ok {
+			return clampScore(score, 0, 100), true
+		}
+		if status == domain.TaskStatusSolved {
+			return 100, true
+		}
+		return 0, true
+	}
+
+	if status == domain.TaskStatusSolved {
+		return 1, true
+	}
+	return 0, true
+}
+
+func clampScore(v int, min int, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func (b *StandingsBuilder) collectStudentStatuses(ctx context.Context, students []domain.Student) (map[string]*accountStatuses, error) {
@@ -435,26 +500,47 @@ func (b *StandingsBuilder) loadFromSite(ctx context.Context, site string, accoun
 		return newAccountStatusesValue(), nil
 	}
 
-	solvedRaw, attemptedRaw, err := client.FetchUserStatuses(ctx, accountID)
+	results, err := client.FetchUserResults(ctx, accountID)
 	if err != nil {
 		return accountStatuses{}, err
 	}
 
 	out := newAccountStatusesValue()
-	for _, raw := range solvedRaw {
-		normalized := domain.NormalizeTaskURL(raw)
+	for _, result := range results {
+		normalized := domain.NormalizeTaskURL(result.TaskURL)
 		if normalized == "" {
 			continue
 		}
-		out.solved[normalized] = struct{}{}
-	}
-	for _, raw := range attemptedRaw {
-		normalized := domain.NormalizeTaskURL(raw)
-		if normalized == "" {
-			continue
+
+		attempted := result.Attempted || result.Solved || result.Score != nil
+		if attempted {
+			out.attempted[normalized] = struct{}{}
 		}
-		out.attempted[normalized] = struct{}{}
+		if result.Solved {
+			out.solved[normalized] = struct{}{}
+		}
+
+		hasScore := false
+		score := 0
+		if result.Score != nil {
+			score = clampScore(*result.Score, 0, 100)
+			hasScore = true
+		} else if attempted {
+			if result.Solved {
+				score = 100
+			} else {
+				score = 0
+			}
+			hasScore = true
+		}
+
+		if hasScore {
+			if prev, ok := out.scores[normalized]; !ok || score > prev {
+				out.scores[normalized] = score
+			}
+		}
 	}
+
 	return out, nil
 }
 
@@ -493,6 +579,7 @@ func newAccountStatusesValue() accountStatuses {
 	return accountStatuses{
 		solved:    make(map[string]struct{}),
 		attempted: make(map[string]struct{}),
+		scores:    make(map[string]int),
 	}
 }
 
@@ -503,6 +590,9 @@ func cloneStatuses(in accountStatuses) accountStatuses {
 	}
 	for k := range in.attempted {
 		out.attempted[k] = struct{}{}
+	}
+	for k, v := range in.scores {
+		out.scores[k] = v
 	}
 	return out
 }
@@ -516,6 +606,11 @@ func mergeStatuses(dst *accountStatuses, src accountStatuses) {
 	}
 	for k := range src.attempted {
 		dst.attempted[k] = struct{}{}
+	}
+	for k, v := range src.scores {
+		if prev, ok := dst.scores[k]; !ok || v > prev {
+			dst.scores[k] = v
+		}
 	}
 }
 

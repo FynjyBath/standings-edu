@@ -109,7 +109,7 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page := GroupPageData{
-		PageTitle: "Standings: " + standings.GroupTitle,
+		PageTitle: standings.GroupTitle,
 		Standings: standings,
 		Footer:    h.buildFooterInfo(),
 	}
@@ -131,7 +131,7 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	page := IndexPageData{
-		PageTitle: "Olympiad Standings: Summary",
+		PageTitle: "Доска почёта",
 		Summary:   summary,
 		Footer:    h.buildFooterInfo(),
 	}

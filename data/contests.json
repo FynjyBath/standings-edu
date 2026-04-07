@@ -7,16 +7,17 @@
       {
         "title": "DFS и BFS",
         "tasks": [
-          "https://site1.example/problem/1",
-          "https://site1.example/problem/2"
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C"
         ]
       },
       {
         "title": "Кратчайшие пути",
         "tasks": [
-          "https://site2.example/tasks/abc",
-          "https://site2.example/tasks/def",
-          "https://site2.example/tasks/ghi"
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C",
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C"
         ]
       }
     ]
@@ -29,14 +30,15 @@
       {
         "title": "Базовые задачи",
         "tasks": [
-          "https://site4.example/dp/a",
-          "https://site4.example/dp/b"
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C"
         ]
       },
       {
         "title": "Рюкзак",
         "tasks": [
-          "https://site4.example/dp/c"
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C"
         ]
       }
     ]
@@ -49,21 +51,22 @@
       {
         "title": "Префикс-функция",
         "tasks": [
-          "https://site3.example/olymp/str/1",
-          "https://site3.example/olymp/str/2"
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C"
         ]
       },
       {
         "title": "Хеши",
         "tasks": [
-          "https://site3.example/olymp/str/3"
+          "https://codeforces.com/problemset/problem/290/A",
+          "https://codeforces.com/gym/102154/problem/C"
         ]
       }
     ]
   },
   {
     "id": "contest_cf_live",
-    "title": "Codeforces (реальные данные)",
+    "title": "Codeforces example",
     "olympiad": true,
     "subcontests": [
       {
@@ -86,7 +89,7 @@
   },
   {
     "id": "contest_informatics_live",
-    "title": "Informatics (реальные данные)",
+    "title": "Informatics example",
     "olympiad": true,
     "subcontests": [
       {
@@ -109,7 +112,7 @@
   },
   {
     "id": "contest_acmp_live",
-    "title": "ACMP (реальные данные)",
+    "title": "ACMP example",
     "olympiad": true,
     "subcontests": [
       {

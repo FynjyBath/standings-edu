@@ -19,6 +19,7 @@ import (
 )
 
 const defaultInformaticsBaseURL = "https://informatics.msk.ru"
+const informaticsRunsPageSize = "1000"
 
 var errInformaticsNotAuthorized = errors.New("informatics: not authorized")
 
@@ -229,7 +230,7 @@ func (c *InformaticsAPIClient) fetchRunsPage(ctx context.Context, accountID stri
 	q := u.Query()
 	q.Set("problem_id", "0")
 	q.Set("user_id", accountID)
-	q.Set("count", "100")
+	q.Set("count", informaticsRunsPageSize)
 	q.Set("page", strconv.Itoa(page))
 	q.Set("from_timestamp", "-1")
 	q.Set("to_timestamp", "-1")

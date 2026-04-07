@@ -14,6 +14,7 @@ import (
 )
 
 const defaultCodeforcesBaseURL = "https://codeforces.com/api"
+const codeforcesPageSize = 10000
 
 type CodeforcesAPIClient struct {
 	baseURL    string
@@ -39,13 +40,12 @@ func (c *CodeforcesAPIClient) FetchUserStatuses(ctx context.Context, accountID s
 	attemptedSet := make(map[string]struct{})
 
 	const (
-		pageSize = 1000
 		maxPages = 30
 	)
 	from := 1
 
 	for page := 0; page < maxPages; page++ {
-		resp, err := c.fetchPage(ctx, handle, from, pageSize)
+		resp, err := c.fetchPage(ctx, handle, from, codeforcesPageSize)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -61,10 +61,10 @@ func (c *CodeforcesAPIClient) FetchUserStatuses(ctx context.Context, accountID s
 			}
 		}
 
-		if len(resp.Result) < pageSize {
+		if len(resp.Result) < codeforcesPageSize {
 			break
 		}
-		from += pageSize
+		from += codeforcesPageSize
 	}
 
 	solved = mapKeysSorted(solvedSet)

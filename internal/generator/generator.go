@@ -41,9 +41,9 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		return fmt.Errorf("group %q not found", onlyGroup)
 	}
 
-	overall, err := g.builder.BuildOverallStandings(ctx, source, groups)
+	overall, standingsByGroup, err := g.builder.BuildAllStandings(ctx, source, groups)
 	if err != nil {
-		return fmt.Errorf("build overall standings: %w", err)
+		return fmt.Errorf("build standings: %w", err)
 	}
 	if err := g.writer.WriteOverallStandings(overall); err != nil {
 		return fmt.Errorf("write overall standings: %w", err)
@@ -54,9 +54,9 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 	for _, group := range groups {
 		g.logger.Printf("INFO generating standings for group=%s", group.Slug)
 
-		standings, err := g.builder.BuildGroupStandings(ctx, source, group)
-		if err != nil {
-			g.logger.Printf("ERROR group=%s build failed: %v", group.Slug, err)
+		standings, ok := standingsByGroup[group.Slug]
+		if !ok {
+			g.logger.Printf("ERROR group=%s build result not found", group.Slug)
 			continue
 		}
 

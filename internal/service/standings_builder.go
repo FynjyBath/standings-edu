@@ -73,18 +73,7 @@ func (b *StandingsBuilder) BuildGroupStandings(ctx context.Context, source *doma
 		return domain.GeneratedGroupStandings{}, err
 	}
 
-	out := domain.GeneratedGroupStandings{
-		GroupSlug:  group.Slug,
-		GroupTitle: group.Title,
-		Contests:   make([]domain.GeneratedContestStandings, 0, len(contests)),
-	}
-
-	for _, contest := range contests {
-		generatedContest := b.buildContestStandings(contest, students, statusByStudent)
-		out.Contests = append(out.Contests, generatedContest)
-	}
-
-	return out, nil
+	return b.buildGroupStandingsPrepared(group, contests, students, statusByStudent), nil
 }
 
 func (b *StandingsBuilder) BuildOverallStandings(ctx context.Context, source *domain.SourceData, groups []domain.GroupDefinition) (domain.GeneratedOverallStandings, error) {
@@ -99,41 +88,34 @@ func (b *StandingsBuilder) BuildOverallStandings(ctx context.Context, source *do
 		return domain.GeneratedOverallStandings{}, err
 	}
 
-	rows := make([]domain.GeneratedOverallRow, 0, len(students))
-	for _, student := range students {
-		perSite := make([]int, len(sitesList))
-		totalSolved := 0
+	return b.buildOverallStandingsPrepared(students, sitesList, statusByStudentSite), nil
+}
 
-		studentStatuses := statusByStudentSite[student.ID]
-		for i, site := range sitesList {
-			siteStatuses := studentStatuses[site]
-			if siteStatuses == nil {
-				continue
-			}
-			solvedCount := len(siteStatuses.solved)
-			perSite[i] = solvedCount
-			totalSolved += solvedCount
-		}
-
-		rows = append(rows, domain.GeneratedOverallRow{
-			StudentID:    student.ID,
-			FullName:     student.FullName,
-			SolvedBySite: perSite,
-			TotalSolved:  totalSolved,
-		})
+func (b *StandingsBuilder) BuildAllStandings(ctx context.Context, source *domain.SourceData, groups []domain.GroupDefinition) (domain.GeneratedOverallStandings, map[string]domain.GeneratedGroupStandings, error) {
+	if source == nil {
+		return domain.GeneratedOverallStandings{}, nil, fmt.Errorf("source data is nil")
 	}
 
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].TotalSolved != rows[j].TotalSolved {
-			return rows[i].TotalSolved > rows[j].TotalSolved
-		}
-		return strings.ToLower(rows[i].FullName) < strings.ToLower(rows[j].FullName)
-	})
+	allStudents := b.resolveStudentsForGroups(source, groups)
+	sitesList := b.collectSites()
 
-	return domain.GeneratedOverallStandings{
-		Sites: sitesList,
-		Rows:  rows,
-	}, nil
+	statusByStudentSite, err := b.collectStudentStatusesBySite(ctx, allStudents)
+	if err != nil {
+		return domain.GeneratedOverallStandings{}, nil, err
+	}
+
+	combinedByStudent := b.buildCombinedStatusesByStudent(allStudents, statusByStudentSite)
+	overall := b.buildOverallStandingsPrepared(allStudents, sitesList, statusByStudentSite)
+
+	groupStandings := make(map[string]domain.GeneratedGroupStandings, len(groups))
+	for _, group := range groups {
+		groupStudents := b.resolveGroupStudents(source, group)
+		contests := b.resolveGroupContests(source, group)
+		statusByStudent := b.pickCombinedStatuses(groupStudents, combinedByStudent)
+		groupStandings[group.Slug] = b.buildGroupStandingsPrepared(group, contests, groupStudents, statusByStudent)
+	}
+
+	return overall, groupStandings, nil
 }
 
 func (b *StandingsBuilder) resolveGroupStudents(source *domain.SourceData, group domain.GroupDefinition) []domain.Student {
@@ -197,6 +179,59 @@ func (b *StandingsBuilder) collectSites() []string {
 	}
 	sort.Strings(sitesList)
 	return sitesList
+}
+
+func (b *StandingsBuilder) buildGroupStandingsPrepared(group domain.GroupDefinition, contests []domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedGroupStandings {
+	out := domain.GeneratedGroupStandings{
+		GroupSlug:  group.Slug,
+		GroupTitle: group.Title,
+		Contests:   make([]domain.GeneratedContestStandings, 0, len(contests)),
+	}
+
+	for _, contest := range contests {
+		generatedContest := b.buildContestStandings(contest, students, statusByStudent)
+		out.Contests = append(out.Contests, generatedContest)
+	}
+
+	return out
+}
+
+func (b *StandingsBuilder) buildOverallStandingsPrepared(students []domain.Student, sitesList []string, statusByStudentSite map[string]map[string]*accountStatuses) domain.GeneratedOverallStandings {
+	rows := make([]domain.GeneratedOverallRow, 0, len(students))
+	for _, student := range students {
+		perSite := make([]int, len(sitesList))
+		totalSolved := 0
+
+		studentStatuses := statusByStudentSite[student.ID]
+		for i, site := range sitesList {
+			siteStatuses := studentStatuses[site]
+			if siteStatuses == nil {
+				continue
+			}
+			solvedCount := len(siteStatuses.solved)
+			perSite[i] = solvedCount
+			totalSolved += solvedCount
+		}
+
+		rows = append(rows, domain.GeneratedOverallRow{
+			StudentID:    student.ID,
+			FullName:     student.FullName,
+			SolvedBySite: perSite,
+			TotalSolved:  totalSolved,
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].TotalSolved != rows[j].TotalSolved {
+			return rows[i].TotalSolved > rows[j].TotalSolved
+		}
+		return strings.ToLower(rows[i].FullName) < strings.ToLower(rows[j].FullName)
+	})
+
+	return domain.GeneratedOverallStandings{
+		Sites: sitesList,
+		Rows:  rows,
+	}
 }
 
 func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
@@ -269,7 +304,10 @@ func (b *StandingsBuilder) collectStudentStatuses(ctx context.Context, students 
 	if err != nil {
 		return nil, err
 	}
+	return b.buildCombinedStatusesByStudent(students, statusByStudentSite), nil
+}
 
+func (b *StandingsBuilder) buildCombinedStatusesByStudent(students []domain.Student, statusByStudentSite map[string]map[string]*accountStatuses) map[string]*accountStatuses {
 	result := make(map[string]*accountStatuses, len(students))
 	for _, student := range students {
 		agg := newAccountStatuses()
@@ -281,7 +319,19 @@ func (b *StandingsBuilder) collectStudentStatuses(ctx context.Context, students 
 		}
 		result[student.ID] = agg
 	}
-	return result, nil
+	return result
+}
+
+func (b *StandingsBuilder) pickCombinedStatuses(students []domain.Student, combinedByStudent map[string]*accountStatuses) map[string]*accountStatuses {
+	result := make(map[string]*accountStatuses, len(students))
+	for _, student := range students {
+		if statuses, ok := combinedByStudent[student.ID]; ok && statuses != nil {
+			result[student.ID] = statuses
+			continue
+		}
+		result[student.ID] = newAccountStatuses()
+	}
+	return result
 }
 
 func (b *StandingsBuilder) collectStudentStatusesBySite(ctx context.Context, students []domain.Student) (map[string]map[string]*accountStatuses, error) {

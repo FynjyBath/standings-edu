@@ -68,6 +68,9 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 ## Как добавить новый сайт
 
 1. Добавить реализацию `SiteClient` в `internal/sites/<site>.go`.
-2. Зарегистрировать клиент в `cmd/generate/main.go`.
-3. Добавить аккаунты сайта в `data/students.json`.
-4. Перезапустить `go run ./cmd/generate`.
+2. Убедиться, что клиент возвращает URL задач в стабильном формате для корректной нормализации (`NormalizeTaskURL`) и совпадения с URL в `data/contests.json`.
+3. Зарегистрировать клиент в `cmd/generate/main.go`.
+4. Добавить аккаунты сайта в `data/students.json` (`site` + `account_id`).
+5. Если интеграции нужен логин/токен, добавить загрузку конфига/секретов в `cmd/generate/main.go` (по аналогии с `-informatics-creds`).
+6. Опционально: добавить читаемое название сайта для сводной таблицы в `internal/web/templates.go` (`siteTitle`).
+7. Перезапустить `go run ./cmd/generate`.

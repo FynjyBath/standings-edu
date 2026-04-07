@@ -40,6 +40,13 @@
     <main class="container">
       {{template "content" .}}
     </main>
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span>&copy; {{.Footer.Copyright}}</span>
+        <span>Обновлено (МСК): {{.Footer.LastUpdatedMSK}}</span>
+        <span>Время сервера: {{.Footer.ServerTime}}</span>
+      </div>
+    </footer>
     <script>
       (function () {
         var storageKey = "nemalo-theme";

@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"strconv"
 
 	"standings-edu/internal/domain"
 )
@@ -21,6 +22,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"statusSymbol": statusSymbol,
 			"statusClass":  statusClass,
 			"scoreText":    scoreText,
+			"scoreAlpha":   scoreAlpha,
 			"siteTitle":    siteTitle,
 		},
 	}
@@ -83,4 +85,19 @@ func scoreText(score *int) string {
 		return ""
 	}
 	return fmt.Sprintf("%d", *score)
+}
+
+func scoreAlpha(score *int) string {
+	if score == nil {
+		return "0"
+	}
+	v := *score
+	if v < 0 {
+		v = 0
+	}
+	if v > 100 {
+		v = 100
+	}
+	alpha := float64(v) / 100.0
+	return strconv.FormatFloat(alpha, 'f', 2, 64)
 }

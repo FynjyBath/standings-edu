@@ -40,7 +40,7 @@
             <td class="solved-count">{{if $contest.Olympiad}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if $contest.Olympiad}}
               {{range .Scores}}
-              <td class="score-cell">{{scoreText .}}</td>
+              <td class="score-cell" style="--score-alpha: {{scoreAlpha .}};">{{scoreText .}}</td>
               {{end}}
             {{else}}
               {{range .Statuses}}

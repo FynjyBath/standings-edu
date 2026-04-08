@@ -16,11 +16,11 @@
             {{if eq .ContestType "provider"}}
             <th rowspan="2" class="count-col">Место</th>
             {{end}}
+            <th rowspan="2" class="student-col">Ученик</th>
+            <th rowspan="2" class="count-col">{{if .Olympiad}}Баллы{{else}}Решено{{end}}</th>
             {{if and (eq .ContestType "provider") (hasPenaltyColumn .Rows)}}
             <th rowspan="2" class="count-col">Штраф</th>
             {{end}}
-            <th rowspan="2" class="student-col">Ученик</th>
-            <th rowspan="2" class="count-col">{{if .Olympiad}}Баллы{{else}}Решено{{end}}</th>
             {{if .Subcontests}}
               {{range .Subcontests}}
               <th colspan="{{.TaskCount}}" class="subcontest-head">{{.Title}}</th>
@@ -45,11 +45,11 @@
             {{if eq $contest.ContestType "provider"}}
             <td class="solved-count">{{placeText .Place}}</td>
             {{end}}
+            <td class="student-name">{{.PublicName}}</td>
+            <td class="solved-count">{{if $contest.Olympiad}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if and (eq $contest.ContestType "provider") (hasPenaltyColumn $contest.Rows)}}
             <td class="solved-count">{{penaltyText .Penalty}}</td>
             {{end}}
-            <td class="student-name">{{.PublicName}}</td>
-            <td class="solved-count">{{if $contest.Olympiad}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if $contest.Olympiad}}
               {{range .Scores}}
               <td class="score-cell" style="--score-alpha: {{scoreAlpha .}};">{{scoreText .}}</td>

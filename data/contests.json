@@ -148,7 +148,7 @@
     "contest_type": "provider",
     "provider": "codeforces_contest",
     "provider_config": {
-      "contest_id": 290,
+      "contest_id": 1711,
       "show_unofficial": true
     },
     "subcontests": []

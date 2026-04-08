@@ -34,7 +34,12 @@ type GroupDefinition struct {
 	Title      string
 	Update     bool
 	StudentIDs []string
-	ContestIDs []string
+	Contests   []GroupContestRef
+}
+
+type GroupContestRef struct {
+	ID     string
+	Update bool
 }
 
 type SourceData struct {

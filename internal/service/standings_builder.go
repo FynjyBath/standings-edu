@@ -198,11 +198,11 @@ func (b *StandingsBuilder) resolveGroupStudents(source *domain.SourceData, group
 }
 
 func (b *StandingsBuilder) resolveGroupContests(source *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
-	contests := make([]domain.Contest, 0, len(group.ContestIDs))
-	for _, contestID := range group.ContestIDs {
-		contest, ok := source.Contests[contestID]
+	contests := make([]domain.Contest, 0, len(group.Contests))
+	for _, contestRef := range group.Contests {
+		contest, ok := source.Contests[contestRef.ID]
 		if !ok {
-			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestID)
+			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
 			continue
 		}
 		contests = append(contests, contest)

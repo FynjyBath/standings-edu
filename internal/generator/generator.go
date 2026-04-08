@@ -2,8 +2,10 @@ package generator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 
 	"standings-edu/internal/domain"
@@ -12,10 +14,11 @@ import (
 )
 
 type Generator struct {
-	loader  *storage.SourceLoader
-	writer  *storage.GeneratedWriter
-	builder *service.StandingsBuilder
-	logger  *log.Logger
+	loader          *storage.SourceLoader
+	writer          *storage.GeneratedWriter
+	generatedLoader *storage.GeneratedLoader
+	builder         *service.StandingsBuilder
+	logger          *log.Logger
 }
 
 func New(loader *storage.SourceLoader, writer *storage.GeneratedWriter, builder *service.StandingsBuilder, logger *log.Logger) *Generator {
@@ -23,10 +26,11 @@ func New(loader *storage.SourceLoader, writer *storage.GeneratedWriter, builder 
 		logger = log.Default()
 	}
 	return &Generator{
-		loader:  loader,
-		writer:  writer,
-		builder: builder,
-		logger:  logger,
+		loader:          loader,
+		writer:          writer,
+		generatedLoader: storage.NewGeneratedLoader(writer.OutDir),
+		builder:         builder,
+		logger:          logger,
 	}
 }
 
@@ -47,7 +51,13 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		return nil
 	}
 
-	standingsByGroup, err := g.builder.BuildGroupsStandings(ctx, source, groupsToUpdate)
+	buildGroups := selectGroupsWithUpdatableContests(groupsToUpdate)
+	if len(buildGroups) == 0 {
+		g.logger.Printf("INFO no contests with update=true in selected groups; nothing to update")
+		return nil
+	}
+
+	standingsByGroup, err := g.builder.BuildGroupsStandings(ctx, source, buildGroups)
 	if err != nil {
 		return fmt.Errorf("build standings: %w", err)
 	}
@@ -61,17 +71,29 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		return fmt.Errorf("write groups list: %w", err)
 	}
 
-	generatedCount := 0
+	fullGroupBySlug := make(map[string]domain.GroupDefinition, len(groupsToUpdate))
 	for _, group := range groupsToUpdate {
+		fullGroupBySlug[group.Slug] = group
+	}
+
+	generatedCount := 0
+	for _, group := range buildGroups {
 		g.logger.Printf("INFO generating standings for group=%s", group.Slug)
 
-		standings, ok := standingsByGroup[group.Slug]
+		updatedStandings, ok := standingsByGroup[group.Slug]
 		if !ok {
 			g.logger.Printf("ERROR group=%s build result not found", group.Slug)
 			continue
 		}
 
-		if err := g.writer.WriteGroupStandings(standings); err != nil {
+		fullGroup := fullGroupBySlug[group.Slug]
+		mergedStandings, ok := g.mergeWithNonUpdatedContests(fullGroup, updatedStandings)
+		if !ok {
+			g.logger.Printf("ERROR group=%s merge failed; skip writing to avoid data loss", group.Slug)
+			continue
+		}
+
+		if err := g.writer.WriteGroupStandings(mergedStandings); err != nil {
 			g.logger.Printf("ERROR group=%s write standings failed: %v", group.Slug, err)
 			continue
 		}
@@ -84,8 +106,67 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		return fmt.Errorf("no groups generated successfully")
 	}
 
-	g.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(groupsToUpdate))
+	g.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(buildGroups))
 	return nil
+}
+
+func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings) (domain.GeneratedGroupStandings, bool) {
+	needExisting := false
+	for _, contest := range group.Contests {
+		if !contest.Update {
+			needExisting = true
+			break
+		}
+	}
+
+	existing := domain.GeneratedGroupStandings{}
+	hasExisting := false
+	if needExisting {
+		var err error
+		existing, err = g.generatedLoader.LoadGroupStandings(group.Slug)
+		hasExisting = err == nil
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				g.logger.Printf("WARN group=%s has contests with update=false but previous standings are missing", group.Slug)
+			} else {
+				g.logger.Printf("WARN group=%s load existing standings failed: %v", group.Slug, err)
+			}
+			return domain.GeneratedGroupStandings{}, false
+		}
+	}
+
+	updatedByID := makeContestBuckets(updated.Contests)
+	existingByID := map[string][]domain.GeneratedContestStandings{}
+	if hasExisting {
+		existingByID = makeContestBuckets(existing.Contests)
+	}
+
+	merged := domain.GeneratedGroupStandings{
+		GroupSlug:  group.Slug,
+		GroupTitle: group.Title,
+		Contests:   make([]domain.GeneratedContestStandings, 0, len(group.Contests)),
+	}
+
+	for _, contestRef := range group.Contests {
+		if contestRef.Update {
+			contest, ok := takeFirstContest(updatedByID, contestRef.ID)
+			if !ok {
+				g.logger.Printf("WARN group=%s contest=%s marked update=true but not built", group.Slug, contestRef.ID)
+				continue
+			}
+			merged.Contests = append(merged.Contests, contest)
+			continue
+		}
+
+		contest, ok := takeFirstContest(existingByID, contestRef.ID)
+		if !ok {
+			g.logger.Printf("WARN group=%s contest=%s update=false but missing in previous standings", group.Slug, contestRef.ID)
+			continue
+		}
+		merged.Contests = append(merged.Contests, contest)
+	}
+
+	return merged, true
 }
 
 func filterGroupsToUpdate(groups []domain.GroupDefinition) []domain.GroupDefinition {
@@ -96,6 +177,48 @@ func filterGroupsToUpdate(groups []domain.GroupDefinition) []domain.GroupDefinit
 		}
 	}
 	return out
+}
+
+func selectGroupsWithUpdatableContests(groups []domain.GroupDefinition) []domain.GroupDefinition {
+	out := make([]domain.GroupDefinition, 0, len(groups))
+	for _, group := range groups {
+		contests := make([]domain.GroupContestRef, 0, len(group.Contests))
+		for _, contest := range group.Contests {
+			if contest.Update {
+				contests = append(contests, contest)
+			}
+		}
+		if len(contests) == 0 {
+			continue
+		}
+
+		groupCopy := group
+		groupCopy.Contests = contests
+		out = append(out, groupCopy)
+	}
+	return out
+}
+
+func makeContestBuckets(contests []domain.GeneratedContestStandings) map[string][]domain.GeneratedContestStandings {
+	buckets := make(map[string][]domain.GeneratedContestStandings, len(contests))
+	for _, contest := range contests {
+		buckets[contest.ID] = append(buckets[contest.ID], contest)
+	}
+	return buckets
+}
+
+func takeFirstContest(buckets map[string][]domain.GeneratedContestStandings, contestID string) (domain.GeneratedContestStandings, bool) {
+	list := buckets[contestID]
+	if len(list) == 0 {
+		return domain.GeneratedContestStandings{}, false
+	}
+	item := list[0]
+	if len(list) == 1 {
+		delete(buckets, contestID)
+	} else {
+		buckets[contestID] = list[1:]
+	}
+	return item, true
 }
 
 func selectGroups(all []domain.GroupDefinition, onlyGroup string) []domain.GroupDefinition {

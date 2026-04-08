@@ -1,7 +1,22 @@
 [
-  "contest_informatics_live",
-  "contest_acmp_live",
-  "contest_cf_live",
-  "contest_graphs",
-  "contest_dp"
+  {
+    "id": "contest_informatics_live",
+    "update": true
+  },
+  {
+    "id": "contest_acmp_live",
+    "update": true
+  },
+  {
+    "id": "contest_cf_live",
+    "update": true
+  },
+  {
+    "id": "contest_graphs",
+    "update": true
+  },
+  {
+    "id": "contest_dp",
+    "update": true
+  }
 ]

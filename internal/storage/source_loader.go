@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"standings-edu/internal/domain"
 )
@@ -96,8 +97,8 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 			return nil, fmt.Errorf("load group %q: %w", slug, err)
 		}
 
-		var contestIDs []string
-		if err := readJSON(filepath.Join(dir, "contests.json"), &contestIDs); err != nil {
+		contests, err := l.loadGroupContests(filepath.Join(dir, "contests.json"))
+		if err != nil {
 			return nil, fmt.Errorf("load group contests %q: %w", slug, err)
 		}
 
@@ -111,7 +112,7 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 			Title:      gf.Title,
 			Update:     update,
 			StudentIDs: gf.StudentIDs,
-			ContestIDs: contestIDs,
+			Contests:   contests,
 		})
 	}
 
@@ -120,6 +121,42 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 	})
 
 	return groups, nil
+}
+
+type groupContestJSON struct {
+	ID        string `json:"id"`
+	ContestID string `json:"contest_id"`
+	Update    *bool  `json:"update,omitempty"`
+}
+
+func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef, error) {
+	var items []groupContestJSON
+	if err := readJSON(path, &items); err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.GroupContestRef, 0, len(items))
+	for i, item := range items {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			id = strings.TrimSpace(item.ContestID)
+		}
+		if id == "" {
+			return nil, fmt.Errorf("contest item #%d in %q has empty id", i, path)
+		}
+
+		update := true
+		if item.Update != nil {
+			update = *item.Update
+		}
+
+		out = append(out, domain.GroupContestRef{
+			ID:     id,
+			Update: update,
+		})
+	}
+
+	return out, nil
 }
 
 func readJSON(path string, out any) error {

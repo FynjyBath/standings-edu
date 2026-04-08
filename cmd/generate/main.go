@@ -40,15 +40,18 @@ func main() {
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)
 	}
+	cfClient := sites.NewCodeforcesAPIClient()
 
 	registry := sites.NewRegistry()
 	registry.Register("informatics", infClient)
-	registry.Register("codeforces", sites.NewCodeforcesAPIClient())
+	registry.Register("codeforces", cfClient)
 	registry.Register("acmp", sites.NewACMPClient())
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)
-	builder := service.NewStandingsBuilder(registry, logger, *parallelism, *cacheTTL)
+	providers := service.NewContestProviderRegistry()
+	providers.Register(service.NewCodeforcesContestProvider(cfClient))
+	builder := service.NewStandingsBuilder(registry, providers, logger, *parallelism, *cacheTTL)
 	gen := generator.New(loader, writer, builder, logger)
 
 	if err := gen.Run(ctx, *onlyGroup); err != nil {

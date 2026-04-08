@@ -140,5 +140,17 @@
         ]
       }
     ]
+  },
+  {
+    "id": "contest_cf_provider_example",
+    "title": "Codeforces contest standings (provider example)",
+    "olympiad": true,
+    "contest_type": "provider",
+    "provider": "codeforces_contest",
+    "provider_config": {
+      "contest_id": 290,
+      "show_unofficial": true
+    },
+    "subcontests": []
   }
 ]

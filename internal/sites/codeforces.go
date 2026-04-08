@@ -22,6 +22,30 @@ type CodeforcesAPIClient struct {
 	httpClient *http.Client
 }
 
+type CodeforcesContestStandings struct {
+	ContestID   int
+	ContestName string
+	Problems    []CodeforcesContestProblem
+	Rows        []CodeforcesContestRow
+}
+
+type CodeforcesContestProblem struct {
+	Index  string
+	Name   string
+	Points *float64
+}
+
+type CodeforcesContestRow struct {
+	Rank           int
+	Handles        []string
+	ProblemResults []CodeforcesContestProblemResult
+}
+
+type CodeforcesContestProblemResult struct {
+	Points               float64
+	RejectedAttemptCount int
+}
+
 func NewCodeforcesAPIClient() *CodeforcesAPIClient {
 	return &CodeforcesAPIClient{
 		baseURL: defaultCodeforcesBaseURL,
@@ -29,6 +53,100 @@ func NewCodeforcesAPIClient() *CodeforcesAPIClient {
 			Timeout: 15 * time.Second,
 		},
 	}
+}
+
+func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (CodeforcesContestStandings, error) {
+	if contestID <= 0 {
+		return CodeforcesContestStandings{}, fmt.Errorf("invalid contest_id=%d", contestID)
+	}
+
+	normalizedHandles := normalizeCodeforcesHandles(handles)
+	if len(normalizedHandles) == 0 {
+		return CodeforcesContestStandings{}, fmt.Errorf("empty handles list")
+	}
+
+	u, err := url.Parse(c.baseURL + "/contest.standings")
+	if err != nil {
+		return CodeforcesContestStandings{}, err
+	}
+
+	q := u.Query()
+	q.Set("contestId", strconv.Itoa(contestID))
+	q.Set("from", "1")
+	q.Set("count", strconv.Itoa(len(normalizedHandles)))
+	q.Set("handles", strings.Join(normalizedHandles, ";"))
+	if showUnofficial {
+		q.Set("showUnofficial", "true")
+	} else {
+		q.Set("showUnofficial", "false")
+	}
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return CodeforcesContestStandings{}, err
+	}
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return CodeforcesContestStandings{}, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 1024))
+		return CodeforcesContestStandings{}, fmt.Errorf("codeforces api status=%d body=%q", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var decoded codeforcesContestStandingsAPIResponse
+	if err := json.NewDecoder(res.Body).Decode(&decoded); err != nil {
+		return CodeforcesContestStandings{}, err
+	}
+	if decoded.Status != "OK" {
+		return CodeforcesContestStandings{}, fmt.Errorf("codeforces api error: %s", decoded.Comment)
+	}
+
+	out := CodeforcesContestStandings{
+		ContestID:   decoded.Result.Contest.ID,
+		ContestName: decoded.Result.Contest.Name,
+		Problems:    make([]CodeforcesContestProblem, 0, len(decoded.Result.Problems)),
+		Rows:        make([]CodeforcesContestRow, 0, len(decoded.Result.Rows)),
+	}
+
+	for _, p := range decoded.Result.Problems {
+		out.Problems = append(out.Problems, CodeforcesContestProblem{
+			Index:  p.Index,
+			Name:   p.Name,
+			Points: p.Points,
+		})
+	}
+
+	for _, row := range decoded.Result.Rows {
+		handles := make([]string, 0, len(row.Party.Members))
+		for _, member := range row.Party.Members {
+			handle := strings.TrimSpace(member.Handle)
+			if handle == "" {
+				continue
+			}
+			handles = append(handles, handle)
+		}
+
+		results := make([]CodeforcesContestProblemResult, 0, len(row.ProblemResults))
+		for _, pr := range row.ProblemResults {
+			results = append(results, CodeforcesContestProblemResult{
+				Points:               pr.Points,
+				RejectedAttemptCount: pr.RejectedAttemptCount,
+			})
+		}
+
+		out.Rows = append(out.Rows, CodeforcesContestRow{
+			Rank:           row.Rank,
+			Handles:        handles,
+			ProblemResults: results,
+		})
+	}
+
+	return out, nil
 }
 
 func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID string) ([]TaskResult, error) {
@@ -184,6 +302,24 @@ func clampScore(v int, min int, max int) int {
 	return v
 }
 
+func normalizeCodeforcesHandles(handles []string) []string {
+	out := make([]string, 0, len(handles))
+	seen := make(map[string]struct{}, len(handles))
+	for _, raw := range handles {
+		handle := strings.TrimSpace(raw)
+		if handle == "" {
+			continue
+		}
+		key := strings.ToLower(handle)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, handle)
+	}
+	return out
+}
+
 type codeforcesAPIResponse struct {
 	Status  string                 `json:"status"`
 	Comment string                 `json:"comment"`
@@ -199,4 +335,46 @@ type codeforcesSubmission struct {
 type codeforcesProblem struct {
 	ContestID int    `json:"contestId"`
 	Index     string `json:"index"`
+}
+
+type codeforcesContestStandingsAPIResponse struct {
+	Status  string                              `json:"status"`
+	Comment string                              `json:"comment"`
+	Result  codeforcesContestStandingsAPIResult `json:"result"`
+}
+
+type codeforcesContestStandingsAPIResult struct {
+	Contest  codeforcesContestMeta           `json:"contest"`
+	Problems []codeforcesContestProblemMeta  `json:"problems"`
+	Rows     []codeforcesContestStandingsRow `json:"rows"`
+}
+
+type codeforcesContestMeta struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type codeforcesContestProblemMeta struct {
+	Index  string   `json:"index"`
+	Name   string   `json:"name"`
+	Points *float64 `json:"points"`
+}
+
+type codeforcesContestStandingsRow struct {
+	Rank           int                                  `json:"rank"`
+	Party          codeforcesContestParty               `json:"party"`
+	ProblemResults []codeforcesContestProblemResultMeta `json:"problemResults"`
+}
+
+type codeforcesContestParty struct {
+	Members []codeforcesContestMember `json:"members"`
+}
+
+type codeforcesContestMember struct {
+	Handle string `json:"handle"`
+}
+
+type codeforcesContestProblemResultMeta struct {
+	Points               float64 `json:"points"`
+	RejectedAttemptCount int     `json:"rejectedAttemptCount"`
 }

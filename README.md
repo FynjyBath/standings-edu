@@ -43,29 +43,11 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 - `http://localhost:8080/standings/group_10a` — standings конкретной группы;
 - `http://localhost:8080/` — `404 Not Found`.
 
-## Olympiad-режим контестов
+## Типы контестов
 
-В `data/contests.json` у каждого контеста есть флаг:
-
-```json
-{
-  "id": "contest_cf_live",
-  "title": "Codeforces (реальные данные)",
-  "olympiad": true,
-  "subcontests": []
-}
-```
-
-Поведение:
-- `olympiad: false` — классический режим: `+`, `×`, пусто;
-- `olympiad: true` — в ячейке задачи показывается балл:
-  - для `codeforces` и `informatics` берётся реальный score;
-  - для сайтов без score-поддержки (например, `acmp`) используется fallback: `1` для solved, `0` для attempted-only;
-  - при отсутствии попыток ячейка пустая.
-
-Сортировка строк в контесте:
-- `olympiad: false` — по `solved_count desc`, затем по ФИО;
-- `olympiad: true` — по `total_score desc`, затем `solved_count desc`, затем по ФИО.
+В `data/contests.json` поддерживаются два типа:
+- `contest_type: "tasks"` (или отсутствие поля `contest_type`) — классический режим, контест задаётся списком задач;
+- `contest_type: "provider"` — standings берутся напрямую из provider-а.
 
 ## Форматы generated
 
@@ -89,8 +71,8 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 Pipeline генератора:
 1. Берутся только группы с `update: true` (с учётом `-group`, если он задан).
 2. Внутри таких групп обновляются только контесты с `update: true` в `data/groups/<group>/contests.json`.
-3. По задачам только обновляемых контестов определяется, какие сайты реально нужны.
-4. Для учеников из этих групп строятся пары `(student, site)` и запрашиваются только нужные аккаунты нужных сайтов.
+3. Для task-based контестов по задачам определяется, какие сайты реально нужны.
+4. Для task-based контестов строятся пары `(student, site)` и запрашиваются только нужные аккаунты нужных сайтов.
 5. Генерируются только обновляемые контесты и сливаются с предыдущими данными группы:
    - `contest.update=true` — пересчитывается;
    - `contest.update=false` — сохраняется из предыдущего `generated/standings/{group}.json` без изменений.
@@ -109,7 +91,7 @@ Pipeline генератора:
 
 Примечания:
 - `informatics` использует вход через Moodle (`/login/index.php`) и получает посылки через `/py/problem/0/filter-runs`; реализована инкрементальная синхронизация по `run_id` между запусками;
-- `codeforces` использует API `user.status`;
+- `codeforces` использует API `user.status` (task-based) и `contest.standings` (provider-based);
 - `acmp` парсит страницу пользователя `index.asp?main=user&id=...`.
 
 ## Как добавить новый сайт
@@ -129,3 +111,17 @@ Pipeline генератора:
 6. Добавить аккаунты сайта в `data/students.json` (`site` + `account_id`).
 7. Если интеграции нужен логин/токен, добавить загрузку конфига/секретов в `cmd/generate/main.go` (по аналогии с `-informatics-creds`).
 8. Перезапустить `go run ./cmd/generate`.
+
+## Как добавить новый standings provider
+
+1. Добавить реализацию `ContestStandingsProvider` в `internal/service/<provider>.go`.
+2. Реализовать методы:
+   - `ProviderID() string`;
+   - `BuildStandings(ctx, input) (domain.GeneratedContestStandings, error)`.
+3. В `BuildStandings` вернуть `GeneratedContestStandings` в текущем формате, чтобы не менять `server/web`.
+4. Зарегистрировать provider в `cmd/generate/main.go` через `ContestProviderRegistry`.
+5. Создать контест в `data/contests.json` с:
+   - `contest_type: "provider"`,
+   - `provider: "<provider_id>"`,
+   - `provider_config: {...}`.
+6. Привязать контест к группе в `data/groups/<group>/contests.json`.

@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"encoding/json"
+	"strings"
+)
+
 type Account struct {
 	Site      string `json:"site"`
 	AccountID string `json:"account_id"`
@@ -17,10 +22,26 @@ type Subcontest struct {
 }
 
 type Contest struct {
-	ID          string       `json:"id"`
-	Title       string       `json:"title"`
-	Olympiad    bool         `json:"olympiad"`
-	Subcontests []Subcontest `json:"subcontests"`
+	ID             string          `json:"id"`
+	Title          string          `json:"title"`
+	Olympiad       bool            `json:"olympiad"`
+	ContestType    string          `json:"contest_type,omitempty"`
+	Provider       string          `json:"provider,omitempty"`
+	ProviderConfig json.RawMessage `json:"provider_config,omitempty"`
+	Subcontests    []Subcontest    `json:"subcontests"`
+}
+
+const (
+	ContestTypeTasks    = "tasks"
+	ContestTypeProvider = "provider"
+)
+
+func (c Contest) TypeOrDefault() string {
+	typ := strings.ToLower(strings.TrimSpace(c.ContestType))
+	if typ == "" {
+		return ContestTypeTasks
+	}
+	return typ
 }
 
 type GroupFile struct {

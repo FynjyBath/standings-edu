@@ -18,5 +18,9 @@
   {
     "id": "contest_dp",
     "update": true
+  },
+  {
+    "id": "contest_cf_provider_example",
+    "update": true
   }
 ]

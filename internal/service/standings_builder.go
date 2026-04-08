@@ -44,12 +44,13 @@ type StandingsBuilder struct {
 	logger        *log.Logger
 	maxConcurrent int
 	cache         *cache.TTLCache[accountStatuses]
+	contestLayers []contestBuilder
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
 }
 
-func NewStandingsBuilder(registry *sites.Registry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *StandingsBuilder {
+func NewStandingsBuilder(registry *sites.Registry, providers *ContestProviderRegistry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *StandingsBuilder {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 8
 	}
@@ -59,12 +60,16 @@ func NewStandingsBuilder(registry *sites.Registry, logger *log.Logger, maxConcur
 	if logger == nil {
 		logger = log.Default()
 	}
+	if providers == nil {
+		providers = NewContestProviderRegistry()
+	}
 
 	return &StandingsBuilder{
 		registry:      registry,
 		logger:        logger,
 		maxConcurrent: maxConcurrent,
 		cache:         cache.NewTTLCache[accountStatuses](cacheTTL),
+		contestLayers: []contestBuilder{newProviderContestBuilder(providers), &taskContestBuilder{}},
 		inflight:      make(map[string]*inflightCall),
 	}
 }
@@ -106,7 +111,11 @@ func (b *StandingsBuilder) BuildGroupsStandings(ctx context.Context, source *dom
 	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
 	for _, pg := range prepared {
 		statusByStudent := b.pickCombinedStatuses(pg.students, combinedByStudent)
-		result[pg.group.Slug] = b.buildGroupStandingsPrepared(pg.group, pg.contests, pg.students, statusByStudent)
+		standings, buildErr := b.buildGroupStandingsPrepared(ctx, source, pg.group, pg.contests, pg.students, statusByStudent)
+		if buildErr != nil {
+			return nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
+		}
+		result[pg.group.Slug] = standings
 	}
 	return result, nil
 }
@@ -130,15 +139,13 @@ func (b *StandingsBuilder) prepareGroups(source *domain.SourceData, groups []dom
 func (b *StandingsBuilder) collectRequiredSitesFromContests(contests []domain.Contest) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, contest := range contests {
-		for _, sc := range contest.Subcontests {
-			for _, taskURL := range sc.Tasks {
-				normalized := domain.NormalizeTaskURL(taskURL)
-				site, _, ok := b.registry.ResolveByTaskURL(normalized)
-				if !ok || site == "" {
-					continue
-				}
-				out[normalizeSite(site)] = struct{}{}
-			}
+		layer, ok := b.pickContestBuilder(contest)
+		if !ok {
+			b.logger.Printf("WARN contest_id=%s unsupported contest_type=%s while collecting required sites", contest.ID, contest.TypeOrDefault())
+			continue
+		}
+		for site := range layer.RequiredSites(b, contest) {
+			out[normalizeSite(site)] = struct{}{}
 		}
 	}
 	return out
@@ -210,7 +217,7 @@ func (b *StandingsBuilder) resolveGroupContests(source *domain.SourceData, group
 	return contests
 }
 
-func (b *StandingsBuilder) buildGroupStandingsPrepared(group domain.GroupDefinition, contests []domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedGroupStandings {
+func (b *StandingsBuilder) buildGroupStandingsPrepared(ctx context.Context, source *domain.SourceData, group domain.GroupDefinition, contests []domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) (domain.GeneratedGroupStandings, error) {
 	out := domain.GeneratedGroupStandings{
 		GroupSlug:  group.Slug,
 		GroupTitle: group.Title,
@@ -218,11 +225,34 @@ func (b *StandingsBuilder) buildGroupStandingsPrepared(group domain.GroupDefinit
 	}
 
 	for _, contest := range contests {
-		generatedContest := b.buildContestStandings(contest, students, statusByStudent)
+		layer, ok := b.pickContestBuilder(contest)
+		if !ok {
+			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())
+		}
+
+		generatedContest, err := layer.Build(ctx, b, contestBuildInput{
+			source:          source,
+			group:           group,
+			contest:         contest,
+			students:        students,
+			statusByStudent: statusByStudent,
+		})
+		if err != nil {
+			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s builder=%s: %w", contest.ID, layer.Name(), err)
+		}
 		out.Contests = append(out.Contests, generatedContest)
 	}
 
-	return out
+	return out, nil
+}
+
+func (b *StandingsBuilder) pickContestBuilder(contest domain.Contest) (contestBuilder, bool) {
+	for _, layer := range b.contestLayers {
+		if layer != nil && layer.Supports(contest) {
+			return layer, true
+		}
+	}
+	return nil, false
 }
 
 func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {

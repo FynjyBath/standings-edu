@@ -85,9 +85,9 @@ Pipeline генератора:
 ## Интеграции сайтов
 
 Реализованы клиенты:
-- `internal/sites/informatics.go`
-- `internal/sites/codeforces.go`
-- `internal/sites/acmp.go`
+- `internal/tasks_based/informatics.go`
+- `internal/tasks_based/codeforces.go`
+- `internal/tasks_based/acmp.go`
 
 Примечания:
 - `informatics` использует вход через Moodle (`/login/index.php`) и получает посылки через `/py/problem/0/filter-runs`; реализована инкрементальная синхронизация по `run_id` между запусками;
@@ -96,7 +96,7 @@ Pipeline генератора:
 
 ## Как добавить новый сайт
 
-1. Добавить реализацию `SiteClient` в `internal/sites/<site>.go`.
+1. Добавить реализацию `SiteClient` в `internal/tasks_based/<site>.go`.
 2. Реализовать методы интерфейса:
    - `FetchUserResults(ctx, accountID) ([]TaskResult, error)`;
    - `MatchTaskURL(taskURL string) bool`;
@@ -114,7 +114,7 @@ Pipeline генератора:
 
 ## Как добавить новый standings provider
 
-1. Добавить реализацию `ContestStandingsProvider` в `internal/service/<provider>.go`.
+1. Добавить реализацию `ContestStandingsProvider` в `internal/provider_based/<provider>.go`.
 2. Реализовать методы:
    - `ProviderID() string`;
    - `BuildStandings(ctx, input) (domain.GeneratedContestStandings, error)`.

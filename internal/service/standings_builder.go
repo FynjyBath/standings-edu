@@ -11,7 +11,8 @@ import (
 
 	"standings-edu/internal/cache"
 	"standings-edu/internal/domain"
-	"standings-edu/internal/sites"
+	providerbased "standings-edu/internal/provider_based"
+	tasksbased "standings-edu/internal/tasks_based"
 )
 
 type accountStatuses struct {
@@ -40,7 +41,7 @@ type preparedGroup struct {
 }
 
 type StandingsBuilder struct {
-	registry      *sites.Registry
+	registry      *tasksbased.Registry
 	logger        *log.Logger
 	maxConcurrent int
 	cache         *cache.TTLCache[accountStatuses]
@@ -50,7 +51,7 @@ type StandingsBuilder struct {
 	inflight   map[string]*inflightCall
 }
 
-func NewStandingsBuilder(registry *sites.Registry, providers *ContestProviderRegistry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *StandingsBuilder {
+func NewStandingsBuilder(registry *tasksbased.Registry, providers *providerbased.ContestProviderRegistry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *StandingsBuilder {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 8
 	}
@@ -61,7 +62,7 @@ func NewStandingsBuilder(registry *sites.Registry, providers *ContestProviderReg
 		logger = log.Default()
 	}
 	if providers == nil {
-		providers = NewContestProviderRegistry()
+		providers = providerbased.NewContestProviderRegistry()
 	}
 
 	return &StandingsBuilder{

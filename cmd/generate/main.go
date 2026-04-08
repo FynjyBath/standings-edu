@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"standings-edu/internal/generator"
+	providerbased "standings-edu/internal/provider_based"
 	"standings-edu/internal/service"
-	"standings-edu/internal/sites"
 	"standings-edu/internal/storage"
+	tasksbased "standings-edu/internal/tasks_based"
 )
 
 func main() {
@@ -36,21 +37,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	infClient, err := sites.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
+	infClient, err := tasksbased.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)
 	}
-	cfClient := sites.NewCodeforcesAPIClient()
+	cfClient := tasksbased.NewCodeforcesAPIClient()
 
-	registry := sites.NewRegistry()
+	registry := tasksbased.NewRegistry()
 	registry.Register("informatics", infClient)
 	registry.Register("codeforces", cfClient)
-	registry.Register("acmp", sites.NewACMPClient())
+	registry.Register("acmp", tasksbased.NewACMPClient())
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)
-	providers := service.NewContestProviderRegistry()
-	providers.Register(service.NewCodeforcesContestProvider(cfClient))
+	providers := providerbased.NewContestProviderRegistry()
+	providers.Register(providerbased.NewCodeforcesContestProvider(cfClient))
 	builder := service.NewStandingsBuilder(registry, providers, logger, *parallelism, *cacheTTL)
 	gen := generator.New(loader, writer, builder, logger)
 

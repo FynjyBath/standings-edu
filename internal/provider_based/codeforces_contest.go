@@ -1,4 +1,4 @@
-package service
+package providerbased
 
 import (
 	"bytes"
@@ -11,13 +11,13 @@ import (
 	"strings"
 
 	"standings-edu/internal/domain"
-	"standings-edu/internal/sites"
+	"standings-edu/internal/tasks_based"
 )
 
 const CodeforcesContestProviderID = "codeforces_contest"
 
 type codeforcesContestStandingsClient interface {
-	FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (sites.CodeforcesContestStandings, error)
+	FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (tasksbased.CodeforcesContestStandings, error)
 }
 
 type CodeforcesContestProvider struct {
@@ -136,7 +136,7 @@ func buildCodeforcesGeneratedStandings(
 	contest domain.Contest,
 	configContestID int,
 	participants []codeforcesContestParticipant,
-	standings sites.CodeforcesContestStandings,
+	standings tasksbased.CodeforcesContestStandings,
 ) domain.GeneratedContestStandings {
 	actualContestID := standings.ContestID
 	if actualContestID <= 0 {
@@ -179,7 +179,7 @@ func buildCodeforcesGeneratedStandings(
 
 	type matchedRow struct {
 		rank int
-		row  sites.CodeforcesContestRow
+		row  tasksbased.CodeforcesContestRow
 	}
 
 	rowByHandle := make(map[string]matchedRow, len(standings.Rows))
@@ -298,4 +298,21 @@ func buildCodeforcesContestProblemURL(contestID int, index string) string {
 		return fmt.Sprintf("https://codeforces.com/gym/%d/problem/%s", contestID, url.PathEscape(idx))
 	}
 	return fmt.Sprintf("https://codeforces.com/contest/%d/problem/%s", contestID, url.PathEscape(idx))
+}
+
+func normalizeSite(site string) string {
+	return strings.ToLower(strings.TrimSpace(site))
+}
+
+func alphabetLabel(idx int) string {
+	if idx < 0 {
+		return ""
+	}
+
+	label := ""
+	for idx >= 0 {
+		label = string(rune('A'+(idx%26))) + label
+		idx = idx/26 - 1
+	}
+	return label
 }

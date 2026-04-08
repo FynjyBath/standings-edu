@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"standings-edu/internal/domain"
+	providerbased "standings-edu/internal/provider_based"
 )
 
 type contestBuildInput struct {
@@ -60,12 +61,12 @@ func (b *taskContestBuilder) Build(_ context.Context, sb *StandingsBuilder, inpu
 }
 
 type providerContestBuilder struct {
-	providers *ContestProviderRegistry
+	providers *providerbased.ContestProviderRegistry
 }
 
-func newProviderContestBuilder(providers *ContestProviderRegistry) *providerContestBuilder {
+func newProviderContestBuilder(providers *providerbased.ContestProviderRegistry) *providerContestBuilder {
 	if providers == nil {
-		providers = NewContestProviderRegistry()
+		providers = providerbased.NewContestProviderRegistry()
 	}
 	return &providerContestBuilder{providers: providers}
 }
@@ -97,7 +98,7 @@ func (b *providerContestBuilder) Build(ctx context.Context, _ *StandingsBuilder,
 		return domain.GeneratedContestStandings{}, fmt.Errorf("unknown provider %q", providerID)
 	}
 
-	return provider.BuildStandings(ctx, ProviderBuildInput{
+	return provider.BuildStandings(ctx, providerbased.ProviderBuildInput{
 		Source:   input.source,
 		Group:    input.group,
 		Contest:  input.contest,

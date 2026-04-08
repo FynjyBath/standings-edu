@@ -266,10 +266,6 @@ main.container {
   border-radius: 12px;
 }
 
-.summary-wrap {
-  margin-bottom: 1rem;
-}
-
 .standings-table {
   border-collapse: separate;
   border-spacing: 0;
@@ -329,16 +325,6 @@ main.container {
 .solved-count {
   min-width: 76px;
   font-weight: 700;
-}
-
-.total-col,
-.total-cell {
-  min-width: 84px;
-  font-weight: 800;
-}
-
-.site-solved {
-  min-width: 76px;
 }
 
 .subcontest-head {

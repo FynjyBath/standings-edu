@@ -23,7 +23,6 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"statusClass":  statusClass,
 			"scoreText":    scoreText,
 			"scoreAlpha":   scoreAlpha,
-			"siteTitle":    siteTitle,
 		},
 	}
 }
@@ -64,19 +63,6 @@ func statusClass(status string) string {
 		return "attempted"
 	default:
 		return "none"
-	}
-}
-
-func siteTitle(site string) string {
-	switch site {
-	case "codeforces":
-		return "Codeforces"
-	case "informatics":
-		return "Informatics"
-	case "acmp":
-		return "ACMP"
-	default:
-		return site
 	}
 }
 

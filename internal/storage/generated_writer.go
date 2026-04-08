@@ -36,15 +36,6 @@ func (w *GeneratedWriter) WriteGroupStandings(standings domain.GeneratedGroupSta
 	return writeJSON(path, standings)
 }
 
-func (w *GeneratedWriter) WriteOverallStandings(standings domain.GeneratedOverallStandings) error {
-	if err := os.MkdirAll(w.OutDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir out dir: %w", err)
-	}
-
-	path := filepath.Join(w.OutDir, "summary.json")
-	return writeJSON(path, standings)
-}
-
 func writeJSON(path string, value any) error {
 	b, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {

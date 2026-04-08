@@ -32,6 +32,13 @@ type accountFetchResult struct {
 	statuses  accountStatuses
 }
 
+type preparedGroup struct {
+	group         domain.GroupDefinition
+	students      []domain.Student
+	contests      []domain.Contest
+	requiredSites map[string]struct{}
+}
+
 type StandingsBuilder struct {
 	registry      *sites.Registry
 	logger        *log.Logger
@@ -63,60 +70,118 @@ func NewStandingsBuilder(registry *sites.Registry, logger *log.Logger, maxConcur
 }
 
 func (b *StandingsBuilder) BuildGroupStandings(ctx context.Context, source *domain.SourceData, group domain.GroupDefinition) (domain.GeneratedGroupStandings, error) {
-	if source == nil {
-		return domain.GeneratedGroupStandings{}, fmt.Errorf("source data is nil")
-	}
-
-	students := b.resolveGroupStudents(source, group)
-	contests := b.resolveGroupContests(source, group)
-	statusByStudent, err := b.collectStudentStatuses(ctx, students)
+	all, err := b.BuildGroupsStandings(ctx, source, []domain.GroupDefinition{group})
 	if err != nil {
 		return domain.GeneratedGroupStandings{}, err
 	}
-
-	return b.buildGroupStandingsPrepared(group, contests, students, statusByStudent), nil
+	standings, ok := all[group.Slug]
+	if !ok {
+		return domain.GeneratedGroupStandings{}, fmt.Errorf("group %q not built", group.Slug)
+	}
+	return standings, nil
 }
 
-func (b *StandingsBuilder) BuildOverallStandings(ctx context.Context, source *domain.SourceData, groups []domain.GroupDefinition) (domain.GeneratedOverallStandings, error) {
+func (b *StandingsBuilder) BuildGroupsStandings(ctx context.Context, source *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, error) {
 	if source == nil {
-		return domain.GeneratedOverallStandings{}, fmt.Errorf("source data is nil")
+		return nil, fmt.Errorf("source data is nil")
 	}
 
-	students := b.resolveStudentsForGroups(source, groups)
-	sitesList := b.collectSites()
-	statusByStudentSite, err := b.collectStudentStatusesBySite(ctx, students)
+	prepared := b.prepareGroups(source, groups)
+	if len(prepared) == 0 {
+		return map[string]domain.GeneratedGroupStandings{}, nil
+	}
+
+	requiredSitesByStudent := b.buildRequiredSitesByStudent(prepared)
+	studentSitePairs := countStudentSitePairs(requiredSitesByStudent)
+	b.logger.Printf("INFO selected user-site pairs for fetch: %d", studentSitePairs)
+
+	statusByStudentSite, err := b.collectStudentStatusesBySiteSelection(ctx, source, requiredSitesByStudent)
 	if err != nil {
-		return domain.GeneratedOverallStandings{}, err
+		return nil, err
 	}
 
-	return b.buildOverallStandingsPrepared(students, sitesList, statusByStudentSite), nil
-}
-
-func (b *StandingsBuilder) BuildAllStandings(ctx context.Context, source *domain.SourceData, groups []domain.GroupDefinition) (domain.GeneratedOverallStandings, map[string]domain.GeneratedGroupStandings, error) {
-	if source == nil {
-		return domain.GeneratedOverallStandings{}, nil, fmt.Errorf("source data is nil")
-	}
-
-	allStudents := b.resolveStudentsForGroups(source, groups)
-	sitesList := b.collectSites()
-
-	statusByStudentSite, err := b.collectStudentStatusesBySite(ctx, allStudents)
-	if err != nil {
-		return domain.GeneratedOverallStandings{}, nil, err
-	}
-
+	allStudents := uniqueStudentsFromPrepared(prepared)
 	combinedByStudent := b.buildCombinedStatusesByStudent(allStudents, statusByStudentSite)
-	overall := b.buildOverallStandingsPrepared(allStudents, sitesList, statusByStudentSite)
 
-	groupStandings := make(map[string]domain.GeneratedGroupStandings, len(groups))
-	for _, group := range groups {
-		groupStudents := b.resolveGroupStudents(source, group)
-		contests := b.resolveGroupContests(source, group)
-		statusByStudent := b.pickCombinedStatuses(groupStudents, combinedByStudent)
-		groupStandings[group.Slug] = b.buildGroupStandingsPrepared(group, contests, groupStudents, statusByStudent)
+	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
+	for _, pg := range prepared {
+		statusByStudent := b.pickCombinedStatuses(pg.students, combinedByStudent)
+		result[pg.group.Slug] = b.buildGroupStandingsPrepared(pg.group, pg.contests, pg.students, statusByStudent)
 	}
+	return result, nil
+}
 
-	return overall, groupStandings, nil
+func (b *StandingsBuilder) prepareGroups(source *domain.SourceData, groups []domain.GroupDefinition) []preparedGroup {
+	out := make([]preparedGroup, 0, len(groups))
+	for _, group := range groups {
+		students := b.resolveGroupStudents(source, group)
+		contests := b.resolveGroupContests(source, group)
+		requiredSites := b.collectRequiredSitesFromContests(contests)
+		out = append(out, preparedGroup{
+			group:         group,
+			students:      students,
+			contests:      contests,
+			requiredSites: requiredSites,
+		})
+	}
+	return out
+}
+
+func (b *StandingsBuilder) collectRequiredSitesFromContests(contests []domain.Contest) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, contest := range contests {
+		for _, sc := range contest.Subcontests {
+			for _, taskURL := range sc.Tasks {
+				normalized := domain.NormalizeTaskURL(taskURL)
+				site, _, ok := b.registry.ResolveByTaskURL(normalized)
+				if !ok || site == "" {
+					continue
+				}
+				out[normalizeSite(site)] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
+func (b *StandingsBuilder) buildRequiredSitesByStudent(prepared []preparedGroup) map[string]map[string]struct{} {
+	out := make(map[string]map[string]struct{})
+	for _, pg := range prepared {
+		for _, student := range pg.students {
+			sitesSet := out[student.ID]
+			if sitesSet == nil {
+				sitesSet = make(map[string]struct{})
+				out[student.ID] = sitesSet
+			}
+			for site := range pg.requiredSites {
+				sitesSet[site] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
+func countStudentSitePairs(requiredSitesByStudent map[string]map[string]struct{}) int {
+	pairs := 0
+	for _, sitesSet := range requiredSitesByStudent {
+		pairs += len(sitesSet)
+	}
+	return pairs
+}
+
+func uniqueStudentsFromPrepared(prepared []preparedGroup) []domain.Student {
+	seen := make(map[string]struct{})
+	out := make([]domain.Student, 0)
+	for _, pg := range prepared {
+		for _, student := range pg.students {
+			if _, ok := seen[student.ID]; ok {
+				continue
+			}
+			seen[student.ID] = struct{}{}
+			out = append(out, student)
+		}
+	}
+	return out
 }
 
 func (b *StandingsBuilder) resolveGroupStudents(source *domain.SourceData, group domain.GroupDefinition) []domain.Student {
@@ -129,28 +194,6 @@ func (b *StandingsBuilder) resolveGroupStudents(source *domain.SourceData, group
 		}
 		students = append(students, student)
 	}
-	return students
-}
-
-func (b *StandingsBuilder) resolveStudentsForGroups(source *domain.SourceData, groups []domain.GroupDefinition) []domain.Student {
-	seen := make(map[string]struct{})
-	students := make([]domain.Student, 0)
-
-	for _, group := range groups {
-		for _, studentID := range group.StudentIDs {
-			if _, ok := seen[studentID]; ok {
-				continue
-			}
-			student, ok := source.Students[studentID]
-			if !ok {
-				b.logger.Printf("WARN group=%s unknown student_id=%s", group.Slug, studentID)
-				continue
-			}
-			students = append(students, student)
-			seen[studentID] = struct{}{}
-		}
-	}
-
 	return students
 }
 
@@ -167,21 +210,6 @@ func (b *StandingsBuilder) resolveGroupContests(source *domain.SourceData, group
 	return contests
 }
 
-func (b *StandingsBuilder) collectSites() []string {
-	sitesSet := make(map[string]struct{})
-	registered := b.registry.Sites()
-	for _, site := range registered {
-		sitesSet[site] = struct{}{}
-	}
-
-	sitesList := make([]string, 0, len(sitesSet))
-	for site := range sitesSet {
-		sitesList = append(sitesList, site)
-	}
-	sort.Strings(sitesList)
-	return sitesList
-}
-
 func (b *StandingsBuilder) buildGroupStandingsPrepared(group domain.GroupDefinition, contests []domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedGroupStandings {
 	out := domain.GeneratedGroupStandings{
 		GroupSlug:  group.Slug,
@@ -195,44 +223,6 @@ func (b *StandingsBuilder) buildGroupStandingsPrepared(group domain.GroupDefinit
 	}
 
 	return out
-}
-
-func (b *StandingsBuilder) buildOverallStandingsPrepared(students []domain.Student, sitesList []string, statusByStudentSite map[string]map[string]*accountStatuses) domain.GeneratedOverallStandings {
-	rows := make([]domain.GeneratedOverallRow, 0, len(students))
-	for _, student := range students {
-		perSite := make([]int, len(sitesList))
-		totalSolved := 0
-
-		studentStatuses := statusByStudentSite[student.ID]
-		for i, site := range sitesList {
-			siteStatuses := studentStatuses[site]
-			if siteStatuses == nil {
-				continue
-			}
-			solvedCount := len(siteStatuses.solved)
-			perSite[i] = solvedCount
-			totalSolved += solvedCount
-		}
-
-		rows = append(rows, domain.GeneratedOverallRow{
-			StudentID:    student.ID,
-			FullName:     student.FullName,
-			SolvedBySite: perSite,
-			TotalSolved:  totalSolved,
-		})
-	}
-
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].TotalSolved != rows[j].TotalSolved {
-			return rows[i].TotalSolved > rows[j].TotalSolved
-		}
-		return strings.ToLower(rows[i].FullName) < strings.ToLower(rows[j].FullName)
-	})
-
-	return domain.GeneratedOverallStandings{
-		Sites: sitesList,
-		Rows:  rows,
-	}
 }
 
 func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
@@ -364,12 +354,91 @@ func clampScore(v int, min int, max int) int {
 	return v
 }
 
-func (b *StandingsBuilder) collectStudentStatuses(ctx context.Context, students []domain.Student) (map[string]*accountStatuses, error) {
-	statusByStudentSite, err := b.collectStudentStatusesBySite(ctx, students)
-	if err != nil {
+func (b *StandingsBuilder) collectStudentStatusesBySiteSelection(ctx context.Context, source *domain.SourceData, requiredSitesByStudent map[string]map[string]struct{}) (map[string]map[string]*accountStatuses, error) {
+	result := make(map[string]map[string]*accountStatuses, len(requiredSitesByStudent))
+
+	resultsCh := make(chan accountFetchResult)
+	sem := make(chan struct{}, b.maxConcurrent)
+	wg := sync.WaitGroup{}
+
+	seenFetches := make(map[string]struct{})
+	for studentID, requiredSites := range requiredSitesByStudent {
+		if len(requiredSites) == 0 {
+			continue
+		}
+
+		student, ok := source.Students[studentID]
+		if !ok {
+			b.logger.Printf("WARN unknown student_id=%s while collecting statuses", studentID)
+			continue
+		}
+
+		for _, account := range student.Accounts {
+			site := normalizeSite(account.Site)
+			if _, need := requiredSites[site]; !need {
+				continue
+			}
+
+			accountID := strings.TrimSpace(account.AccountID)
+			if accountID == "" {
+				continue
+			}
+
+			fetchKey := studentID + "|" + site + "|" + accountID
+			if _, already := seenFetches[fetchKey]; already {
+				continue
+			}
+			seenFetches[fetchKey] = struct{}{}
+
+			wg.Add(1)
+			go func(studentID string, site string, accountID string) {
+				defer wg.Done()
+
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				defer func() { <-sem }()
+
+				statuses, err := b.fetchAccountStatuses(ctx, site, accountID)
+				if err != nil {
+					b.logger.Printf("WARN student_id=%s site=%s account_id=%s fetch error: %v", studentID, site, accountID, err)
+					return
+				}
+
+				select {
+				case resultsCh <- accountFetchResult{studentID: studentID, site: site, statuses: statuses}:
+				case <-ctx.Done():
+				}
+			}(studentID, site, accountID)
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	for res := range resultsCh {
+		studentSites := result[res.studentID]
+		if studentSites == nil {
+			studentSites = make(map[string]*accountStatuses)
+			result[res.studentID] = studentSites
+		}
+		agg := studentSites[res.site]
+		if agg == nil {
+			agg = newAccountStatuses()
+			studentSites[res.site] = agg
+		}
+		mergeStatuses(agg, res.statuses)
+	}
+
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return b.buildCombinedStatusesByStudent(students, statusByStudentSite), nil
+
+	return result, nil
 }
 
 func (b *StandingsBuilder) buildCombinedStatusesByStudent(students []domain.Student, statusByStudentSite map[string]map[string]*accountStatuses) map[string]*accountStatuses {
@@ -397,73 +466,6 @@ func (b *StandingsBuilder) pickCombinedStatuses(students []domain.Student, combi
 		result[student.ID] = newAccountStatuses()
 	}
 	return result
-}
-
-func (b *StandingsBuilder) collectStudentStatusesBySite(ctx context.Context, students []domain.Student) (map[string]map[string]*accountStatuses, error) {
-	result := make(map[string]map[string]*accountStatuses, len(students))
-	for _, student := range students {
-		result[student.ID] = make(map[string]*accountStatuses)
-	}
-
-	resultsCh := make(chan accountFetchResult)
-	sem := make(chan struct{}, b.maxConcurrent)
-	wg := sync.WaitGroup{}
-
-	for _, student := range students {
-		for _, account := range student.Accounts {
-			account := account
-			studentID := student.ID
-			site := normalizeSite(account.Site)
-			accountID := strings.TrimSpace(account.AccountID)
-			if site == "" || accountID == "" {
-				continue
-			}
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
-				select {
-				case sem <- struct{}{}:
-				case <-ctx.Done():
-					return
-				}
-				defer func() { <-sem }()
-
-				statuses, err := b.fetchAccountStatuses(ctx, site, accountID)
-				if err != nil {
-					b.logger.Printf("WARN student_id=%s site=%s account_id=%s fetch error: %v", studentID, site, accountID, err)
-					return
-				}
-
-				select {
-				case resultsCh <- accountFetchResult{studentID: studentID, site: site, statuses: statuses}:
-				case <-ctx.Done():
-				}
-			}()
-		}
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultsCh)
-	}()
-
-	for res := range resultsCh {
-		studentSites := result[res.studentID]
-		agg := studentSites[res.site]
-		if agg == nil {
-			agg = newAccountStatuses()
-			studentSites[res.site] = agg
-		}
-		mergeStatuses(agg, res.statuses)
-	}
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 func (b *StandingsBuilder) fetchAccountStatuses(ctx context.Context, site string, accountID string) (accountStatuses, error) {

@@ -39,7 +39,7 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 ```
 
 После запуска:
-- `http://localhost:8080/standings` — сводная таблица по всем участникам: solved по сайтам + total;
+- `http://localhost:8080/standings` — пока пустая страница (без таблиц);
 - `http://localhost:8080/standings/group_10a` — standings конкретной группы;
 - `http://localhost:8080/` — `404 Not Found`.
 
@@ -70,7 +70,6 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 ## Форматы generated
 
 Генератор пишет:
-- `generated/summary.json` — сводка по участникам для страницы `/standings`;
 - `generated/groups.json` — список групп;
 - `generated/standings/{group}.json` — готовые standings групп.
 
@@ -82,9 +81,20 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 ## API
 
 - `GET /healthz`
-- `GET /api/summary`
 - `GET /api/groups`
 - `GET /api/groups/{group_name}/standings`
+
+## Как работает генерация
+
+Pipeline генератора:
+1. Берутся только группы с `update: true` (с учётом `-group`, если он задан).
+2. По задачам этих групп определяется, какие сайты реально нужны для каждой группы.
+3. Для учеников из этих групп строятся пары `(student, site)` и запрашиваются только нужные аккаунты нужных сайтов.
+4. Генерируются и перезаписываются только `generated/standings/{group}.json` для `update: true` групп.
+
+Важно:
+- группы с `update: false` не пересчитываются и их `generated/standings/{group}.json` не трогаются;
+- если поле `update` не указано, используется значение по умолчанию `true`.
 
 ## Интеграции сайтов
 
@@ -114,5 +124,4 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 5. Зарегистрировать клиент в `cmd/generate/main.go`.
 6. Добавить аккаунты сайта в `data/students.json` (`site` + `account_id`).
 7. Если интеграции нужен логин/токен, добавить загрузку конфига/секретов в `cmd/generate/main.go` (по аналогии с `-informatics-creds`).
-8. Опционально: добавить читаемое название сайта для сводной таблицы в `internal/web/templates.go` (`siteTitle`).
-9. Перезапустить `go run ./cmd/generate`.
+8. Перезапустить `go run ./cmd/generate`.

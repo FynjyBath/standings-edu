@@ -2,12 +2,9 @@ package generator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
-	"os"
 	"sort"
-	"strings"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/service"
@@ -50,23 +47,9 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		return nil
 	}
 
-	updatedOverall, standingsByGroup, err := g.builder.BuildAllStandings(ctx, source, groupsToUpdate)
+	standingsByGroup, err := g.builder.BuildGroupsStandings(ctx, source, groupsToUpdate)
 	if err != nil {
 		return fmt.Errorf("build standings: %w", err)
-	}
-
-	overallToWrite := updatedOverall
-	if shouldMergeOverall(onlyGroup, source.Groups, groupsToUpdate) {
-		merged, mergeErr := g.mergeOverallWithExisting(updatedOverall)
-		if mergeErr != nil {
-			g.logger.Printf("WARN failed to merge summary with existing data: %v; writing updated subset only", mergeErr)
-		} else {
-			overallToWrite = merged
-		}
-	}
-
-	if err := g.writer.WriteOverallStandings(overallToWrite); err != nil {
-		return fmt.Errorf("write overall standings: %w", err)
 	}
 
 	metas := make([]domain.GeneratedGroupMeta, 0, len(selectedGroups))
@@ -97,74 +80,12 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		g.logger.Printf("INFO group=%s generated", group.Slug)
 	}
 
-	if len(groupsToUpdate) > 0 && generatedCount == 0 {
+	if generatedCount == 0 {
 		return fmt.Errorf("no groups generated successfully")
 	}
 
 	g.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(groupsToUpdate))
 	return nil
-}
-
-func shouldMergeOverall(onlyGroup string, allGroups []domain.GroupDefinition, groupsToUpdate []domain.GroupDefinition) bool {
-	if onlyGroup != "" {
-		return true
-	}
-	return len(groupsToUpdate) < len(allGroups)
-}
-
-func (g *Generator) mergeOverallWithExisting(updated domain.GeneratedOverallStandings) (domain.GeneratedOverallStandings, error) {
-	loader := storage.NewGeneratedLoader(g.writer.OutDir)
-	existing, err := loader.LoadOverallStandings()
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return updated, nil
-		}
-		return domain.GeneratedOverallStandings{}, err
-	}
-
-	rowsByStudentID := make(map[string]domain.GeneratedOverallRow, len(existing.Rows)+len(updated.Rows))
-	for _, row := range existing.Rows {
-		rowsByStudentID[row.StudentID] = remapOverallRowToSites(row, existing.Sites, updated.Sites)
-	}
-	for _, row := range updated.Rows {
-		rowsByStudentID[row.StudentID] = row
-	}
-
-	mergedRows := make([]domain.GeneratedOverallRow, 0, len(rowsByStudentID))
-	for _, row := range rowsByStudentID {
-		mergedRows = append(mergedRows, row)
-	}
-
-	sort.Slice(mergedRows, func(i, j int) bool {
-		if mergedRows[i].TotalSolved != mergedRows[j].TotalSolved {
-			return mergedRows[i].TotalSolved > mergedRows[j].TotalSolved
-		}
-		return strings.ToLower(mergedRows[i].FullName) < strings.ToLower(mergedRows[j].FullName)
-	})
-
-	return domain.GeneratedOverallStandings{Sites: updated.Sites, Rows: mergedRows}, nil
-}
-
-func remapOverallRowToSites(row domain.GeneratedOverallRow, fromSites []string, toSites []string) domain.GeneratedOverallRow {
-	countsBySite := make(map[string]int, len(fromSites))
-	for i, site := range fromSites {
-		if i >= len(row.SolvedBySite) {
-			break
-		}
-		countsBySite[site] = row.SolvedBySite[i]
-	}
-
-	perSite := make([]int, len(toSites))
-	total := 0
-	for i, site := range toSites {
-		count := countsBySite[site]
-		perSite[i] = count
-		total += count
-	}
-
-	row.SolvedBySite = perSite
-	row.TotalSolved = total
-	return row
 }
 
 func filterGroupsToUpdate(groups []domain.GroupDefinition) []domain.GroupDefinition {

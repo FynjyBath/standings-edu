@@ -303,7 +303,7 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 
 		row := domain.GeneratedRow{
 			StudentID:   student.ID,
-			FullName:    student.FullName,
+			PublicName:  student.PublicName,
 			SolvedCount: 0,
 			Statuses:    make([]string, len(out.Tasks)),
 		}
@@ -342,13 +342,13 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 			if out.Rows[i].SolvedCount != out.Rows[j].SolvedCount {
 				return out.Rows[i].SolvedCount > out.Rows[j].SolvedCount
 			}
-			return strings.ToLower(out.Rows[i].FullName) < strings.ToLower(out.Rows[j].FullName)
+			return strings.ToLower(out.Rows[i].PublicName) < strings.ToLower(out.Rows[j].PublicName)
 		}
 
 		if out.Rows[i].SolvedCount != out.Rows[j].SolvedCount {
 			return out.Rows[i].SolvedCount > out.Rows[j].SolvedCount
 		}
-		return strings.ToLower(out.Rows[i].FullName) < strings.ToLower(out.Rows[j].FullName)
+		return strings.ToLower(out.Rows[i].PublicName) < strings.ToLower(out.Rows[j].PublicName)
 	})
 
 	return out

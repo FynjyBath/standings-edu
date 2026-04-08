@@ -11,9 +11,9 @@ type Account struct {
 }
 
 type Student struct {
-	ID       string    `json:"id"`
-	FullName string    `json:"full_name"`
-	Accounts []Account `json:"accounts"`
+	ID         string    `json:"id"`
+	PublicName string    `json:"public_name"`
+	Accounts   []Account `json:"accounts"`
 }
 
 type Subcontest struct {
@@ -94,7 +94,7 @@ type GeneratedSubcontest struct {
 
 type GeneratedRow struct {
 	StudentID   string   `json:"student_id"`
-	FullName    string   `json:"full_name"`
+	PublicName  string   `json:"public_name"`
 	Place       string   `json:"place,omitempty"`
 	SolvedCount int      `json:"solved_count"`
 	TotalScore  int      `json:"total_score,omitempty"`

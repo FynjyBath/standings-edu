@@ -1,7 +1,7 @@
 [
   {
     "id": "admin",
-    "full_name": "Ныйкин А. И.",
+    "public_name": "Ныйкин А. И.",
     "accounts": [
       {
         "site": "informatics",
@@ -19,7 +19,7 @@
   },
   {
     "id": "bibragimov",
-    "full_name": "Ибрагимов Б. А.",
+    "public_name": "Ибрагимов Б. А.",
     "accounts": [
       {
         "site": "informatics",
@@ -37,7 +37,7 @@
   },
   {
     "id": "agaliaviev",
-    "full_name": "Галявиев А. Р.",
+    "public_name": "Галявиев А. Р.",
     "accounts": [
       {
         "site": "codeforces",
@@ -51,7 +51,7 @@
   },
   {
     "id": "msayk",
-    "full_name": "Сайк М. А.",
+    "public_name": "Сайк М. А.",
     "accounts": [
       {
         "site": "codeforces",

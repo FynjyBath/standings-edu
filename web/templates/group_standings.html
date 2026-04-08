@@ -42,7 +42,7 @@
             {{if eq $contest.ContestType "provider"}}
             <td class="solved-count">{{placeText .Place}}</td>
             {{end}}
-            <td class="student-name">{{.FullName}}</td>
+            <td class="student-name">{{.PublicName}}</td>
             <td class="solved-count">{{if $contest.Olympiad}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if $contest.Olympiad}}
               {{range .Scores}}

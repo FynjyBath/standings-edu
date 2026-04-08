@@ -66,9 +66,9 @@ type codeforcesContestProviderConfig struct {
 }
 
 type codeforcesContestParticipant struct {
-	Handle    string
-	StudentID string
-	FullName  string
+	Handle     string
+	StudentID  string
+	PublicName string
 }
 
 type providerBuiltRow struct {
@@ -124,9 +124,9 @@ func resolveDefaultCodeforcesParticipants(students []domain.Student) ([]codeforc
 			seen[key] = struct{}{}
 
 			participants = append(participants, codeforcesContestParticipant{
-				Handle:    handle,
-				StudentID: student.ID,
-				FullName:  student.FullName,
+				Handle:     handle,
+				StudentID:  student.ID,
+				PublicName: student.PublicName,
 			})
 		}
 	}
@@ -216,9 +216,9 @@ func buildCodeforcesGeneratedStandings(
 		}
 
 		row := domain.GeneratedRow{
-			StudentID: participant.StudentID,
-			FullName:  participant.FullName,
-			Statuses:  make([]string, len(out.Tasks)),
+			StudentID:  participant.StudentID,
+			PublicName: participant.PublicName,
+			Statuses:   make([]string, len(out.Tasks)),
 		}
 		for i := range row.Statuses {
 			row.Statuses[i] = domain.TaskStatusNone
@@ -279,7 +279,7 @@ func buildCodeforcesGeneratedStandings(
 		if builtRows[i].rank != builtRows[j].rank {
 			return builtRows[i].rank < builtRows[j].rank
 		}
-		return strings.ToLower(builtRows[i].row.FullName) < strings.ToLower(builtRows[j].row.FullName)
+		return strings.ToLower(builtRows[i].row.PublicName) < strings.ToLower(builtRows[j].row.PublicName)
 	})
 
 	assignProviderPlaces(builtRows)

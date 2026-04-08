@@ -37,6 +37,7 @@ type CodeforcesContestProblem struct {
 
 type CodeforcesContestRow struct {
 	Rank           int
+	Penalty        *int
 	Handles        []string
 	ProblemResults []CodeforcesContestProblemResult
 }
@@ -141,6 +142,7 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 
 		out.Rows = append(out.Rows, CodeforcesContestRow{
 			Rank:           row.Rank,
+			Penalty:        row.Penalty,
 			Handles:        handles,
 			ProblemResults: results,
 		})
@@ -362,6 +364,7 @@ type codeforcesContestProblemMeta struct {
 
 type codeforcesContestStandingsRow struct {
 	Rank           int                                  `json:"rank"`
+	Penalty        *int                                 `json:"penalty"`
 	Party          codeforcesContestParty               `json:"party"`
 	ProblemResults []codeforcesContestProblemResultMeta `json:"problemResults"`
 }

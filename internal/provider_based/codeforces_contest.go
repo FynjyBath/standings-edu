@@ -220,6 +220,10 @@ func buildCodeforcesGeneratedStandings(
 			PublicName: participant.PublicName,
 			Statuses:   make([]string, len(out.Tasks)),
 		}
+		if ok && match.row.Penalty != nil {
+			penalty := *match.row.Penalty
+			row.Penalty = &penalty
+		}
 		for i := range row.Statuses {
 			row.Statuses[i] = domain.TaskStatusNone
 		}

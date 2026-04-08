@@ -19,11 +19,13 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 	return &TemplateRenderer{
 		templatesDir: templatesDir,
 		funcMap: template.FuncMap{
-			"statusSymbol": statusSymbol,
-			"statusClass":  statusClass,
-			"scoreText":    scoreText,
-			"scoreAlpha":   scoreAlpha,
-			"placeText":    placeText,
+			"statusSymbol":     statusSymbol,
+			"statusClass":      statusClass,
+			"scoreText":        scoreText,
+			"scoreAlpha":       scoreAlpha,
+			"placeText":        placeText,
+			"penaltyText":      penaltyText,
+			"hasPenaltyColumn": hasPenaltyColumn,
 		},
 	}
 }
@@ -91,4 +93,20 @@ func scoreAlpha(score *int) string {
 
 func placeText(place string) string {
 	return place
+}
+
+func penaltyText(penalty *int) string {
+	if penalty == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", *penalty)
+}
+
+func hasPenaltyColumn(rows []domain.GeneratedRow) bool {
+	for _, row := range rows {
+		if row.Penalty != nil {
+			return true
+		}
+	}
+	return false
 }

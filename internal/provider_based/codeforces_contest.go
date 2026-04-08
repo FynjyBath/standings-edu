@@ -171,12 +171,8 @@ func buildCodeforcesGeneratedStandings(
 		})
 	}
 
-	subcontestTitle := "Codeforces Contest"
-	if strings.TrimSpace(standings.ContestName) != "" {
-		subcontestTitle = strings.TrimSpace(standings.ContestName)
-	}
 	out.Subcontests = append(out.Subcontests, domain.GeneratedSubcontest{
-		Title:     subcontestTitle,
+		Title:     "Результаты",
 		TaskCount: len(tasks),
 		Tasks:     tasks,
 	})

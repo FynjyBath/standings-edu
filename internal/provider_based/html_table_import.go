@@ -238,7 +238,6 @@ func normalizeColumnKind(raw string) htmlImportColumnKind {
 
 func parseMatchingTables(pageHTML string, schema htmlTableImportSchema) ([]parsedImportedTable, error) {
 	tableBlocks := extractTagBlocks(pageHTML, "table")
-	out := make([]parsedImportedTable, 0)
 	for i, tableBlock := range tableBlocks {
 		rows := extractTagBlocks(tableBlock, "tr")
 		parsedRows := make([]parsedImportedRow, 0)
@@ -253,19 +252,17 @@ func parseMatchingTables(pageHTML string, schema htmlTableImportSchema) ([]parse
 			}
 			parsedRows = append(parsedRows, row)
 		}
-		if len(parsedRows) == 0 {
-			continue
+		if len(parsedRows) > 0 {
+			return []parsedImportedTable{
+				{
+					index: i + 1,
+					rows:  parsedRows,
+				},
+			}, nil
 		}
-		out = append(out, parsedImportedTable{
-			index: i + 1,
-			rows:  parsedRows,
-		})
 	}
 
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no tables found on page with row column count=%d", len(schema.columns))
-	}
-	return out, nil
+	return nil, fmt.Errorf("no matching table found on page with row column count=%d", len(schema.columns))
 }
 
 func parseImportedRow(cells []string, schema htmlTableImportSchema) parsedImportedRow {
@@ -499,7 +496,7 @@ func buildImportedStandings(
 		}
 
 		out.Subcontests = append(out.Subcontests, domain.GeneratedSubcontest{
-			Title:     fmt.Sprintf("Table #%d", table.index),
+			Title:     "Результаты",
 			TaskCount: len(subTasks),
 			Tasks:     subTasks,
 		})

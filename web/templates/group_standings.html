@@ -13,6 +13,9 @@
       <table class="standings-table">
         <thead>
           <tr>
+            {{if eq .ContestType "provider"}}
+            <th rowspan="2" class="count-col">Место</th>
+            {{end}}
             <th rowspan="2" class="student-col">Ученик</th>
             <th rowspan="2" class="count-col">{{if .Olympiad}}Баллы{{else}}Решено{{end}}</th>
             {{if .Subcontests}}
@@ -36,6 +39,9 @@
         <tbody>
           {{range .Rows}}
           <tr>
+            {{if eq $contest.ContestType "provider"}}
+            <td class="solved-count">{{placeText .Place}}</td>
+            {{end}}
             <td class="student-name">{{.FullName}}</td>
             <td class="solved-count">{{if $contest.Olympiad}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if $contest.Olympiad}}

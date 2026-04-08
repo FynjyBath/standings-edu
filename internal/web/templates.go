@@ -23,6 +23,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"statusClass":  statusClass,
 			"scoreText":    scoreText,
 			"scoreAlpha":   scoreAlpha,
+			"placeText":    placeText,
 		},
 	}
 }
@@ -86,4 +87,8 @@ func scoreAlpha(score *int) string {
 	}
 	alpha := float64(v) / 100.0
 	return strconv.FormatFloat(alpha, 'f', 2, 64)
+}
+
+func placeText(place string) string {
+	return place
 }

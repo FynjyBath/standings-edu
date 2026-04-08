@@ -95,6 +95,7 @@ type GeneratedSubcontest struct {
 type GeneratedRow struct {
 	StudentID   string   `json:"student_id"`
 	FullName    string   `json:"full_name"`
+	Place       string   `json:"place,omitempty"`
 	SolvedCount int      `json:"solved_count"`
 	TotalScore  int      `json:"total_score,omitempty"`
 	Statuses    []string `json:"statuses"`
@@ -105,6 +106,7 @@ type GeneratedContestStandings struct {
 	ID          string                `json:"id"`
 	Title       string                `json:"title"`
 	Olympiad    bool                  `json:"olympiad"`
+	ContestType string                `json:"contest_type,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`

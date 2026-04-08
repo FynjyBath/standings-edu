@@ -71,6 +71,11 @@ type codeforcesContestParticipant struct {
 	FullName  string
 }
 
+type providerBuiltRow struct {
+	rank int
+	row  domain.GeneratedRow
+}
+
 func (c codeforcesContestProviderConfig) showUnofficialOrDefault() bool {
 	if c.ShowUnofficial == nil {
 		return true
@@ -201,11 +206,7 @@ func buildCodeforcesGeneratedStandings(
 		}
 	}
 
-	type builtRow struct {
-		rank int
-		row  domain.GeneratedRow
-	}
-	builtRows := make([]builtRow, 0, len(participants))
+	builtRows := make([]providerBuiltRow, 0, len(participants))
 
 	for _, participant := range participants {
 		match, ok := rowByHandle[strings.ToLower(strings.TrimSpace(participant.Handle))]
@@ -271,7 +272,7 @@ func buildCodeforcesGeneratedStandings(
 			}
 		}
 
-		builtRows = append(builtRows, builtRow{rank: rank, row: row})
+		builtRows = append(builtRows, providerBuiltRow{rank: rank, row: row})
 	}
 
 	sort.SliceStable(builtRows, func(i, j int) bool {
@@ -280,6 +281,8 @@ func buildCodeforcesGeneratedStandings(
 		}
 		return strings.ToLower(builtRows[i].row.FullName) < strings.ToLower(builtRows[j].row.FullName)
 	})
+
+	assignProviderPlaces(builtRows)
 
 	for _, item := range builtRows {
 		out.Rows = append(out.Rows, item.row)
@@ -315,4 +318,33 @@ func alphabetLabel(idx int) string {
 		idx = idx/26 - 1
 	}
 	return label
+}
+
+func assignProviderPlaces(rows []providerBuiltRow) {
+	const missingRank = 1_000_000_000
+	i := 0
+	for i < len(rows) {
+		if rows[i].rank >= missingRank {
+			rows[i].row.Place = ""
+			i++
+			continue
+		}
+
+		rank := rows[i].rank
+		j := i + 1
+		for j < len(rows) && rows[j].rank == rank {
+			j++
+		}
+
+		if j-i == 1 {
+			rows[i].row.Place = fmt.Sprintf("%d", rank)
+		} else {
+			endRank := rank + (j - i) - 1
+			place := fmt.Sprintf("%d-%d", rank, endRank)
+			for k := i; k < j; k++ {
+				rows[k].row.Place = place
+			}
+		}
+		i = j
+	}
 }

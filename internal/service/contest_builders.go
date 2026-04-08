@@ -98,10 +98,16 @@ func (b *providerContestBuilder) Build(ctx context.Context, _ *StandingsBuilder,
 		return domain.GeneratedContestStandings{}, fmt.Errorf("unknown provider %q", providerID)
 	}
 
-	return provider.BuildStandings(ctx, providerbased.ProviderBuildInput{
+	standings, err := provider.BuildStandings(ctx, providerbased.ProviderBuildInput{
 		Source:   input.source,
 		Group:    input.group,
 		Contest:  input.contest,
 		Students: input.students,
 	})
+	if err != nil {
+		return domain.GeneratedContestStandings{}, err
+	}
+
+	standings.ContestType = domain.ContestTypeProvider
+	return standings, nil
 }

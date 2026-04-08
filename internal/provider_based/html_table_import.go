@@ -336,6 +336,7 @@ func buildStudentMatchers(students []domain.Student) []studentMatcher {
 	for _, s := range students {
 		full := normalizeForMatch(s.FullName)
 		public := normalizeForMatch(s.PublicName)
+		surname := firstToken(full)
 
 		patterns := make([]string, 0, 6)
 		if full != "" {
@@ -351,6 +352,9 @@ func buildStudentMatchers(students []domain.Student) []studentMatcher {
 		if full != "" {
 			fullParts = append(fullParts, full)
 		}
+		if surname != "" {
+			fullParts = append(fullParts, surname)
+		}
 		fullParts = append(fullParts, buildInitialPatterns(s.FullName)...)
 		fullParts = uniqueStrings(fullParts)
 
@@ -361,6 +365,17 @@ func buildStudentMatchers(students []domain.Student) []studentMatcher {
 		})
 	}
 	return out
+}
+
+func firstToken(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if idx := strings.IndexByte(s, ' '); idx >= 0 {
+		return strings.TrimSpace(s[:idx])
+	}
+	return s
 }
 
 func buildInitialPatterns(fullName string) []string {

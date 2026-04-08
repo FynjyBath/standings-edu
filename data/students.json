@@ -1,6 +1,7 @@
 [
   {
     "id": "admin",
+    "full_name": "Ныйкин Антон Игоревич",
     "public_name": "Ныйкин А. И.",
     "accounts": [
       {
@@ -19,6 +20,7 @@
   },
   {
     "id": "bibragimov",
+    "full_name": "Ибрагимов Булат Асхатович",
     "public_name": "Ибрагимов Б. А.",
     "accounts": [
       {
@@ -37,6 +39,7 @@
   },
   {
     "id": "agaliaviev",
+    "full_name": "Галявиев Арслан Рафисович",
     "public_name": "Галявиев А. Р.",
     "accounts": [
       {
@@ -51,6 +54,7 @@
   },
   {
     "id": "msayk",
+    "full_name": "Сайк Максим Артемович",
     "public_name": "Сайк М. А.",
     "accounts": [
       {

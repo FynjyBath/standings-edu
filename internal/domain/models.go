@@ -11,6 +11,7 @@ type Account struct {
 }
 
 type Student struct {
+	FullName   string    `json:"full_name"`
 	ID         string    `json:"id"`
 	PublicName string    `json:"public_name"`
 	Accounts   []Account `json:"accounts"`

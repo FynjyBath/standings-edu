@@ -108,7 +108,7 @@ Pipeline генератора:
    - `Score` (`nil`, если сайт не отдаёт score).
 4. Убедиться, что URL задач стабильно нормализуются (`NormalizeTaskURL`) и совпадают с URL в `data/contests.json`.
 5. Зарегистрировать клиент в `cmd/generate/main.go`.
-6. Добавить аккаунты сайта в `data/students.json` (`site` + `account_id`).
+6. Добавить участника в `data/students.json`: обязательный `full_name`, опциональный `public_name` (если пустой, берётся из `full_name`), и аккаунты (`site` + `account_id`).
 7. Если интеграции нужен логин/токен, добавить загрузку конфига/секретов в `cmd/generate/main.go` (по аналогии с `-informatics-creds`).
 8. Перезапустить `go run ./cmd/generate`.
 

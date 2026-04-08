@@ -51,9 +51,18 @@ func (l *SourceLoader) loadStudents() (map[string]domain.Student, error) {
 	}
 
 	out := make(map[string]domain.Student, len(students))
-	for _, s := range students {
+	for i, s := range students {
+		s.ID = strings.TrimSpace(s.ID)
 		if s.ID == "" {
 			continue
+		}
+		s.FullName = strings.TrimSpace(s.FullName)
+		if s.FullName == "" {
+			return nil, fmt.Errorf("student item #%d has empty full_name", i)
+		}
+		s.PublicName = strings.TrimSpace(s.PublicName)
+		if s.PublicName == "" {
+			s.PublicName = s.FullName
 		}
 		out[s.ID] = s
 	}

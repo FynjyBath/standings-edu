@@ -152,5 +152,30 @@
       "show_unofficial": true
     },
     "subcontests": []
+  },
+  {
+    "id": "contest_html_roi_2024_import",
+    "title": "ROI 2024 standings import (HTML table provider)",
+    "olympiad": true,
+    "contest_type": "provider",
+    "provider": "html_table_import",
+    "provider_config": {
+      "page_url": "https://neerc.ifmo.ru/school/archive/2023-2024/ru-olymp-roi-2024-standings.html",
+      "columns": [
+        "place",
+        "name",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "skip"
+      ],
+      "auto_find": true
+    },
+    "subcontests": []
   }
 ]

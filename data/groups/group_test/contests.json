@@ -22,5 +22,9 @@
   {
     "id": "contest_cf_provider_example",
     "update": true
+  },
+  {
+    "id": "contest_html_roi_2024_import",
+    "update": true
   }
 ]

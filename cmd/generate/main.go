@@ -52,6 +52,7 @@ func main() {
 	writer := storage.NewGeneratedWriter(*outDir)
 	providers := providerbased.NewContestProviderRegistry()
 	providers.Register(providerbased.NewCodeforcesContestProvider(cfClient))
+	providers.Register(providerbased.NewHTMLTableImportProvider())
 	builder := service.NewStandingsBuilder(registry, providers, logger, *parallelism, *cacheTTL)
 	gen := generator.New(loader, writer, builder, logger)
 

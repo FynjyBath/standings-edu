@@ -10,46 +10,26 @@ func EnsureInitialSourceFiles(dataDir string) ([]string, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir data dir %q: %w", dataDir, err)
 	}
-	if err := os.MkdirAll(filepath.Join(dataDir, "groups", "group_example"), 0o755); err != nil {
-		return nil, fmt.Errorf("mkdir group_example dir: %w", err)
+
+	paths := []string{
+		filepath.Join(dataDir, "students.json"),
+		filepath.Join(dataDir, "contests.json"),
 	}
 
-	items := []struct {
-		path    string
-		content []byte
-	}{
-		{
-			path:    filepath.Join(dataDir, "students.json"),
-			content: []byte("[]\n"),
-		},
-		{
-			path:    filepath.Join(dataDir, "contests.json"),
-			content: []byte("[]\n"),
-		},
-		{
-			path:    filepath.Join(dataDir, "groups", "group_example", "contests.json"),
-			content: []byte("[]\n"),
-		},
-		{
-			path:    filepath.Join(dataDir, "groups", "group_example", "groups.json"),
-			content: []byte("{}\n"),
-		},
-	}
-
-	created := make([]string, 0, len(items))
-	for _, item := range items {
-		ok, err := ensureFileWithContent(item.path, item.content)
+	created := make([]string, 0, len(paths))
+	for _, path := range paths {
+		ok, err := ensureEmptyJSONArrayFile(path)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			created = append(created, item.path)
+			created = append(created, path)
 		}
 	}
 	return created, nil
 }
 
-func ensureFileWithContent(path string, content []byte) (bool, error) {
+func ensureEmptyJSONArrayFile(path string) (bool, error) {
 	info, err := os.Stat(path)
 	if err == nil {
 		if info.IsDir() {
@@ -61,7 +41,7 @@ func ensureFileWithContent(path string, content []byte) (bool, error) {
 		return false, fmt.Errorf("stat %q: %w", path, err)
 	}
 
-	if err := os.WriteFile(path, content, 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("[]\n"), 0o644); err != nil {
 		return false, fmt.Errorf("write file %q: %w", path, err)
 	}
 	return true, nil

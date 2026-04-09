@@ -102,7 +102,7 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 		dir := filepath.Join(groupsDir, slug)
 
 		var gf domain.GroupFile
-		if err := l.readGroupFile(dir, &gf); err != nil {
+		if err := readJSON(filepath.Join(dir, "group.json"), &gf); err != nil {
 			return nil, fmt.Errorf("load group %q: %w", slug, err)
 		}
 
@@ -166,18 +166,6 @@ func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef,
 	}
 
 	return out, nil
-}
-
-func (l *SourceLoader) readGroupFile(dir string, out *domain.GroupFile) error {
-	groupPath := filepath.Join(dir, "group.json")
-	if err := readJSON(groupPath, out); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-
-	groupsPath := filepath.Join(dir, "groups.json")
-	return readJSON(groupsPath, out)
 }
 
 func readJSON(path string, out any) error {

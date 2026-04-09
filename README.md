@@ -16,11 +16,9 @@
 go run ./cmd/generate
 ```
 
-При первом запуске генератор автоматически создаёт пустые:
+При первом запуске генератор автоматически создаёт только пустые:
 - `data/students.json`
 - `data/contests.json`
-- `data/groups/group_example/contests.json`
-- `data/groups/group_example/groups.json`
 
 Расширенный запуск:
 

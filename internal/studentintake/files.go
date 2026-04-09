@@ -64,6 +64,9 @@ func WriteStudentsFile(path string, students []domain.Student) error {
 		if len(s.Accounts) > 0 {
 			item.Accounts = s.Accounts
 		}
+		if len(s.Groups) > 0 {
+			item.Groups = s.Groups
+		}
 		items = append(items, item)
 	}
 
@@ -87,6 +90,7 @@ type studentJSON struct {
 	FullName   string           `json:"full_name"`
 	PublicName string           `json:"public_name,omitempty"`
 	Accounts   []domain.Account `json:"accounts,omitempty"`
+	Groups     []string         `json:"groups,omitempty"`
 }
 
 func decodeIntakeItem(item map[string]json.RawMessage) (domain.Student, error) {
@@ -112,6 +116,11 @@ func decodeIntakeItem(item map[string]json.RawMessage) (domain.Student, error) {
 			return domain.Student{}, fmt.Errorf("field accounts: %w", err)
 		}
 	}
+	if raw, ok := item["groups"]; ok {
+		if err := json.Unmarshal(raw, &student.Groups); err != nil {
+			return domain.Student{}, fmt.Errorf("field groups: %w", err)
+		}
+	}
 
 	extraAccounts := make([]domain.Account, 0)
 	extraKeys := make([]string, 0, len(item))
@@ -123,7 +132,7 @@ func decodeIntakeItem(item map[string]json.RawMessage) (domain.Student, error) {
 	for _, key := range extraKeys {
 		raw := item[key]
 		field := strings.TrimSpace(strings.ToLower(key))
-		if field == "" || field == "id" || field == "full_name" || field == "public_name" || field == "accounts" {
+		if field == "" || field == "id" || field == "full_name" || field == "public_name" || field == "accounts" || field == "groups" || field == "group" {
 			continue
 		}
 

@@ -15,6 +15,7 @@ type Student struct {
 	ID         string    `json:"id"`
 	PublicName string    `json:"public_name"`
 	Accounts   []Account `json:"accounts"`
+	Groups     []string  `json:"groups,omitempty"`
 }
 
 type Subcontest struct {

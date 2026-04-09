@@ -30,7 +30,7 @@ func main() {
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 	loader := storage.NewGeneratedLoader(*generatedDir)
-	intakeStore := studentintake.NewStore(*intakePath)
+	intakeStore := studentintake.NewStore(*intakePath, *dataDir)
 	renderer := web.NewTemplateRenderer(*templatesDir)
 	handlers := httpapi.NewHandlers(loader, intakeStore, renderer, logger)
 	router := httpapi.NewRouter(handlers, *staticDir)

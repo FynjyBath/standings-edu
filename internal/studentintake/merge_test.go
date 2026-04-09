@@ -170,6 +170,35 @@ func TestMergeStudentsIgnoreEmptyFields(t *testing.T) {
 	}
 }
 
+func TestMergeStudentsGroups(t *testing.T) {
+	t.Parallel()
+
+	existing := []domain.Student{
+		{
+			ID:       "admin-id",
+			FullName: "Иванов Иван Иванович",
+			Groups:   []string{"group_a"},
+		},
+	}
+	intake := []domain.Student{
+		{
+			FullName: "Иванов Иван Иванович",
+			Groups:   []string{"group_a", "group_b"},
+		},
+	}
+
+	merged, _, err := MergeStudents(existing, intake)
+	if err != nil {
+		t.Fatalf("MergeStudents() error = %v", err)
+	}
+	if len(merged) != 1 {
+		t.Fatalf("len(merged) = %d, want 1", len(merged))
+	}
+	if len(merged[0].Groups) != 2 || merged[0].Groups[0] != "group_a" || merged[0].Groups[1] != "group_b" {
+		t.Fatalf("merged groups = %#v, want [group_a group_b]", merged[0].Groups)
+	}
+}
+
 func accountIDBySite(accounts []domain.Account, site string) string {
 	for _, account := range accounts {
 		if account.Site == site {

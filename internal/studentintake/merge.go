@@ -62,6 +62,9 @@ func mergeExistingStudent(existing domain.Student, incoming domain.Student) doma
 		existing.PublicName = GeneratePublicNameFromFullName(existing.FullName)
 	}
 	existing.Accounts = mergeAccountUpdates(existing.Accounts, incoming.Accounts)
+	for _, group := range incoming.Groups {
+		existing.Groups = appendUnique(existing.Groups, group)
+	}
 	return existing
 }
 
@@ -81,6 +84,7 @@ func buildNewStudent(current []domain.Student, incoming domain.Student) domain.S
 		FullName:   incoming.FullName,
 		PublicName: publicName,
 		Accounts:   incoming.Accounts,
+		Groups:     incoming.Groups,
 	})
 }
 

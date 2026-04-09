@@ -20,6 +20,7 @@ func normalizeStudent(s domain.Student) domain.Student {
 	s.FullName = normalizeWhitespace(s.FullName)
 	s.PublicName = normalizeWhitespace(s.PublicName)
 	s.Accounts = normalizeAccounts(s.Accounts)
+	s.Groups = normalizeGroups(s.Groups)
 	return s
 }
 
@@ -63,7 +64,7 @@ func accountsFromFields(fields map[string]string) []domain.Account {
 	for _, key := range keys {
 		value := fields[key]
 		field := strings.TrimSpace(key)
-		if field == "" || field == "full_name" || field == "public_name" || field == "id" {
+		if field == "" || field == "full_name" || field == "public_name" || field == "id" || field == "group" || field == "groups" {
 			continue
 		}
 		accountID := strings.TrimSpace(value)
@@ -76,4 +77,41 @@ func accountsFromFields(fields map[string]string) []domain.Account {
 		})
 	}
 	return normalizeAccounts(accounts)
+}
+
+func normalizeGroups(groups []string) []string {
+	if len(groups) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(groups))
+	seen := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		if _, ok := seen[group]; ok {
+			continue
+		}
+		seen[group] = struct{}{}
+		out = append(out, group)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func appendUnique(values []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return values
+	}
+	for _, v := range values {
+		if strings.TrimSpace(v) == value {
+			return values
+		}
+	}
+	return append(values, value)
 }

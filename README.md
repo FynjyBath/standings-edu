@@ -41,6 +41,7 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 После запуска:
 - `http://localhost:8080/standings` — пока пустая страница (без таблиц);
 - `http://localhost:8080/standings/group_10a` — standings конкретной группы;
+- `http://localhost:8080/standings/group_10a/summary` — сводная таблица по всем контестам группы;
 - `http://localhost:8080/standings/group_10a/summary-edu` — сводная таблица по всем task-based контестам группы;
 - `http://localhost:8080/standings/group_10a/summary-olymp` — сводная таблица по всем provider-контестам группы;
 - `http://localhost:8080/` — `404 Not Found`.

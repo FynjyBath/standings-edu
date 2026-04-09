@@ -109,6 +109,10 @@ func (h *Handlers) GroupSummaryEduPage(w http.ResponseWriter, r *http.Request) {
 	h.renderGroupSummaryPage(w, r, "edu")
 }
 
+func (h *Handlers) GroupSummaryAllPage(w http.ResponseWriter, r *http.Request) {
+	h.renderGroupSummaryPage(w, r, "all")
+}
+
 func (h *Handlers) GroupSummaryOlympPage(w http.ResponseWriter, r *http.Request) {
 	h.renderGroupSummaryPage(w, r, "olymp")
 }
@@ -140,6 +144,8 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 	modeTitle := "summary-edu"
 	if mode == "olymp" {
 		modeTitle = "summary-olymp"
+	} else if mode == "all" {
+		modeTitle = "summary"
 	}
 
 	page := GroupSummaryPageData{

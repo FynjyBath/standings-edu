@@ -13,6 +13,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /api/groups/{group_name}/standings", handlers.APIGroupStandings)
 	mux.HandleFunc("GET /standings", handlers.IndexPage)
 	mux.HandleFunc("GET /standings/{group_name}", handlers.GroupStandingsPage)
+	mux.HandleFunc("GET /standings/{group_name}/summary", handlers.GroupSummaryAllPage)
 	mux.HandleFunc("GET /standings/{group_name}/summary-edu", handlers.GroupSummaryEduPage)
 	mux.HandleFunc("GET /standings/{group_name}/summary-olymp", handlers.GroupSummaryOlympPage)
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {

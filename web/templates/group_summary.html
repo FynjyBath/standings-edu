@@ -5,14 +5,17 @@
   <p>
     {{if eq .Mode "edu"}}
     Режим: <strong>summary-edu</strong>
-    {{else}}
+    {{else if eq .Mode "olymp"}}
     Режим: <strong>summary-olymp</strong>
+    {{else}}
+    Режим: <strong>summary</strong>
     {{end}}
   </p>
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}">К списку контестов</a>
-    <a class="summary-link-btn{{if eq .Mode "edu"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary-edu">summary-edu</a>
-    <a class="summary-link-btn{{if eq .Mode "olymp"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary-olymp">summary-olymp</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}">Списком</a>
+    <a class="summary-link-btn{{if eq .Mode "all"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary">Все</a>
+    <a class="summary-link-btn{{if eq .Mode "edu"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary-edu">Тематические</a>
+    <a class="summary-link-btn{{if eq .Mode "olymp"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary-olymp">Соревновательные</a>
   </p>
 </section>
 
@@ -49,6 +52,9 @@
 
     var contests = (standings.contests || []).filter(function (contest) {
       var contestType = (contest.contest_type || "tasks").toLowerCase();
+      if (mode === "all") {
+        return true;
+      }
       if (mode === "edu") {
         return contestType !== "provider";
       }

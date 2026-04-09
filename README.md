@@ -39,7 +39,7 @@
 Этот каталог используется только как шаблон: команды проекта читают данные из `data/`.
 
 Важно:
-- при первом запуске генератор автоматически создаст пустые `data/students.json` и `data/contests.json`, если их нет;
+- `data/students.json` и `data/contests.json` должны существовать (их может создать `cmd/server` при старте);
 - группы нужно создать отдельно (можно по примеру из `data_example/groups/group_example/`).
 
 Быстрый старт из примеров:
@@ -90,6 +90,7 @@ go run ./cmd/server
 - создаёт `generated/`, если каталога нет;
 - создаёт `generated/standings/`, если каталога нет;
 - создаёт `data/`, `data/groups/` и `data/sites/`, если их нет;
+- создаёт `data/students.json` и `data/contests.json` со значением `[]`, если файлов нет;
 - создаёт `data/student_intake.json` со значением `[]`, если файла нет.
 
 Важно:

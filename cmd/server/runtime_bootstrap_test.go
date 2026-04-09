@@ -38,6 +38,8 @@ func TestEnsureServerRuntimeLayoutCreatesMissingRuntimePaths(t *testing.T) {
 	assertDirExists(t, layout.DataDir)
 	assertDirExists(t, filepath.Join(layout.DataDir, "groups"))
 	assertDirExists(t, filepath.Join(layout.DataDir, "sites"))
+	assertFileContent(t, filepath.Join(layout.DataDir, "students.json"), "[]\n")
+	assertFileContent(t, filepath.Join(layout.DataDir, "contests.json"), "[]\n")
 
 	b, err := os.ReadFile(layout.IntakePath)
 	if err != nil {
@@ -67,6 +69,14 @@ func TestEnsureServerRuntimeLayoutDoesNotOverwriteIntakeFile(t *testing.T) {
 	if err := os.WriteFile(intakePath, []byte(original), 0o644); err != nil {
 		t.Fatalf("write intake file: %v", err)
 	}
+	const studentsOriginal = "[{\"id\":\"saved\"}]\n"
+	const contestsOriginal = "[{\"id\":\"saved_contest\"}]\n"
+	if err := os.WriteFile(filepath.Join(base, "data", "students.json"), []byte(studentsOriginal), 0o644); err != nil {
+		t.Fatalf("write students file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "data", "contests.json"), []byte(contestsOriginal), 0o644); err != nil {
+		t.Fatalf("write contests file: %v", err)
+	}
 
 	layout := serverRuntimeLayout{
 		GeneratedDir: filepath.Join(base, "generated"),
@@ -88,6 +98,8 @@ func TestEnsureServerRuntimeLayoutDoesNotOverwriteIntakeFile(t *testing.T) {
 	if string(b) != original {
 		t.Fatalf("intake file was unexpectedly overwritten: got %q", string(b))
 	}
+	assertFileContent(t, filepath.Join(base, "data", "students.json"), studentsOriginal)
+	assertFileContent(t, filepath.Join(base, "data", "contests.json"), contestsOriginal)
 }
 
 func TestEnsureServerRuntimeLayoutFailsOnWrongPathTypes(t *testing.T) {
@@ -132,5 +144,16 @@ func assertDirExists(t *testing.T, path string) {
 	}
 	if !info.IsDir() {
 		t.Fatalf("path %q is not a directory", path)
+	}
+}
+
+func assertFileContent(t *testing.T, path string, want string) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %q: %v", path, err)
+	}
+	if string(b) != want {
+		t.Fatalf("%q content = %q, want %q", path, string(b), want)
 	}
 }

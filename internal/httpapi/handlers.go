@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -146,7 +147,7 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		GroupTitle:    standings.GroupTitle,
 		GroupSlug:     standings.GroupSlug,
 		Mode:          mode,
-		StandingsJSON: string(standingsJSON),
+		StandingsJSON: template.JS(string(standingsJSON)),
 		Footer:        h.buildFooterInfo(),
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_summary.html", page); err != nil {
@@ -217,6 +218,6 @@ type GroupSummaryPageData struct {
 	GroupTitle    string
 	GroupSlug     string
 	Mode          string
-	StandingsJSON string
+	StandingsJSON template.JS
 	Footer        FooterInfo
 }

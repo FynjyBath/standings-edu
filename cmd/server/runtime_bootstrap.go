@@ -11,6 +11,8 @@ import (
 type serverRuntimeLayout struct {
 	GeneratedDir string
 	DataDir      string
+	StudentsPath string
+	ContestsPath string
 	IntakePath   string
 }
 
@@ -28,10 +30,10 @@ func ensureServerRuntimeLayout(layout serverRuntimeLayout, logger *log.Logger) e
 	if err := ensureDir(layout.DataDir, true, logger); err != nil {
 		return fmt.Errorf("data dir: %w", err)
 	}
-	if err := ensureJSONFile(filepath.Join(layout.DataDir, "students.json"), []byte("[]\n"), logger); err != nil {
+	if err := ensureJSONFile(layout.StudentsPath, []byte("[]\n"), logger); err != nil {
 		return fmt.Errorf("students file: %w", err)
 	}
-	if err := ensureJSONFile(filepath.Join(layout.DataDir, "contests.json"), []byte("[]\n"), logger); err != nil {
+	if err := ensureJSONFile(layout.ContestsPath, []byte("[]\n"), logger); err != nil {
 		return fmt.Errorf("contests file: %w", err)
 	}
 	if err := ensureDir(filepath.Join(layout.DataDir, "groups"), true, logger); err != nil {

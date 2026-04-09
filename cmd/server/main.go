@@ -27,11 +27,15 @@ func main() {
 	if *intakePath == "" {
 		*intakePath = filepath.Join(*dataDir, "student_intake.json")
 	}
+	studentsPath := filepath.Join(*dataDir, "students.json")
+	contestsPath := filepath.Join(*dataDir, "contests.json")
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 	if err := ensureServerRuntimeLayout(serverRuntimeLayout{
 		GeneratedDir: *generatedDir,
 		DataDir:      *dataDir,
+		StudentsPath: studentsPath,
+		ContestsPath: contestsPath,
 		IntakePath:   *intakePath,
 	}, logger); err != nil {
 		logger.Fatalf("prepare server runtime layout: %v", err)

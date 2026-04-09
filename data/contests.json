@@ -197,6 +197,7 @@
         "task",
         "task",
         "task",
+        "skip",
         "status"
       ],
       "auto_find": true,

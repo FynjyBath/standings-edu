@@ -16,13 +16,6 @@
 go run ./cmd/generate
 ```
 
-При первом запуске генератор автоматически создаёт отсутствующие базовые файлы в `data/`:
-- `students.json` (из `students_example.json`, иначе `[]`);
-- `contests.json` (из `contests_example.json`, иначе `[]`);
-- `student_intake.json` (`[]`);
-- `groups/group_example/{group.json,contests.json}` (из `*_example.json`, если шаблоны есть);
-- `sites/informatics_credentials.json` (из `sites/informatics_credentials_example.json`, иначе дефолтный шаблон).
-
 Расширенный запуск:
 
 ```bash

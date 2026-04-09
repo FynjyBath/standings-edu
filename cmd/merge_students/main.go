@@ -59,5 +59,16 @@ func main() {
 	if err := studentintake.WriteStudentsFile(*studentsPath, merged); err != nil {
 		logger.Fatalf("write merged students failed: %v", err)
 	}
-	fmt.Printf("merged: students=%d updated=%d added=%d result=%d file=%s\n", len(students), stats.Updated, stats.Added, len(merged), *studentsPath)
+	if err := studentintake.WriteStudentsFile(*intakePath, nil); err != nil {
+		logger.Fatalf("clear intake file failed: %v", err)
+	}
+	fmt.Printf(
+		"merged: students=%d updated=%d added=%d result=%d file=%s intake_cleared=%s\n",
+		len(students),
+		stats.Updated,
+		stats.Added,
+		len(merged),
+		*studentsPath,
+		*intakePath,
+	)
 }

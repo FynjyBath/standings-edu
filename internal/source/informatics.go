@@ -463,15 +463,16 @@ func (c *InformaticsAPIClient) loadStateLocked() error {
 	if c.stateLoaded {
 		return nil
 	}
-	c.stateLoaded = true
 
 	if c.statePath == "" {
+		c.stateLoaded = true
 		return nil
 	}
 
 	b, err := os.ReadFile(c.statePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			c.stateLoaded = true
 			return nil
 		}
 		return fmt.Errorf("read informatics state %q: %w", c.statePath, err)
@@ -486,6 +487,7 @@ func (c *InformaticsAPIClient) loadStateLocked() error {
 	}
 
 	c.accountState = decoded.Accounts
+	c.stateLoaded = true
 	return nil
 }
 

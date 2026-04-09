@@ -16,6 +16,9 @@ func (s *Store) syncGroupMembership(intakeStudent domain.Student, fields map[str
 	if groupSlug == "" {
 		return nil
 	}
+	if !isValidGroupSlug(groupSlug) {
+		return fmt.Errorf("invalid group slug %q", groupSlug)
+	}
 
 	groupPath, groupFile, err := loadGroupFile(s.dataDir, groupSlug)
 	if err != nil {
@@ -102,6 +105,9 @@ func loadGroupFile(dataDir, groupSlug string) (string, domain.GroupFile, error) 
 	for _, path := range paths {
 		groupFile, err := readGroupFile(path)
 		if err == nil {
+			if err := ensureGroupContestsFile(groupDir); err != nil {
+				return "", domain.GroupFile{}, err
+			}
 			return path, groupFile, nil
 		}
 		if errors.Is(err, os.ErrNotExist) {
@@ -110,7 +116,24 @@ func loadGroupFile(dataDir, groupSlug string) (string, domain.GroupFile, error) 
 		return "", domain.GroupFile{}, err
 	}
 
-	return "", domain.GroupFile{}, os.ErrNotExist
+	groupFile := domain.GroupFile{
+		Title:      groupSlug,
+		Update:     boolPtr(true),
+		StudentIDs: nil,
+	}
+	groupPath := filepath.Join(groupDir, "group.json")
+
+	if err := os.MkdirAll(groupDir, 0o755); err != nil {
+		return "", domain.GroupFile{}, fmt.Errorf("mkdir group dir %q: %w", groupDir, err)
+	}
+	if err := writeGroupFile(groupPath, groupFile); err != nil {
+		return "", domain.GroupFile{}, err
+	}
+	if err := ensureGroupContestsFile(groupDir); err != nil {
+		return "", domain.GroupFile{}, err
+	}
+
+	return groupPath, groupFile, nil
 }
 
 func readGroupFile(path string) (domain.GroupFile, error) {
@@ -139,4 +162,35 @@ func writeGroupFile(path string, groupFile domain.GroupFile) error {
 		return err
 	}
 	return nil
+}
+
+func ensureGroupContestsFile(groupDir string) error {
+	path := filepath.Join(groupDir, "contests.json")
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat contests file %q: %w", path, err)
+	}
+
+	if err := os.WriteFile(path, []byte("[]\n"), 0o644); err != nil {
+		return fmt.Errorf("write contests file %q: %w", path, err)
+	}
+	return nil
+}
+
+func isValidGroupSlug(slug string) bool {
+	if strings.TrimSpace(slug) == "" {
+		return false
+	}
+	if strings.Contains(slug, "/") || strings.Contains(slug, "\\") {
+		return false
+	}
+	if strings.Contains(slug, "..") {
+		return false
+	}
+	return true
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }

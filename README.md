@@ -4,7 +4,7 @@
 
 Ключевая идея архитектуры:
 - `cmd/generate` — офлайн генерация всех standings в `generated/`;
-- `cmd/server` — только чтение готовых файлов и отдача HTML/API, без обращений к сайтам.
+- `cmd/server` — чтение готовых файлов и отдача HTML/API, плюс intake endpoint для сбора анкет в отдельный JSON.
 
 ## Запуск
 
@@ -35,7 +35,7 @@ go run ./cmd/server
 Расширенный запуск:
 
 ```bash
-go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/templates -static ./web/static
+go run ./cmd/server -addr :8080 -generated ./generated -data ./data -intake ./data/student_intake.json -templates ./web/templates -static ./web/static
 ```
 
 После запуска:
@@ -73,6 +73,122 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 - `GET /healthz`
 - `GET /api/groups`
 - `GET /api/groups/{group_name}/standings`
+- `POST /api/rpc` (`student_intake.submit`)
+
+## Student Intake
+
+Сервер принимает JSON-RPC запросы на `POST /api/rpc`.
+
+Поддерживаемый метод:
+- `student_intake.submit`
+
+Параметры:
+- `full_name` (обязательный);
+- любые другие строковые поля считаются аккаунтами сайтов (`site = имя_поля`, `account_id = значение`).
+
+Правила записи в `data/student_intake.json`:
+- файл хранится в формате массива студентов (как `students.json`);
+- значения trim-ятся, пустые поля не сохраняются;
+- при повторной анкете того же `full_name` запись обновляется;
+- `id` генерируется из `full_name` (`Иванов Иван Петрович` -> `ivanov-ip`);
+- при коллизии `id` добавляется суффикс `-2`, `-3`, ...
+
+Пример JSON-RPC запроса:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "student_intake.submit",
+  "params": {
+    "full_name": "Иванов Иван Иванович",
+    "codeforces": "tourist",
+    "informatics": "12345",
+    "acmp": "777"
+  }
+}
+```
+
+## Merge Intake -> Students
+
+Отдельная команда для вливания анкет:
+
+```bash
+go run ./cmd/merge_students -data ./data -students ./data/students.json -intake ./data/student_intake.json -dry-run
+```
+
+Запись в `students.json`:
+
+```bash
+go run ./cmd/merge_students -data ./data -students ./data/students.json -intake ./data/student_intake.json -write
+```
+
+Поведение merge:
+- сначала поиск существующего ученика по точному `full_name`, затем по `id`;
+- при обновлении существующего ученика его текущий `id` сохраняется;
+- непустые поля intake обновляют/добавляют данные, отсутствующие поля ничего не удаляют;
+- аккаунты merge-ятся по `site`: обновление существующих или добавление новых;
+- новые ученики добавляются в конец массива.
+
+Пример до/после:
+
+`students.json` (до):
+
+```json
+[
+  {
+    "id": "admin",
+    "full_name": "Иванов Иван Иванович",
+    "accounts": [
+      {"site": "codeforces", "account_id": "old_cf"}
+    ]
+  }
+]
+```
+
+`student_intake.json`:
+
+```json
+[
+  {
+    "id": "ivanov-ii",
+    "full_name": "Иванов Иван Иванович",
+    "accounts": [
+      {"site": "codeforces", "account_id": "new_cf"},
+      {"site": "acmp", "account_id": "777"}
+    ]
+  },
+  {
+    "id": "petrov-pp",
+    "full_name": "Петров Петр Петрович",
+    "accounts": [
+      {"site": "informatics", "account_id": "12345"}
+    ]
+  }
+]
+```
+
+`students.json` (после merge):
+
+```json
+[
+  {
+    "id": "admin",
+    "full_name": "Иванов Иван Иванович",
+    "accounts": [
+      {"site": "codeforces", "account_id": "new_cf"},
+      {"site": "acmp", "account_id": "777"}
+    ]
+  },
+  {
+    "id": "petrov-pp",
+    "full_name": "Петров Петр Петрович",
+    "accounts": [
+      {"site": "informatics", "account_id": "12345"}
+    ]
+  }
+]
+```
 
 ## Как работает генерация
 

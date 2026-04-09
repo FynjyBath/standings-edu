@@ -11,6 +11,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/storage"
+	"standings-edu/internal/studentintake"
 	"standings-edu/internal/web"
 )
 
@@ -26,16 +27,18 @@ func loadMoscowLocation() *time.Location {
 
 type Handlers struct {
 	loader   *storage.GeneratedLoader
+	intake   *studentintake.Store
 	renderer *web.TemplateRenderer
 	logger   *log.Logger
 }
 
-func NewHandlers(loader *storage.GeneratedLoader, renderer *web.TemplateRenderer, logger *log.Logger) *Handlers {
+func NewHandlers(loader *storage.GeneratedLoader, intake *studentintake.Store, renderer *web.TemplateRenderer, logger *log.Logger) *Handlers {
 	if logger == nil {
 		logger = log.Default()
 	}
 	return &Handlers{
 		loader:   loader,
+		intake:   intake,
 		renderer: renderer,
 		logger:   logger,
 	}

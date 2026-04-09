@@ -5,9 +5,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"standings-edu/internal/httpapi"
 	"standings-edu/internal/storage"
+	"standings-edu/internal/studentintake"
 	"standings-edu/internal/web"
 )
 
@@ -15,15 +17,22 @@ func main() {
 	var (
 		addr         = flag.String("addr", ":8080", "HTTP listen address")
 		generatedDir = flag.String("generated", "./generated", "path to generated files")
+		dataDir      = flag.String("data", "./data", "path to source data directory")
+		intakePath   = flag.String("intake", "", "path to intake json file (default: <data>/student_intake.json)")
 		templatesDir = flag.String("templates", "./web/templates", "path to templates")
 		staticDir    = flag.String("static", "./web/static", "path to static files")
 	)
 	flag.Parse()
 
+	if *intakePath == "" {
+		*intakePath = filepath.Join(*dataDir, "student_intake.json")
+	}
+
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 	loader := storage.NewGeneratedLoader(*generatedDir)
+	intakeStore := studentintake.NewStore(*intakePath)
 	renderer := web.NewTemplateRenderer(*templatesDir)
-	handlers := httpapi.NewHandlers(loader, renderer, logger)
+	handlers := httpapi.NewHandlers(loader, intakeStore, renderer, logger)
 	router := httpapi.NewRouter(handlers, *staticDir)
 
 	logger.Printf("server listening on %s", *addr)

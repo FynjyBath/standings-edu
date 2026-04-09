@@ -288,6 +288,59 @@ main.container {
   padding: 0.1rem 0.32rem;
 }
 
+.index-hero {
+  margin: 1.2rem 0 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 64%, transparent 36%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--surface-strong) 78%, var(--accent) 22%) 0%,
+    color-mix(in srgb, var(--surface) 92%, var(--accent) 8%) 100%
+  );
+  box-shadow: var(--shadow);
+}
+
+.index-hero h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.45rem, 2.6vw, 2rem);
+  color: var(--accent-strong);
+}
+
+.index-hero p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.form-block {
+  margin: 1.15rem 0 1.5rem;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent 35%);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.form-block__head h2 {
+  margin: 0 0 0.8rem;
+  color: var(--accent-strong);
+}
+
+.form-embed-shell {
+  border: 1px solid color-mix(in srgb, var(--line) 62%, transparent 38%);
+  border-radius: 12px;
+  padding: 0.35rem;
+  background: color-mix(in srgb, var(--surface) 92%, var(--surface-strong) 8%);
+}
+
+.form-embed-iframe {
+  width: 100%;
+  min-height: 760px;
+  border: 0;
+  border-radius: 10px;
+  display: block;
+}
+
 .contest-block {
   margin: 1.2rem 0 1.5rem;
   background: var(--surface);
@@ -463,6 +516,18 @@ main.container {
 
   .contest-block {
     padding: 0.68rem;
+  }
+
+  .index-hero {
+    padding: 0.8rem 0.85rem;
+  }
+
+  .form-block {
+    padding: 0.7rem;
+  }
+
+  .form-embed-iframe {
+    min-height: 700px;
   }
 
   .student-col,

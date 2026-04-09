@@ -66,12 +66,8 @@ func (h *Handlers) StandingsRPC(w http.ResponseWriter, r *http.Request) {
 			writeRPCError(w, http.StatusBadRequest, req.ID, -32602, "invalid params: full_name is required")
 			return
 		}
-		if errors.Is(err, studentintake.ErrInvalidGroupSlug) {
-			writeRPCError(w, http.StatusBadRequest, req.ID, -32602, "invalid params: group must be a valid slug")
-			return
-		}
 		h.logger.Printf("ERROR rpc method=%s err=%v", req.Method, err)
-		writeRPCError(w, http.StatusInternalServerError, req.ID, -32603, "internal error: "+err.Error())
+		writeRPCError(w, http.StatusInternalServerError, req.ID, -32603, "internal error")
 		return
 	}
 

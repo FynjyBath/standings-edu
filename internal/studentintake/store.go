@@ -12,7 +12,6 @@ import (
 )
 
 var ErrMissingFullName = errors.New("full_name is required")
-var ErrInvalidGroupSlug = errors.New("invalid group slug")
 
 type Store struct {
 	path    string

@@ -331,14 +331,17 @@ main.container {
   border-radius: 12px;
   padding: 0.35rem;
   background: color-mix(in srgb, var(--surface) 92%, var(--surface-strong) 8%);
+  max-width: 690px;
+  margin: 0 auto;
 }
 
 .form-embed-iframe {
-  width: 100%;
+  width: min(100%, 650px);
   min-height: 760px;
   border: 0;
   border-radius: 10px;
   display: block;
+  margin: 0 auto;
 }
 
 .contest-block {

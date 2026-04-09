@@ -33,8 +33,6 @@ func main() {
 		GeneratedDir: *generatedDir,
 		DataDir:      *dataDir,
 		IntakePath:   *intakePath,
-		TemplatesDir: *templatesDir,
-		StaticDir:    *staticDir,
 	}, logger); err != nil {
 		logger.Fatalf("prepare server runtime layout: %v", err)
 	}

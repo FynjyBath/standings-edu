@@ -12,8 +12,6 @@ type serverRuntimeLayout struct {
 	GeneratedDir string
 	DataDir      string
 	IntakePath   string
-	TemplatesDir string
-	StaticDir    string
 }
 
 func ensureServerRuntimeLayout(layout serverRuntimeLayout, logger *log.Logger) error {
@@ -44,14 +42,6 @@ func ensureServerRuntimeLayout(layout serverRuntimeLayout, logger *log.Logger) e
 	}
 	if err := ensureJSONFile(layout.IntakePath, []byte("[]\n"), logger); err != nil {
 		return fmt.Errorf("intake file: %w", err)
-	}
-
-	// Templates/static are part of repository assets, so we only validate them.
-	if err := ensureDir(layout.TemplatesDir, false, logger); err != nil {
-		return fmt.Errorf("templates dir: %w", err)
-	}
-	if err := ensureDir(layout.StaticDir, false, logger); err != nil {
-		return fmt.Errorf("static dir: %w", err)
 	}
 	return nil
 }

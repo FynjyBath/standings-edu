@@ -4,15 +4,15 @@
   <p>Slug: <code>{{.GroupSlug}}</code></p>
   <p>
     {{if eq .Mode "edu"}}
-    Режим: <strong>summary-edu</strong> (все task-based контесты)
+    Режим: <strong>summary-edu</strong>
     {{else}}
-    Режим: <strong>summary-olymp</strong> (все provider контесты)
+    Режим: <strong>summary-olymp</strong>
     {{end}}
   </p>
   <p class="summary-links">
-    <a href="/standings/{{.GroupSlug}}">к списку контестов</a>
-    <a href="/standings/{{.GroupSlug}}/summary-edu">summary-edu</a>
-    <a href="/standings/{{.GroupSlug}}/summary-olymp">summary-olymp</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}">К списку контестов</a>
+    <a class="summary-link-btn{{if eq .Mode "edu"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary-edu">summary-edu</a>
+    <a class="summary-link-btn{{if eq .Mode "olymp"}} is-active{{end}}" href="/standings/{{.GroupSlug}}/summary-olymp">summary-olymp</a>
   </p>
 </section>
 

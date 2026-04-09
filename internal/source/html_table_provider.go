@@ -1,4 +1,4 @@
-package providerbased
+package source
 
 import (
 	"bytes"
@@ -113,7 +113,7 @@ var (
 	reInt   = regexp.MustCompile(`-?\d+`)
 )
 
-func (p *HTMLTableImportProvider) BuildStandings(ctx context.Context, input ProviderBuildInput) (domain.GeneratedContestStandings, error) {
+func (p *HTMLTableImportProvider) BuildStandings(ctx context.Context, input ContestProviderInput) (domain.GeneratedContestStandings, error) {
 	if p == nil || p.httpClient == nil {
 		return domain.GeneratedContestStandings{}, fmt.Errorf("html table import provider client is not configured")
 	}
@@ -627,7 +627,7 @@ func buildImportedStandings(
 		for j := range schema.taskIndices {
 			url := fmt.Sprintf("%s#table-%d-task-%d", pageURL, table.index, j+1)
 			subTasks = append(subTasks, domain.GeneratedTask{
-				Label:         htmlImportAlphabetLabel(j),
+				Label:         domain.AlphabetLabel(j),
 				URL:           url,
 				NormalizedURL: domain.NormalizeTaskURL(url),
 			})
@@ -931,16 +931,4 @@ func uniqueStrings(items []string) []string {
 		out = append(out, item)
 	}
 	return out
-}
-
-func htmlImportAlphabetLabel(idx int) string {
-	if idx < 0 {
-		return ""
-	}
-	label := ""
-	for idx >= 0 {
-		label = string(rune('A'+(idx%26))) + label
-		idx = idx/26 - 1
-	}
-	return label
 }

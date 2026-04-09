@@ -10,21 +10,19 @@ import (
 	"syscall"
 	"time"
 
-	"standings-edu/internal/generator"
-	providerbased "standings-edu/internal/provider_based"
-	"standings-edu/internal/service"
+	"standings-edu/internal/source"
+	"standings-edu/internal/standings"
 	"standings-edu/internal/storage"
-	tasksbased "standings-edu/internal/tasks_based"
 )
 
 func main() {
 	var (
-		dataDir          = flag.String("data", "./data", "path to source data directory")
-		outDir           = flag.String("out", "./generated", "path to generated output directory")
+		dataDir          = flag.String("data-dir", "./data", "path to source data directory")
+		outDir           = flag.String("generated-dir", "./generated", "path to generated output directory")
 		onlyGroup        = flag.String("group", "", "optional group slug to generate")
-		parallelism      = flag.Int("parallel", 8, "max concurrent account fetches")
+		parallelism      = flag.Int("parallelism", 8, "max concurrent account fetches")
 		cacheTTL         = flag.Duration("cache-ttl", 5*time.Minute, "TTL for account status cache")
-		informaticsCreds = flag.String("informatics-creds", "./data/sites/informatics_credentials.json", "path to informatics credentials JSON")
+		informaticsCreds = flag.String("informatics-creds-file", "./data/sites/informatics_credentials.json", "path to informatics credentials JSON")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 	)
 	flag.Parse()
@@ -45,26 +43,25 @@ func main() {
 		logger.Printf("INFO initialized source file: %s", path)
 	}
 
-	infClient, err := tasksbased.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
+	infClient, err := source.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)
 	}
-	cfClient := tasksbased.NewCodeforcesAPIClient()
+	cfClient := source.NewCodeforcesAPIClient()
 
-	registry := tasksbased.NewRegistry()
-	registry.Register("informatics", infClient)
-	registry.Register("codeforces", cfClient)
-	registry.Register("acmp", tasksbased.NewACMPClient())
+	registry := source.NewRegistry()
+	registry.RegisterSite("informatics", infClient)
+	registry.RegisterSite("codeforces", cfClient)
+	registry.RegisterSite("acmp", source.NewACMPClient())
+	registry.RegisterProvider(source.NewCodeforcesContestProvider(cfClient))
+	registry.RegisterProvider(source.NewHTMLTableImportProvider())
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)
-	providers := providerbased.NewContestProviderRegistry()
-	providers.Register(providerbased.NewCodeforcesContestProvider(cfClient))
-	providers.Register(providerbased.NewHTMLTableImportProvider())
-	builder := service.NewStandingsBuilder(registry, providers, logger, *parallelism, *cacheTTL)
-	gen := generator.New(loader, writer, builder, logger)
+	builder := standings.NewBuilder(registry, logger, *parallelism, *cacheTTL)
+	pipeline := standings.NewPipeline(loader, writer, builder, logger)
 
-	if err := gen.Run(ctx, *onlyGroup); err != nil {
+	if err := pipeline.Run(ctx, *onlyGroup); err != nil {
 		logger.Fatalf("generation failed: %v", err)
 	}
 }

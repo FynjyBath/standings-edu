@@ -2,6 +2,7 @@ package studentintake
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,5 +81,21 @@ func TestStoreSubmitWithGroup(t *testing.T) {
 	}
 	if len(groupFile.StudentIDs) != 1 || groupFile.StudentIDs[0] != student.ID {
 		t.Fatalf("group student_ids = %#v, want [%s]", groupFile.StudentIDs, student.ID)
+	}
+}
+
+func TestStoreSubmitInvalidGroup(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	intakePath := filepath.Join(dataDir, "student_intake.json")
+	store := NewStore(intakePath, dataDir)
+
+	_, err := store.Submit(map[string]string{
+		"full_name": "Иванов Иван Иванович",
+		"group":     "../bad",
+	})
+	if !errors.Is(err, ErrInvalidGroupSlug) {
+		t.Fatalf("Submit() error = %v, want ErrInvalidGroupSlug", err)
 	}
 }

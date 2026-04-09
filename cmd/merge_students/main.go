@@ -13,9 +13,9 @@ import (
 
 func main() {
 	var (
-		dataDir      = flag.String("data", "./data", "path to data directory")
-		studentsPath = flag.String("students", "", "path to students.json (default: <data>/students.json)")
-		intakePath   = flag.String("intake", "", "path to student_intake.json (default: <data>/student_intake.json)")
+		dataDir      = flag.String("data-dir", "./data", "path to data directory")
+		studentsPath = flag.String("students-file", "", "path to students.json (default: <data>/students.json)")
+		intakePath   = flag.String("intake-file", "", "path to student_intake.json (default: <data>/student_intake.json)")
 		dryRun       = flag.Bool("dry-run", true, "show merge result without writing students.json")
 		writeMode    = flag.Bool("write", false, "write merged students.json")
 	)

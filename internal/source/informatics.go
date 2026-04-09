@@ -1,4 +1,4 @@
-package tasksbased
+package source
 
 import (
 	"context"
@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"standings-edu/internal/domain"
 )
 
 const defaultInformaticsBaseURL = "https://informatics.msk.ru"
@@ -333,25 +335,15 @@ func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int
 
 func inferInformaticsScore(run informaticsRun) int {
 	if run.EjudgeScore.Valid {
-		return clampInformaticsScore(run.EjudgeScore.Value)
+		return domain.ClampScore(run.EjudgeScore.Value)
 	}
 	if run.Score.Valid {
-		return clampInformaticsScore(run.Score.Value)
+		return domain.ClampScore(run.Score.Value)
 	}
 	if run.EjudgeStatus == 0 {
 		return 100
 	}
 	return 0
-}
-
-func clampInformaticsScore(v int) int {
-	if v < 0 {
-		return 0
-	}
-	if v > 100 {
-		return 100
-	}
-	return v
 }
 
 func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, state informaticsAccountState) {
@@ -400,7 +392,7 @@ func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, sta
 		}
 
 		if result.Score != nil {
-			score := clampInformaticsScore(*result.Score)
+			score := domain.ClampScore(*result.Score)
 			if !agg.hasScore || score > agg.score {
 				agg.score = score
 				agg.hasScore = true
@@ -431,7 +423,7 @@ func aggregatesToTaskResults(aggByTask map[string]informaticsTaskAggregate) []Ta
 
 		var score *int
 		if agg.hasScore {
-			value := clampInformaticsScore(agg.score)
+			value := domain.ClampScore(agg.score)
 			score = &value
 		}
 

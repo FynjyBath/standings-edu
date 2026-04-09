@@ -1,4 +1,4 @@
-package generator
+package standings
 
 import (
 	"context"
@@ -9,23 +9,22 @@ import (
 	"sort"
 
 	"standings-edu/internal/domain"
-	"standings-edu/internal/service"
 	"standings-edu/internal/storage"
 )
 
-type Generator struct {
+type Pipeline struct {
 	loader          *storage.SourceLoader
 	writer          *storage.GeneratedWriter
 	generatedLoader *storage.GeneratedLoader
-	builder         *service.StandingsBuilder
+	builder         *Builder
 	logger          *log.Logger
 }
 
-func New(loader *storage.SourceLoader, writer *storage.GeneratedWriter, builder *service.StandingsBuilder, logger *log.Logger) *Generator {
+func NewPipeline(loader *storage.SourceLoader, writer *storage.GeneratedWriter, builder *Builder, logger *log.Logger) *Pipeline {
 	if logger == nil {
 		logger = log.Default()
 	}
-	return &Generator{
+	return &Pipeline{
 		loader:          loader,
 		writer:          writer,
 		generatedLoader: storage.NewGeneratedLoader(writer.OutDir),
@@ -34,30 +33,30 @@ func New(loader *storage.SourceLoader, writer *storage.GeneratedWriter, builder 
 	}
 }
 
-func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
-	source, err := g.loader.Load(ctx)
+func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
+	data, err := p.loader.Load(ctx)
 	if err != nil {
 		return fmt.Errorf("load source data: %w", err)
 	}
 
-	selectedGroups := selectGroups(source.Groups, onlyGroup)
+	selectedGroups := selectGroups(data.Groups, onlyGroup)
 	if onlyGroup != "" && len(selectedGroups) == 0 {
 		return fmt.Errorf("group %q not found", onlyGroup)
 	}
 
 	groupsToUpdate := filterGroupsToUpdate(selectedGroups)
 	if len(groupsToUpdate) == 0 {
-		g.logger.Printf("INFO no groups with update=true selected; nothing to update")
+		p.logger.Printf("INFO no groups with update=true selected; nothing to update")
 		return nil
 	}
 
 	buildGroups := selectGroupsWithUpdatableContests(groupsToUpdate)
 	if len(buildGroups) == 0 {
-		g.logger.Printf("INFO no contests with update=true in selected groups; nothing to update")
+		p.logger.Printf("INFO no contests with update=true in selected groups; nothing to update")
 		return nil
 	}
 
-	standingsByGroup, err := g.builder.BuildGroupsStandings(ctx, source, buildGroups)
+	standingsByGroup, err := p.builder.BuildGroupsStandings(ctx, data, buildGroups)
 	if err != nil {
 		return fmt.Errorf("build standings: %w", err)
 	}
@@ -67,7 +66,7 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 		metas = append(metas, domain.GeneratedGroupMeta{Slug: group.Slug, Title: group.Title})
 	}
 	sort.Slice(metas, func(i, j int) bool { return metas[i].Slug < metas[j].Slug })
-	if err := g.writer.WriteGroups(metas); err != nil {
+	if err := p.writer.WriteGroups(metas); err != nil {
 		return fmt.Errorf("write groups list: %w", err)
 	}
 
@@ -78,39 +77,39 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 
 	generatedCount := 0
 	for _, group := range buildGroups {
-		g.logger.Printf("INFO generating standings for group=%s", group.Slug)
+		p.logger.Printf("INFO generating standings for group=%s", group.Slug)
 
 		updatedStandings, ok := standingsByGroup[group.Slug]
 		if !ok {
-			g.logger.Printf("ERROR group=%s build result not found", group.Slug)
+			p.logger.Printf("ERROR group=%s build result not found", group.Slug)
 			continue
 		}
 
 		fullGroup := fullGroupBySlug[group.Slug]
-		mergedStandings, ok := g.mergeWithNonUpdatedContests(fullGroup, updatedStandings)
+		mergedStandings, ok := p.mergeWithNonUpdatedContests(fullGroup, updatedStandings)
 		if !ok {
-			g.logger.Printf("ERROR group=%s merge failed; skip writing to avoid data loss", group.Slug)
+			p.logger.Printf("ERROR group=%s merge failed; skip writing to avoid data loss", group.Slug)
 			continue
 		}
 
-		if err := g.writer.WriteGroupStandings(mergedStandings); err != nil {
-			g.logger.Printf("ERROR group=%s write standings failed: %v", group.Slug, err)
+		if err := p.writer.WriteGroupStandings(mergedStandings); err != nil {
+			p.logger.Printf("ERROR group=%s write standings failed: %v", group.Slug, err)
 			continue
 		}
 
 		generatedCount++
-		g.logger.Printf("INFO group=%s generated", group.Slug)
+		p.logger.Printf("INFO group=%s generated", group.Slug)
 	}
 
 	if generatedCount == 0 {
 		return fmt.Errorf("no groups generated successfully")
 	}
 
-	g.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(buildGroups))
+	p.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(buildGroups))
 	return nil
 }
 
-func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings) (domain.GeneratedGroupStandings, bool) {
+func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings) (domain.GeneratedGroupStandings, bool) {
 	hasNonUpdatedContests := false
 	for _, contest := range group.Contests {
 		if !contest.Update {
@@ -121,17 +120,17 @@ func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, up
 
 	existing := domain.GeneratedGroupStandings{}
 	hasExisting := false
-	existingLoaded, loadErr := g.generatedLoader.LoadGroupStandings(group.Slug)
+	existingLoaded, loadErr := p.generatedLoader.LoadGroupStandings(group.Slug)
 	if loadErr == nil {
 		existing = existingLoaded
 		hasExisting = true
 	} else if !errors.Is(loadErr, os.ErrNotExist) {
-		g.logger.Printf("WARN group=%s load existing standings failed: %v", group.Slug, loadErr)
+		p.logger.Printf("WARN group=%s load existing standings failed: %v", group.Slug, loadErr)
 	}
 
 	if hasNonUpdatedContests && !hasExisting {
 		if errors.Is(loadErr, os.ErrNotExist) {
-			g.logger.Printf("WARN group=%s has contests with update=false but previous standings are missing", group.Slug)
+			p.logger.Printf("WARN group=%s has contests with update=false but previous standings are missing", group.Slug)
 		}
 		return domain.GeneratedGroupStandings{}, false
 	}
@@ -155,12 +154,12 @@ func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, up
 				if hasExisting {
 					existingContest, oldOK := takeFirstContest(existingByID, contestRef.ID)
 					if oldOK {
-						g.logger.Printf("WARN group=%s contest=%s update=true but not built; keep previous generated version", group.Slug, contestRef.ID)
+						p.logger.Printf("WARN group=%s contest=%s update=true but not built; keep previous generated version", group.Slug, contestRef.ID)
 						merged.Contests = append(merged.Contests, existingContest)
 						continue
 					}
 				}
-				g.logger.Printf("WARN group=%s contest=%s update=true but not built and no previous version found", group.Slug, contestRef.ID)
+				p.logger.Printf("WARN group=%s contest=%s update=true but not built and no previous version found", group.Slug, contestRef.ID)
 				continue
 			}
 			merged.Contests = append(merged.Contests, contest)
@@ -169,7 +168,7 @@ func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, up
 
 		contest, ok := takeFirstContest(existingByID, contestRef.ID)
 		if !ok {
-			g.logger.Printf("WARN group=%s contest=%s update=false but missing in previous standings", group.Slug, contestRef.ID)
+			p.logger.Printf("WARN group=%s contest=%s update=false but missing in previous standings", group.Slug, contestRef.ID)
 			continue
 		}
 		merged.Contests = append(merged.Contests, contest)

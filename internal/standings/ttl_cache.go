@@ -1,35 +1,34 @@
-package cache
+package standings
 
 import (
 	"sync"
 	"time"
 )
 
-type item[T any] struct {
+type cacheItem[T any] struct {
 	value     T
 	expiresAt time.Time
 }
 
-type TTLCache[T any] struct {
+type ttlCache[T any] struct {
 	mu    sync.RWMutex
-	data  map[string]item[T]
+	data  map[string]cacheItem[T]
 	ttl   time.Duration
 	nowFn func() time.Time
 }
 
-func NewTTLCache[T any](ttl time.Duration) *TTLCache[T] {
-	return &TTLCache[T]{
-		data:  make(map[string]item[T]),
+func newTTLCache[T any](ttl time.Duration) *ttlCache[T] {
+	return &ttlCache[T]{
+		data:  make(map[string]cacheItem[T]),
 		ttl:   ttl,
 		nowFn: time.Now,
 	}
 }
 
-func (c *TTLCache[T]) Get(key string) (T, bool) {
+func (c *ttlCache[T]) Get(key string) (T, bool) {
 	c.mu.RLock()
 	it, ok := c.data[key]
 	c.mu.RUnlock()
-
 	if !ok {
 		var zero T
 		return zero, false
@@ -46,9 +45,9 @@ func (c *TTLCache[T]) Get(key string) (T, bool) {
 	return it.value, true
 }
 
-func (c *TTLCache[T]) Set(key string, value T) {
+func (c *ttlCache[T]) Set(key string, value T) {
 	c.mu.Lock()
-	c.data[key] = item[T]{
+	c.data[key] = cacheItem[T]{
 		value:     value,
 		expiresAt: c.nowFn().Add(c.ttl),
 	}

@@ -1,4 +1,4 @@
-package tasksbased
+package source
 
 import (
 	"context"
@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"standings-edu/internal/domain"
 )
 
 const defaultCodeforcesBaseURL = "https://codeforces.com/api"
@@ -299,22 +301,12 @@ func buildCodeforcesProblemURL(p codeforcesProblem) string {
 
 func codeforcesSubmissionScore(sub codeforcesSubmission) int {
 	if sub.Points != nil {
-		return clampScore(int(math.Round(*sub.Points)), 0, 100)
+		return domain.ClampScore(int(math.Round(*sub.Points)))
 	}
 	if sub.Verdict == "OK" {
 		return 100
 	}
 	return 0
-}
-
-func clampScore(v int, min int, max int) int {
-	if v < min {
-		return min
-	}
-	if v > max {
-		return max
-	}
-	return v
 }
 
 func normalizeCodeforcesHandles(handles []string) []string {

@@ -1,4 +1,4 @@
-package providerbased
+package source
 
 import (
 	"bytes"
@@ -11,13 +11,12 @@ import (
 	"strings"
 
 	"standings-edu/internal/domain"
-	"standings-edu/internal/tasks_based"
 )
 
 const CodeforcesContestProviderID = "codeforces_contest"
 
 type codeforcesContestStandingsClient interface {
-	FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (tasksbased.CodeforcesContestStandings, error)
+	FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (CodeforcesContestStandings, error)
 }
 
 type CodeforcesContestProvider struct {
@@ -32,7 +31,7 @@ func (p *CodeforcesContestProvider) ProviderID() string {
 	return CodeforcesContestProviderID
 }
 
-func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input ProviderBuildInput) (domain.GeneratedContestStandings, error) {
+func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input ContestProviderInput) (domain.GeneratedContestStandings, error) {
 	if p == nil || p.client == nil {
 		return domain.GeneratedContestStandings{}, fmt.Errorf("codeforces contest provider client is not configured")
 	}
@@ -108,7 +107,7 @@ func resolveDefaultCodeforcesParticipants(students []domain.Student) ([]codeforc
 	seen := make(map[string]struct{})
 	for _, student := range students {
 		for _, account := range student.Accounts {
-			if normalizeSite(account.Site) != "codeforces" {
+			if domain.NormalizeSite(account.Site) != "codeforces" {
 				continue
 			}
 
@@ -141,7 +140,7 @@ func buildCodeforcesGeneratedStandings(
 	contest domain.Contest,
 	configContestID int,
 	participants []codeforcesContestParticipant,
-	standings tasksbased.CodeforcesContestStandings,
+	standings CodeforcesContestStandings,
 ) domain.GeneratedContestStandings {
 	actualContestID := standings.ContestID
 	if actualContestID <= 0 {
@@ -161,7 +160,7 @@ func buildCodeforcesGeneratedStandings(
 	for i, problem := range standings.Problems {
 		label := strings.TrimSpace(problem.Index)
 		if label == "" {
-			label = alphabetLabel(i)
+			label = domain.AlphabetLabel(i)
 		}
 		taskURL := buildCodeforcesContestProblemURL(actualContestID, problem.Index)
 		tasks = append(tasks, domain.GeneratedTask{
@@ -180,7 +179,7 @@ func buildCodeforcesGeneratedStandings(
 
 	type matchedRow struct {
 		rank int
-		row  tasksbased.CodeforcesContestRow
+		row  CodeforcesContestRow
 	}
 
 	rowByHandle := make(map[string]matchedRow, len(standings.Rows))
@@ -301,23 +300,6 @@ func buildCodeforcesContestProblemURL(contestID int, index string) string {
 		return fmt.Sprintf("https://codeforces.com/gym/%d/problem/%s", contestID, url.PathEscape(idx))
 	}
 	return fmt.Sprintf("https://codeforces.com/contest/%d/problem/%s", contestID, url.PathEscape(idx))
-}
-
-func normalizeSite(site string) string {
-	return strings.ToLower(strings.TrimSpace(site))
-}
-
-func alphabetLabel(idx int) string {
-	if idx < 0 {
-		return ""
-	}
-
-	label := ""
-	for idx >= 0 {
-		label = string(rune('A'+(idx%26))) + label
-		idx = idx/26 - 1
-	}
-	return label
 }
 
 func assignProviderPlaces(rows []providerBuiltRow) {

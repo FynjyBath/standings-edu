@@ -1,4 +1,4 @@
-package service
+package standings
 
 import (
 	"context"
@@ -9,10 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"standings-edu/internal/cache"
 	"standings-edu/internal/domain"
-	providerbased "standings-edu/internal/provider_based"
-	tasksbased "standings-edu/internal/tasks_based"
+	"standings-edu/internal/source"
 )
 
 type accountStatuses struct {
@@ -40,18 +38,17 @@ type preparedGroup struct {
 	requiredSites map[string]struct{}
 }
 
-type StandingsBuilder struct {
-	registry      *tasksbased.Registry
+type Builder struct {
+	sources       *source.Registry
 	logger        *log.Logger
 	maxConcurrent int
-	cache         *cache.TTLCache[accountStatuses]
-	contestLayers []contestBuilder
+	cache         *ttlCache[accountStatuses]
 
 	inflightMu sync.Mutex
 	inflight   map[string]*inflightCall
 }
 
-func NewStandingsBuilder(registry *tasksbased.Registry, providers *providerbased.ContestProviderRegistry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *StandingsBuilder {
+func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *Builder {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 8
 	}
@@ -61,22 +58,21 @@ func NewStandingsBuilder(registry *tasksbased.Registry, providers *providerbased
 	if logger == nil {
 		logger = log.Default()
 	}
-	if providers == nil {
-		providers = providerbased.NewContestProviderRegistry()
+	if sources == nil {
+		sources = source.NewRegistry()
 	}
 
-	return &StandingsBuilder{
-		registry:      registry,
+	return &Builder{
+		sources:       sources,
 		logger:        logger,
 		maxConcurrent: maxConcurrent,
-		cache:         cache.NewTTLCache[accountStatuses](cacheTTL),
-		contestLayers: []contestBuilder{newProviderContestBuilder(providers), &taskContestBuilder{}},
+		cache:         newTTLCache[accountStatuses](cacheTTL),
 		inflight:      make(map[string]*inflightCall),
 	}
 }
 
-func (b *StandingsBuilder) BuildGroupStandings(ctx context.Context, source *domain.SourceData, group domain.GroupDefinition) (domain.GeneratedGroupStandings, error) {
-	all, err := b.BuildGroupsStandings(ctx, source, []domain.GroupDefinition{group})
+func (b *Builder) BuildGroupStandings(ctx context.Context, data *domain.SourceData, group domain.GroupDefinition) (domain.GeneratedGroupStandings, error) {
+	all, err := b.BuildGroupsStandings(ctx, data, []domain.GroupDefinition{group})
 	if err != nil {
 		return domain.GeneratedGroupStandings{}, err
 	}
@@ -87,32 +83,30 @@ func (b *StandingsBuilder) BuildGroupStandings(ctx context.Context, source *doma
 	return standings, nil
 }
 
-func (b *StandingsBuilder) BuildGroupsStandings(ctx context.Context, source *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, error) {
-	if source == nil {
+func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, error) {
+	if data == nil {
 		return nil, fmt.Errorf("source data is nil")
 	}
 
-	prepared := b.prepareGroups(source, groups)
+	prepared := b.prepareGroups(data, groups)
 	if len(prepared) == 0 {
 		return map[string]domain.GeneratedGroupStandings{}, nil
 	}
 
 	requiredSitesByStudent := b.buildRequiredSitesByStudent(prepared)
-	studentSitePairs := countStudentSitePairs(requiredSitesByStudent)
-	b.logger.Printf("INFO selected user-site pairs for fetch: %d", studentSitePairs)
+	b.logger.Printf("INFO selected user-site pairs for fetch: %d", countStudentSitePairs(requiredSitesByStudent))
 
-	statusByStudentSite, err := b.collectStudentStatusesBySiteSelection(ctx, source, requiredSitesByStudent)
+	statusByStudentSite, err := b.collectStudentStatusesBySiteSelection(ctx, data, requiredSitesByStudent)
 	if err != nil {
 		return nil, err
 	}
 
-	allStudents := uniqueStudentsFromPrepared(prepared)
-	combinedByStudent := b.buildCombinedStatusesByStudent(allStudents, statusByStudentSite)
+	combinedByStudent := b.buildCombinedStatusesByStudent(uniqueStudentsFromPrepared(prepared), statusByStudentSite)
 
 	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
 	for _, pg := range prepared {
 		statusByStudent := b.pickCombinedStatuses(pg.students, combinedByStudent)
-		standings, buildErr := b.buildGroupStandingsPrepared(ctx, source, pg.group, pg.contests, pg.students, statusByStudent)
+		standings, buildErr := b.buildGroupStandingsPrepared(ctx, data, pg.group, pg.contests, pg.students, statusByStudent)
 		if buildErr != nil {
 			return nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
 		}
@@ -121,11 +115,11 @@ func (b *StandingsBuilder) BuildGroupsStandings(ctx context.Context, source *dom
 	return result, nil
 }
 
-func (b *StandingsBuilder) prepareGroups(source *domain.SourceData, groups []domain.GroupDefinition) []preparedGroup {
+func (b *Builder) prepareGroups(data *domain.SourceData, groups []domain.GroupDefinition) []preparedGroup {
 	out := make([]preparedGroup, 0, len(groups))
 	for _, group := range groups {
-		students := b.resolveGroupStudents(source, group)
-		contests := b.resolveGroupContests(source, group)
+		students := b.resolveGroupStudents(data, group)
+		contests := b.resolveGroupContests(data, group)
 		requiredSites := b.collectRequiredSitesFromContests(contests)
 		out = append(out, preparedGroup{
 			group:         group,
@@ -137,22 +131,27 @@ func (b *StandingsBuilder) prepareGroups(source *domain.SourceData, groups []dom
 	return out
 }
 
-func (b *StandingsBuilder) collectRequiredSitesFromContests(contests []domain.Contest) map[string]struct{} {
+func (b *Builder) collectRequiredSitesFromContests(contests []domain.Contest) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, contest := range contests {
-		layer, ok := b.pickContestBuilder(contest)
-		if !ok {
-			b.logger.Printf("WARN contest_id=%s unsupported contest_type=%s while collecting required sites", contest.ID, contest.TypeOrDefault())
+		if contest.TypeOrDefault() != domain.ContestTypeTasks {
 			continue
 		}
-		for site := range layer.RequiredSites(b, contest) {
-			out[normalizeSite(site)] = struct{}{}
+		for _, sc := range contest.Subcontests {
+			for _, taskURL := range sc.Tasks {
+				normalized := domain.NormalizeTaskURL(taskURL)
+				site, _, ok := b.sources.ResolveSiteByTaskURL(normalized)
+				if !ok || site == "" {
+					continue
+				}
+				out[domain.NormalizeSite(site)] = struct{}{}
+			}
 		}
 	}
 	return out
 }
 
-func (b *StandingsBuilder) buildRequiredSitesByStudent(prepared []preparedGroup) map[string]map[string]struct{} {
+func (b *Builder) buildRequiredSitesByStudent(prepared []preparedGroup) map[string]map[string]struct{} {
 	out := make(map[string]map[string]struct{})
 	for _, pg := range prepared {
 		for _, student := range pg.students {
@@ -192,10 +191,10 @@ func uniqueStudentsFromPrepared(prepared []preparedGroup) []domain.Student {
 	return out
 }
 
-func (b *StandingsBuilder) resolveGroupStudents(source *domain.SourceData, group domain.GroupDefinition) []domain.Student {
+func (b *Builder) resolveGroupStudents(data *domain.SourceData, group domain.GroupDefinition) []domain.Student {
 	students := make([]domain.Student, 0, len(group.StudentIDs))
 	for _, studentID := range group.StudentIDs {
-		student, ok := source.Students[studentID]
+		student, ok := data.Students[studentID]
 		if !ok {
 			b.logger.Printf("WARN group=%s unknown student_id=%s", group.Slug, studentID)
 			continue
@@ -205,10 +204,10 @@ func (b *StandingsBuilder) resolveGroupStudents(source *domain.SourceData, group
 	return students
 }
 
-func (b *StandingsBuilder) resolveGroupContests(source *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
+func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
 	contests := make([]domain.Contest, 0, len(group.Contests))
 	for _, contestRef := range group.Contests {
-		contest, ok := source.Contests[contestRef.ID]
+		contest, ok := data.Contests[contestRef.ID]
 		if !ok {
 			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
 			continue
@@ -218,7 +217,14 @@ func (b *StandingsBuilder) resolveGroupContests(source *domain.SourceData, group
 	return contests
 }
 
-func (b *StandingsBuilder) buildGroupStandingsPrepared(ctx context.Context, source *domain.SourceData, group domain.GroupDefinition, contests []domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) (domain.GeneratedGroupStandings, error) {
+func (b *Builder) buildGroupStandingsPrepared(
+	ctx context.Context,
+	data *domain.SourceData,
+	group domain.GroupDefinition,
+	contests []domain.Contest,
+	students []domain.Student,
+	statusByStudent map[string]*accountStatuses,
+) (domain.GeneratedGroupStandings, error) {
 	out := domain.GeneratedGroupStandings{
 		GroupSlug:  group.Slug,
 		GroupTitle: group.Title,
@@ -226,45 +232,61 @@ func (b *StandingsBuilder) buildGroupStandingsPrepared(ctx context.Context, sour
 	}
 
 	for _, contest := range contests {
-		layer, ok := b.pickContestBuilder(contest)
-		if !ok {
-			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())
-		}
-
-		generatedContest, err := layer.Build(ctx, b, contestBuildInput{
-			source:          source,
-			group:           group,
-			contest:         contest,
-			students:        students,
-			statusByStudent: statusByStudent,
-		})
-		if err != nil {
-			if contest.TypeOrDefault() == domain.ContestTypeProvider {
+		typ := contest.TypeOrDefault()
+		switch typ {
+		case domain.ContestTypeTasks:
+			out.Contests = append(out.Contests, b.buildTaskContestStandings(contest, students, statusByStudent))
+		case domain.ContestTypeProvider:
+			generated, err := b.buildProviderContestStandings(ctx, data, group, contest, students)
+			if err != nil {
 				b.logger.Printf("WARN group=%s contest_id=%s provider build failed; keep previous generated version if available: %v", group.Slug, contest.ID, err)
 				continue
 			}
-			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s builder=%s: %w", contest.ID, layer.Name(), err)
+			out.Contests = append(out.Contests, generated)
+		default:
+			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, typ)
 		}
-		out.Contests = append(out.Contests, generatedContest)
 	}
 
 	return out, nil
 }
 
-func (b *StandingsBuilder) pickContestBuilder(contest domain.Contest) (contestBuilder, bool) {
-	for _, layer := range b.contestLayers {
-		if layer != nil && layer.Supports(contest) {
-			return layer, true
-		}
+func (b *Builder) buildProviderContestStandings(
+	ctx context.Context,
+	data *domain.SourceData,
+	group domain.GroupDefinition,
+	contest domain.Contest,
+	students []domain.Student,
+) (domain.GeneratedContestStandings, error) {
+	providerID := strings.TrimSpace(contest.Provider)
+	if providerID == "" {
+		return domain.GeneratedContestStandings{}, fmt.Errorf("provider contest requires non-empty provider")
 	}
-	return nil, false
+
+	provider, ok := b.sources.Provider(providerID)
+	if !ok {
+		return domain.GeneratedContestStandings{}, fmt.Errorf("unknown provider %q", providerID)
+	}
+
+	standings, err := provider.BuildStandings(ctx, source.ContestProviderInput{
+		Source:   data,
+		Group:    group,
+		Contest:  contest,
+		Students: students,
+	})
+	if err != nil {
+		return domain.GeneratedContestStandings{}, err
+	}
+	standings.ContestType = domain.ContestTypeProvider
+	return standings, nil
 }
 
-func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
 		Olympiad:    contest.Olympiad,
+		ContestType: domain.ContestTypeTasks,
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
@@ -279,7 +301,7 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 		for i, taskURL := range sc.Tasks {
 			normalized := domain.NormalizeTaskURL(taskURL)
 			task := domain.GeneratedTask{
-				Label:         alphabetLabel(i),
+				Label:         domain.AlphabetLabel(i),
 				URL:           strings.TrimSpace(taskURL),
 				NormalizedURL: normalized,
 			}
@@ -288,7 +310,7 @@ func (b *StandingsBuilder) buildContestStandings(contest domain.Contest, student
 
 			useRealScores := false
 			if contest.Olympiad {
-				_, client, ok := b.registry.ResolveByTaskURL(normalized)
+				_, client, ok := b.sources.ResolveSiteByTaskURL(normalized)
 				if ok && client != nil && client.SupportsTaskScores() {
 					useRealScores = true
 				}
@@ -365,7 +387,7 @@ func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskUR
 
 	if useRealScores {
 		if score, ok := combined.scores[normalizedTaskURL]; ok {
-			return clampScore(score, 0, 100), true
+			return domain.ClampScore(score), true
 		}
 		if status == domain.TaskStatusSolved {
 			return 100, true
@@ -379,17 +401,7 @@ func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskUR
 	return 0, true
 }
 
-func clampScore(v int, min int, max int) int {
-	if v < min {
-		return min
-	}
-	if v > max {
-		return max
-	}
-	return v
-}
-
-func (b *StandingsBuilder) collectStudentStatusesBySiteSelection(ctx context.Context, source *domain.SourceData, requiredSitesByStudent map[string]map[string]struct{}) (map[string]map[string]*accountStatuses, error) {
+func (b *Builder) collectStudentStatusesBySiteSelection(ctx context.Context, data *domain.SourceData, requiredSitesByStudent map[string]map[string]struct{}) (map[string]map[string]*accountStatuses, error) {
 	result := make(map[string]map[string]*accountStatuses, len(requiredSitesByStudent))
 
 	resultsCh := make(chan accountFetchResult)
@@ -402,14 +414,14 @@ func (b *StandingsBuilder) collectStudentStatusesBySiteSelection(ctx context.Con
 			continue
 		}
 
-		student, ok := source.Students[studentID]
+		student, ok := data.Students[studentID]
 		if !ok {
 			b.logger.Printf("WARN unknown student_id=%s while collecting statuses", studentID)
 			continue
 		}
 
 		for _, account := range student.Accounts {
-			site := normalizeSite(account.Site)
+			site := domain.NormalizeSite(account.Site)
 			if _, need := requiredSites[site]; !need {
 				continue
 			}
@@ -476,7 +488,7 @@ func (b *StandingsBuilder) collectStudentStatusesBySiteSelection(ctx context.Con
 	return result, nil
 }
 
-func (b *StandingsBuilder) buildCombinedStatusesByStudent(students []domain.Student, statusByStudentSite map[string]map[string]*accountStatuses) map[string]*accountStatuses {
+func (b *Builder) buildCombinedStatusesByStudent(students []domain.Student, statusByStudentSite map[string]map[string]*accountStatuses) map[string]*accountStatuses {
 	result := make(map[string]*accountStatuses, len(students))
 	for _, student := range students {
 		agg := newAccountStatuses()
@@ -491,7 +503,7 @@ func (b *StandingsBuilder) buildCombinedStatusesByStudent(students []domain.Stud
 	return result
 }
 
-func (b *StandingsBuilder) pickCombinedStatuses(students []domain.Student, combinedByStudent map[string]*accountStatuses) map[string]*accountStatuses {
+func (b *Builder) pickCombinedStatuses(students []domain.Student, combinedByStudent map[string]*accountStatuses) map[string]*accountStatuses {
 	result := make(map[string]*accountStatuses, len(students))
 	for _, student := range students {
 		if statuses, ok := combinedByStudent[student.ID]; ok && statuses != nil {
@@ -503,8 +515,8 @@ func (b *StandingsBuilder) pickCombinedStatuses(students []domain.Student, combi
 	return result
 }
 
-func (b *StandingsBuilder) fetchAccountStatuses(ctx context.Context, site string, accountID string) (accountStatuses, error) {
-	site = normalizeSite(site)
+func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, accountID string) (accountStatuses, error) {
+	site = domain.NormalizeSite(site)
 	accountID = strings.TrimSpace(accountID)
 	cacheKey := site + ":" + accountID
 
@@ -530,8 +542,8 @@ func (b *StandingsBuilder) fetchAccountStatuses(ctx context.Context, site string
 	return cloneStatuses(res), err
 }
 
-func (b *StandingsBuilder) loadFromSite(ctx context.Context, site string, accountID string) (accountStatuses, error) {
-	client, ok := b.registry.Get(site)
+func (b *Builder) loadFromSite(ctx context.Context, site string, accountID string) (accountStatuses, error) {
+	client, ok := b.sources.Site(site)
 	if !ok {
 		b.logger.Printf("WARN unknown site=%s account_id=%s", site, accountID)
 		return newAccountStatusesValue(), nil
@@ -560,7 +572,7 @@ func (b *StandingsBuilder) loadFromSite(ctx context.Context, site string, accoun
 		hasScore := false
 		score := 0
 		if result.Score != nil {
-			score = clampScore(*result.Score, 0, 100)
+			score = domain.ClampScore(*result.Score)
 			hasScore = true
 		} else if attempted {
 			if result.Solved {
@@ -581,7 +593,7 @@ func (b *StandingsBuilder) loadFromSite(ctx context.Context, site string, accoun
 	return out, nil
 }
 
-func (b *StandingsBuilder) acquireInflight(cacheKey string) *inflightCall {
+func (b *Builder) acquireInflight(cacheKey string) *inflightCall {
 	b.inflightMu.Lock()
 	defer b.inflightMu.Unlock()
 
@@ -593,7 +605,7 @@ func (b *StandingsBuilder) acquireInflight(cacheKey string) *inflightCall {
 	return nil
 }
 
-func (b *StandingsBuilder) resolveInflight(cacheKey string, res accountStatuses, err error) {
+func (b *Builder) resolveInflight(cacheKey string, res accountStatuses, err error) {
 	b.inflightMu.Lock()
 	call := b.inflight[cacheKey]
 	delete(b.inflight, cacheKey)
@@ -649,21 +661,4 @@ func mergeStatuses(dst *accountStatuses, src accountStatuses) {
 			dst.scores[k] = v
 		}
 	}
-}
-
-func normalizeSite(site string) string {
-	return strings.ToLower(strings.TrimSpace(site))
-}
-
-func alphabetLabel(idx int) string {
-	if idx < 0 {
-		return ""
-	}
-
-	label := ""
-	for idx >= 0 {
-		label = string(rune('A'+(idx%26))) + label
-		idx = idx/26 - 1
-	}
-	return label
 }

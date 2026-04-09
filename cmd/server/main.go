@@ -16,9 +16,9 @@ import (
 func main() {
 	var (
 		addr         = flag.String("addr", ":8080", "HTTP listen address")
-		generatedDir = flag.String("generated", "./generated", "path to generated files")
-		dataDir      = flag.String("data", "./data", "path to source data directory")
-		intakePath   = flag.String("intake", "", "path to intake json file (default: <data>/student_intake.json)")
+		generatedDir = flag.String("generated-dir", "./generated", "path to generated files")
+		dataDir      = flag.String("data-dir", "./data", "path to source data directory")
+		intakePath   = flag.String("intake-file", "", "path to intake json file (default: <data>/student_intake.json)")
 		templatesDir = flag.String("templates", "./web/templates", "path to templates")
 		staticDir    = flag.String("static", "./web/static", "path to static files")
 	)

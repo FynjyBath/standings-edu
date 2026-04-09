@@ -37,7 +37,7 @@ func (l *GeneratedLoader) LoadGroups() ([]domain.GeneratedGroupMeta, error) {
 }
 
 func (l *GeneratedLoader) LoadGroupStandings(slug string) (domain.GeneratedGroupStandings, error) {
-	if !isValidSlug(slug) {
+	if !domain.IsValidSlug(slug) {
 		return domain.GeneratedGroupStandings{}, ErrInvalidGroupSlug
 	}
 
@@ -102,17 +102,4 @@ func (l *GeneratedLoader) LoadLastUpdatedAt() (time.Time, error) {
 		return time.Time{}, os.ErrNotExist
 	}
 	return latest, nil
-}
-
-func isValidSlug(slug string) bool {
-	if strings.TrimSpace(slug) == "" {
-		return false
-	}
-	if strings.Contains(slug, "/") || strings.Contains(slug, "\\") {
-		return false
-	}
-	if strings.Contains(slug, "..") {
-		return false
-	}
-	return true
 }

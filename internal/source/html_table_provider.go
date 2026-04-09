@@ -262,7 +262,7 @@ func normalizeColumnKind(raw string) htmlImportColumnKind {
 		return htmlColPenalty
 	case "status", "статус":
 		return htmlColStatus
-	case "skip", "пропустить":
+	case "skip", "пропустить", "пропуск":
 		return htmlColSkip
 	default:
 		return -1

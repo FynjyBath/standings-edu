@@ -241,6 +241,23 @@ main.container {
   color: var(--muted);
 }
 
+.summary-links {
+  margin-top: 0.55rem !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.summary-links a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.summary-links a:hover {
+  color: var(--accent);
+}
+
 .page-head code {
   background: color-mix(in srgb, var(--surface-strong) 68%, transparent 32%);
   border-radius: 6px;

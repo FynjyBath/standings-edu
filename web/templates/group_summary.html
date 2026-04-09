@@ -1,0 +1,224 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>{{.GroupTitle}}</h1>
+  <p>Slug: <code>{{.GroupSlug}}</code></p>
+  <p>
+    {{if eq .Mode "edu"}}
+    Режим: <strong>summary-edu</strong> (все task-based контесты)
+    {{else}}
+    Режим: <strong>summary-olymp</strong> (все provider контесты)
+    {{end}}
+  </p>
+  <p class="summary-links">
+    <a href="/standings/{{.GroupSlug}}">к списку контестов</a>
+    <a href="/standings/{{.GroupSlug}}/summary-edu">summary-edu</a>
+    <a href="/standings/{{.GroupSlug}}/summary-olymp">summary-olymp</a>
+  </p>
+</section>
+
+<section class="contest-block">
+  <h2>Сводная таблица</h2>
+  <div class="table-wrap" id="summary-root"></div>
+  <p class="empty-hint" id="summary-empty" style="display:none;">Нет контестов для выбранного режима.</p>
+</section>
+
+<script id="summary-data" type="application/json">{{.StandingsJSON}}</script>
+<script>
+  (function () {
+    var root = document.getElementById("summary-root");
+    var empty = document.getElementById("summary-empty");
+    if (!root || !empty) {
+      return;
+    }
+
+    var mode = {{printf "%q" .Mode}};
+    var raw = document.getElementById("summary-data");
+    if (!raw) {
+      empty.style.display = "";
+      return;
+    }
+
+    var standings;
+    try {
+      standings = JSON.parse(raw.textContent || "{}");
+    } catch (e) {
+      empty.textContent = "Ошибка чтения данных summary.";
+      empty.style.display = "";
+      return;
+    }
+
+    var contests = (standings.contests || []).filter(function (contest) {
+      var contestType = (contest.contest_type || "tasks").toLowerCase();
+      if (mode === "edu") {
+        return contestType !== "provider";
+      }
+      return contestType === "provider";
+    });
+
+    if (contests.length === 0) {
+      empty.style.display = "";
+      return;
+    }
+
+    var studentsMap = new Map();
+    contests.forEach(function (contest) {
+      (contest.rows || []).forEach(function (row) {
+        if (!row || !row.student_id) {
+          return;
+        }
+        if (!studentsMap.has(row.student_id)) {
+          studentsMap.set(row.student_id, {
+            student_id: row.student_id,
+            public_name: row.public_name || row.student_id
+          });
+        }
+      });
+    });
+    var students = Array.from(studentsMap.values()).sort(function (a, b) {
+      return (a.public_name || "").localeCompare(b.public_name || "", "ru");
+    });
+
+    var contestRowMaps = contests.map(function (contest) {
+      var rowMap = new Map();
+      (contest.rows || []).forEach(function (row) {
+        if (row && row.student_id) {
+          rowMap.set(row.student_id, row);
+        }
+      });
+      return rowMap;
+    });
+
+    var table = document.createElement("table");
+    table.className = "standings-table summary-table";
+
+    var thead = document.createElement("thead");
+    var trTop = document.createElement("tr");
+    var trBottom = document.createElement("tr");
+
+    var thStudent = document.createElement("th");
+    thStudent.className = "student-col";
+    thStudent.rowSpan = 2;
+    thStudent.textContent = "Ученик";
+    trTop.appendChild(thStudent);
+
+    var thScore = document.createElement("th");
+    thScore.className = "count-col";
+    thScore.rowSpan = 2;
+    thScore.textContent = "Σ баллов";
+    trTop.appendChild(thScore);
+
+    var thPlus = document.createElement("th");
+    thPlus.className = "count-col";
+    thPlus.rowSpan = 2;
+    thPlus.textContent = "Σ +";
+    trTop.appendChild(thPlus);
+
+    var totalTaskCount = 0;
+    contests.forEach(function (contest) {
+      var tasks = contest.tasks || [];
+      if (tasks.length === 0) {
+        return;
+      }
+      totalTaskCount += tasks.length;
+
+      var top = document.createElement("th");
+      top.className = "subcontest-head";
+      top.colSpan = tasks.length;
+      top.textContent = contest.title || contest.id || "Контест";
+      trTop.appendChild(top);
+
+      tasks.forEach(function (task) {
+        var th = document.createElement("th");
+        th.className = "task-col";
+        var a = document.createElement("a");
+        a.href = task.url || "#";
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = task.label || "?";
+        th.appendChild(a);
+        trBottom.appendChild(th);
+      });
+    });
+
+    if (totalTaskCount === 0) {
+      empty.style.display = "";
+      empty.textContent = "Нет задач в выбранных контестах.";
+      return;
+    }
+
+    thead.appendChild(trTop);
+    thead.appendChild(trBottom);
+    table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    students.forEach(function (student) {
+      var tr = document.createElement("tr");
+
+      var tdName = document.createElement("td");
+      tdName.className = "student-name";
+      tdName.textContent = student.public_name;
+      tr.appendChild(tdName);
+
+      var totalScore = 0;
+      var totalPlus = 0;
+      var cells = [];
+
+      contests.forEach(function (contest, contestIdx) {
+        var tasks = contest.tasks || [];
+        var row = contestRowMaps[contestIdx].get(student.student_id) || null;
+        for (var i = 0; i < tasks.length; i++) {
+          var status = "none";
+          if (row && Array.isArray(row.statuses) && i < row.statuses.length && row.statuses[i]) {
+            status = row.statuses[i];
+          }
+
+          var score = null;
+          if (row && Array.isArray(row.scores) && i < row.scores.length) {
+            var s = row.scores[i];
+            if (typeof s === "number" && Number.isFinite(s)) {
+              score = s;
+            }
+          }
+          if (score !== null) {
+            totalScore += score;
+          }
+
+          if (status === "solved") {
+            totalPlus++;
+          }
+
+          var td = document.createElement("td");
+          td.className = "status-cell " + status;
+          if (status === "solved") {
+            td.textContent = "+";
+          } else if (status === "attempted") {
+            td.textContent = "×";
+          } else {
+            td.textContent = "";
+          }
+          cells.push(td);
+        }
+      });
+
+      var tdScore = document.createElement("td");
+      tdScore.className = "solved-count";
+      tdScore.textContent = String(totalScore);
+      tr.appendChild(tdScore);
+
+      var tdPlus = document.createElement("td");
+      tdPlus.className = "solved-count";
+      tdPlus.textContent = String(totalPlus);
+      tr.appendChild(tdPlus);
+
+      cells.forEach(function (cell) {
+        tr.appendChild(cell);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    root.appendChild(table);
+  })();
+</script>
+{{end}}

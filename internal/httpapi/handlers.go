@@ -104,6 +104,56 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handlers) GroupSummaryEduPage(w http.ResponseWriter, r *http.Request) {
+	h.renderGroupSummaryPage(w, r, "edu")
+}
+
+func (h *Handlers) GroupSummaryOlympPage(w http.ResponseWriter, r *http.Request) {
+	h.renderGroupSummaryPage(w, r, "olymp")
+}
+
+func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request, mode string) {
+	slug := r.PathValue("group_name")
+	standings, err := h.loader.LoadGroupStandings(slug)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidGroupSlug) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		h.logger.Printf("ERROR load standings summary page slug=%s mode=%s err=%v", slug, mode, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	standingsJSON, err := json.Marshal(standings)
+	if err != nil {
+		h.logger.Printf("ERROR marshal standings summary slug=%s mode=%s err=%v", slug, mode, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	modeTitle := "summary-edu"
+	if mode == "olymp" {
+		modeTitle = "summary-olymp"
+	}
+
+	page := GroupSummaryPageData{
+		PageTitle:     standings.GroupTitle + " — " + modeTitle,
+		GroupTitle:    standings.GroupTitle,
+		GroupSlug:     standings.GroupSlug,
+		Mode:          mode,
+		StandingsJSON: string(standingsJSON),
+		Footer:        h.buildFooterInfo(),
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "group_summary.html", page); err != nil {
+		h.logger.Printf("ERROR render group summary slug=%s mode=%s err=%v", slug, mode, err)
+	}
+}
+
 func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
 	page := IndexPageData{
 		PageTitle: "Доска почёта",
@@ -160,4 +210,13 @@ type GroupPageData struct {
 	PageTitle string
 	Standings domain.GeneratedGroupStandings
 	Footer    FooterInfo
+}
+
+type GroupSummaryPageData struct {
+	PageTitle     string
+	GroupTitle    string
+	GroupSlug     string
+	Mode          string
+	StandingsJSON string
+	Footer        FooterInfo
 }

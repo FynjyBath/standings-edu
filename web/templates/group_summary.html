@@ -18,7 +18,7 @@
 
 <section class="contest-block">
   <h2>Сводная таблица</h2>
-  <div class="table-wrap" id="summary-root"></div>
+  <div class="table-wrap" id="summary-root" data-mode="{{.Mode}}"></div>
   <p class="empty-hint" id="summary-empty" style="display:none;">Нет контестов для выбранного режима.</p>
 </section>
 
@@ -31,7 +31,7 @@
       return;
     }
 
-    var mode = {{printf "%q" .Mode}};
+    var mode = (root.dataset.mode || "").toLowerCase();
     var raw = document.getElementById("summary-data");
     if (!raw) {
       empty.style.display = "";

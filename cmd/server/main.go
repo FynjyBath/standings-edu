@@ -29,6 +29,16 @@ func main() {
 	}
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
+	if err := ensureServerRuntimeLayout(serverRuntimeLayout{
+		GeneratedDir: *generatedDir,
+		DataDir:      *dataDir,
+		IntakePath:   *intakePath,
+		TemplatesDir: *templatesDir,
+		StaticDir:    *staticDir,
+	}, logger); err != nil {
+		logger.Fatalf("prepare server runtime layout: %v", err)
+	}
+
 	loader := storage.NewGeneratedLoader(*generatedDir)
 	intakeStore := studentintake.NewStore(*intakePath, *dataDir)
 	renderer := web.NewTemplateRenderer(*templatesDir)

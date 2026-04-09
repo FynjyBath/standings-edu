@@ -37,6 +37,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	createdDataFiles, err := storage.EnsureDataBootstrap(*dataDir, *informaticsCreds)
+	if err != nil {
+		logger.Fatalf("failed to bootstrap data files: %v", err)
+	}
+	for _, path := range createdDataFiles {
+		logger.Printf("INFO initialized data file: %s", path)
+	}
+
 	infClient, err := tasksbased.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)

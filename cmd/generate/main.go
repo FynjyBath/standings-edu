@@ -37,6 +37,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	createdFiles, err := storage.EnsureInitialSourceFiles(*dataDir)
+	if err != nil {
+		logger.Fatalf("failed to initialize source files: %v", err)
+	}
+	for _, path := range createdFiles {
+		logger.Printf("INFO initialized source file: %s", path)
+	}
+
 	infClient, err := tasksbased.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)

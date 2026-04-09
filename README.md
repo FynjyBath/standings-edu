@@ -16,6 +16,10 @@
 go run ./cmd/generate
 ```
 
+При первом запуске генератор автоматически создаёт только пустые:
+- `data/students.json`
+- `data/contests.json`
+
 Расширенный запуск:
 
 ```bash

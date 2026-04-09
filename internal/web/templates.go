@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"standings-edu/internal/domain"
 )
@@ -19,13 +20,14 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 	return &TemplateRenderer{
 		templatesDir: templatesDir,
 		funcMap: template.FuncMap{
-			"statusSymbol":     statusSymbol,
-			"statusClass":      statusClass,
-			"scoreText":        scoreText,
-			"scoreAlpha":       scoreAlpha,
-			"placeText":        placeText,
-			"penaltyText":      penaltyText,
-			"hasPenaltyColumn": hasPenaltyColumn,
+			"statusSymbol":            statusSymbol,
+			"statusClass":             statusClass,
+			"scoreText":               scoreText,
+			"scoreAlpha":              scoreAlpha,
+			"placeText":               placeText,
+			"penaltyText":             penaltyText,
+			"hasPenaltyColumn":        hasPenaltyColumn,
+			"hasProviderStatusColumn": hasProviderStatusColumn,
 		},
 	}
 }
@@ -105,6 +107,15 @@ func penaltyText(penalty *int) string {
 func hasPenaltyColumn(rows []domain.GeneratedRow) bool {
 	for _, row := range rows {
 		if row.Penalty != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func hasProviderStatusColumn(rows []domain.GeneratedRow) bool {
+	for _, row := range rows {
+		if strings.TrimSpace(row.ProviderStatus) != "" {
 			return true
 		}
 	}

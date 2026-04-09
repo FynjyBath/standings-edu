@@ -94,14 +94,15 @@ type GeneratedSubcontest struct {
 }
 
 type GeneratedRow struct {
-	StudentID   string   `json:"student_id"`
-	PublicName  string   `json:"public_name"`
-	Place       string   `json:"place,omitempty"`
-	Penalty     *int     `json:"penalty,omitempty"`
-	SolvedCount int      `json:"solved_count"`
-	TotalScore  int      `json:"total_score,omitempty"`
-	Statuses    []string `json:"statuses"`
-	Scores      []*int   `json:"scores,omitempty"`
+	StudentID      string   `json:"student_id"`
+	PublicName     string   `json:"public_name"`
+	Place          string   `json:"place,omitempty"`
+	Penalty        *int     `json:"penalty,omitempty"`
+	ProviderStatus string   `json:"provider_status,omitempty"`
+	SolvedCount    int      `json:"solved_count"`
+	TotalScore     int      `json:"total_score,omitempty"`
+	Statuses       []string `json:"statuses"`
+	Scores         []*int   `json:"scores,omitempty"`
 }
 
 type GeneratedContestStandings struct {

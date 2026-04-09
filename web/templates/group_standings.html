@@ -31,6 +31,9 @@
               <th colspan="{{.TaskCount}}" class="subcontest-head">{{.Title}}</th>
               {{end}}
             {{end}}
+            {{if and (eq .ContestType "provider") (hasProviderStatusColumn .Rows)}}
+            <th rowspan="2" class="count-col">Статус</th>
+            {{end}}
           </tr>
           <tr>
             {{if .Subcontests}}
@@ -63,6 +66,9 @@
               {{range .Statuses}}
               <td class="status-cell {{statusClass .}}">{{statusSymbol .}}</td>
               {{end}}
+            {{end}}
+            {{if and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}
+            <td class="provider-status-cell">{{.ProviderStatus}}</td>
             {{end}}
           </tr>
           {{end}}

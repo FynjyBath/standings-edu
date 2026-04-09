@@ -63,6 +63,11 @@ go run ./cmd/server -addr :8080 -generated ./generated -templates ./web/template
 - `row.total_score`;
 - `row.scores` (массив `int|null` в порядке задач контеста).
 
+Для provider-контестов дополнительно могут заполняться:
+- `row.place`;
+- `row.penalty`;
+- `row.provider_status` (необязательный произвольный статус: изменение рейтинга, диплом и т.п.).
+
 ## API
 
 - `GET /healthz`
@@ -140,6 +145,7 @@ Pipeline генератора:
   - `name` / `имя`,
   - `task` / `задача` (может повторяться),
   - `penalty` / `штраф`,
+  - `status` / `статус`,
   - `skip` / `пропустить`;
 - `auto_find` (`true/false`) — если `true`, учитываются только строки, где колонка `name` содержит:
   - префикс `full_name` ученика (из `students.json`), или

@@ -368,6 +368,11 @@ main.container {
   font-weight: 700;
 }
 
+.provider-status-cell {
+  min-width: 140px;
+  text-align: left !important;
+}
+
 .subcontest-head {
   font-size: 0.92rem;
 }

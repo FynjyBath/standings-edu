@@ -177,5 +177,33 @@
       "auto_find": true
     },
     "subcontests": []
+  },
+  {
+    "id": "contest_html_roi_2025_import",
+    "title": "ROI 2025 standings import (HTML table provider)",
+    "olympiad": true,
+    "contest_type": "provider",
+    "provider": "html_table_import",
+    "provider_config": {
+      "page_url": "https://neerc.ifmo.ru/school/archive/2024-2025/ru-olymp-roi-2025-standings.html",
+      "columns": [
+        "place",
+        "name",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "task",
+        "status"
+      ],
+      "auto_find": true,
+      "search_prefixes": [
+        "Грекова Дарья Сергеевна"
+      ]
+    },
+    "subcontests": []
   }
 ]

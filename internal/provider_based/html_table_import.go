@@ -49,6 +49,7 @@ const (
 	htmlColName
 	htmlColTask
 	htmlColPenalty
+	htmlColStatus
 )
 
 type htmlTableImportSchema struct {
@@ -56,15 +57,17 @@ type htmlTableImportSchema struct {
 	nameIndex    int
 	placeIndex   int
 	penaltyIndex int
+	statusIndex  int
 	taskIndices  []int
 }
 
 type parsedImportedRow struct {
-	name     string
-	place    string
-	penalty  *int
-	statuses []string
-	scores   []*int
+	name           string
+	place          string
+	penalty        *int
+	providerStatus string
+	statuses       []string
+	scores         []*int
 }
 
 type parsedImportedTable struct {
@@ -191,6 +194,7 @@ func parseHTMLTableImportSchema(columns []string) (htmlTableImportSchema, error)
 		nameIndex:    -1,
 		placeIndex:   -1,
 		penaltyIndex: -1,
+		statusIndex:  -1,
 		taskIndices:  make([]int, 0),
 	}
 
@@ -212,6 +216,11 @@ func parseHTMLTableImportSchema(columns []string) (htmlTableImportSchema, error)
 				return schema, fmt.Errorf("provider_config.columns contains duplicate penalty column")
 			}
 			schema.penaltyIndex = i
+		case htmlColStatus:
+			if schema.statusIndex >= 0 {
+				return schema, fmt.Errorf("provider_config.columns contains duplicate status column")
+			}
+			schema.statusIndex = i
 		case htmlColTask:
 			schema.taskIndices = append(schema.taskIndices, i)
 		case htmlColSkip:
@@ -241,6 +250,8 @@ func normalizeColumnKind(raw string) htmlImportColumnKind {
 		return htmlColTask
 	case "penalty", "штраф":
 		return htmlColPenalty
+	case "status", "статус":
+		return htmlColStatus
 	case "skip", "пропустить":
 		return htmlColSkip
 	default:
@@ -299,6 +310,8 @@ func parseImportedRow(cells []string, schema htmlTableImportSchema) parsedImport
 				value := penalty
 				row.penalty = &value
 			}
+		case htmlColStatus:
+			row.providerStatus = cell
 		case htmlColTask:
 			status, score := parseTaskCell(cell)
 			row.statuses[taskPos] = status
@@ -627,6 +640,9 @@ func buildImportedStandings(
 			if row.Penalty == nil && match.row.penalty != nil {
 				p := *match.row.penalty
 				row.Penalty = &p
+			}
+			if row.ProviderStatus == "" && strings.TrimSpace(match.row.providerStatus) != "" {
+				row.ProviderStatus = strings.TrimSpace(match.row.providerStatus)
 			}
 
 			offset := tableTaskOffsets[tableIdx]

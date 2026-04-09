@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/source"
@@ -19,41 +18,21 @@ type accountStatuses struct {
 	scores    map[string]int
 }
 
-type inflightCall struct {
-	done chan struct{}
-	res  accountStatuses
-	err  error
-}
-
-type accountFetchResult struct {
-	studentID string
-	site      string
-	statuses  accountStatuses
-}
-
 type preparedGroup struct {
-	group         domain.GroupDefinition
-	students      []domain.Student
-	contests      []domain.Contest
-	requiredSites map[string]struct{}
+	group    domain.GroupDefinition
+	students []domain.Student
+	contests []domain.Contest
 }
 
 type Builder struct {
 	sources       *source.Registry
 	logger        *log.Logger
 	maxConcurrent int
-	cache         *ttlCache[accountStatuses]
-
-	inflightMu sync.Mutex
-	inflight   map[string]*inflightCall
 }
 
-func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int, cacheTTL time.Duration) *Builder {
+func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int) *Builder {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 8
-	}
-	if cacheTTL <= 0 {
-		cacheTTL = 5 * time.Minute
 	}
 	if logger == nil {
 		logger = log.Default()
@@ -66,21 +45,7 @@ func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int,
 		sources:       sources,
 		logger:        logger,
 		maxConcurrent: maxConcurrent,
-		cache:         newTTLCache[accountStatuses](cacheTTL),
-		inflight:      make(map[string]*inflightCall),
 	}
-}
-
-func (b *Builder) BuildGroupStandings(ctx context.Context, data *domain.SourceData, group domain.GroupDefinition) (domain.GeneratedGroupStandings, error) {
-	all, err := b.BuildGroupsStandings(ctx, data, []domain.GroupDefinition{group})
-	if err != nil {
-		return domain.GeneratedGroupStandings{}, err
-	}
-	standings, ok := all[group.Slug]
-	if !ok {
-		return domain.GeneratedGroupStandings{}, fmt.Errorf("group %q not built", group.Slug)
-	}
-	return standings, nil
 }
 
 func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, error) {
@@ -93,20 +58,16 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 		return map[string]domain.GeneratedGroupStandings{}, nil
 	}
 
-	requiredSitesByStudent := b.buildRequiredSitesByStudent(prepared)
-	b.logger.Printf("INFO selected user-site pairs for fetch: %d", countStudentSitePairs(requiredSitesByStudent))
-
-	statusByStudentSite, err := b.collectStudentStatusesBySiteSelection(ctx, data, requiredSitesByStudent)
+	requiredSites := b.collectRequiredTaskSites(prepared)
+	students := uniqueStudents(prepared)
+	statusByStudent, err := b.collectStudentsTaskStatuses(ctx, students, requiredSites)
 	if err != nil {
 		return nil, err
 	}
 
-	combinedByStudent := b.buildCombinedStatusesByStudent(uniqueStudentsFromPrepared(prepared), statusByStudentSite)
-
 	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
 	for _, pg := range prepared {
-		statusByStudent := b.pickCombinedStatuses(pg.students, combinedByStudent)
-		standings, buildErr := b.buildGroupStandingsPrepared(ctx, data, pg.group, pg.contests, pg.students, statusByStudent)
+		standings, buildErr := b.buildGroupStandings(ctx, data, pg, statusByStudent)
 		if buildErr != nil {
 			return nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
 		}
@@ -120,73 +81,11 @@ func (b *Builder) prepareGroups(data *domain.SourceData, groups []domain.GroupDe
 	for _, group := range groups {
 		students := b.resolveGroupStudents(data, group)
 		contests := b.resolveGroupContests(data, group)
-		requiredSites := b.collectRequiredSitesFromContests(contests)
 		out = append(out, preparedGroup{
-			group:         group,
-			students:      students,
-			contests:      contests,
-			requiredSites: requiredSites,
+			group:    group,
+			students: students,
+			contests: contests,
 		})
-	}
-	return out
-}
-
-func (b *Builder) collectRequiredSitesFromContests(contests []domain.Contest) map[string]struct{} {
-	out := make(map[string]struct{})
-	for _, contest := range contests {
-		if contest.TypeOrDefault() != domain.ContestTypeTasks {
-			continue
-		}
-		for _, sc := range contest.Subcontests {
-			for _, taskURL := range sc.Tasks {
-				normalized := domain.NormalizeTaskURL(taskURL)
-				site, _, ok := b.sources.ResolveSiteByTaskURL(normalized)
-				if !ok || site == "" {
-					continue
-				}
-				out[domain.NormalizeSite(site)] = struct{}{}
-			}
-		}
-	}
-	return out
-}
-
-func (b *Builder) buildRequiredSitesByStudent(prepared []preparedGroup) map[string]map[string]struct{} {
-	out := make(map[string]map[string]struct{})
-	for _, pg := range prepared {
-		for _, student := range pg.students {
-			sitesSet := out[student.ID]
-			if sitesSet == nil {
-				sitesSet = make(map[string]struct{})
-				out[student.ID] = sitesSet
-			}
-			for site := range pg.requiredSites {
-				sitesSet[site] = struct{}{}
-			}
-		}
-	}
-	return out
-}
-
-func countStudentSitePairs(requiredSitesByStudent map[string]map[string]struct{}) int {
-	pairs := 0
-	for _, sitesSet := range requiredSitesByStudent {
-		pairs += len(sitesSet)
-	}
-	return pairs
-}
-
-func uniqueStudentsFromPrepared(prepared []preparedGroup) []domain.Student {
-	seen := make(map[string]struct{})
-	out := make([]domain.Student, 0)
-	for _, pg := range prepared {
-		for _, student := range pg.students {
-			if _, ok := seen[student.ID]; ok {
-				continue
-			}
-			seen[student.ID] = struct{}{}
-			out = append(out, student)
-		}
 	}
 	return out
 }
@@ -217,34 +116,208 @@ func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.Gro
 	return contests
 }
 
-func (b *Builder) buildGroupStandingsPrepared(
+func uniqueStudents(prepared []preparedGroup) []domain.Student {
+	seen := make(map[string]struct{})
+	out := make([]domain.Student, 0)
+	for _, pg := range prepared {
+		for _, student := range pg.students {
+			if _, ok := seen[student.ID]; ok {
+				continue
+			}
+			seen[student.ID] = struct{}{}
+			out = append(out, student)
+		}
+	}
+	return out
+}
+
+func (b *Builder) collectRequiredTaskSites(prepared []preparedGroup) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, pg := range prepared {
+		for _, contest := range pg.contests {
+			if contest.TypeOrDefault() != domain.ContestTypeTasks {
+				continue
+			}
+			for _, subcontest := range contest.Subcontests {
+				for _, taskURL := range subcontest.Tasks {
+					normalized := domain.NormalizeTaskURL(taskURL)
+					site, _, ok := b.sources.ResolveSiteByTaskURL(normalized)
+					if !ok {
+						continue
+					}
+					out[domain.NormalizeSite(site)] = struct{}{}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func (b *Builder) collectStudentsTaskStatuses(ctx context.Context, students []domain.Student, requiredSites map[string]struct{}) (map[string]*accountStatuses, error) {
+	result := make(map[string]*accountStatuses, len(students))
+	for _, student := range students {
+		result[student.ID] = newAccountStatuses()
+	}
+
+	if len(requiredSites) == 0 || len(students) == 0 {
+		return result, nil
+	}
+
+	type target struct {
+		site      string
+		accountID string
+	}
+
+	targetByKey := make(map[string]target)
+	studentKeys := make(map[string][]string, len(students))
+	for _, student := range students {
+		seenStudentKeys := make(map[string]struct{})
+		for _, account := range student.Accounts {
+			site := domain.NormalizeSite(account.Site)
+			if _, need := requiredSites[site]; !need {
+				continue
+			}
+			accountID := strings.TrimSpace(account.AccountID)
+			if site == "" || accountID == "" {
+				continue
+			}
+
+			key := site + "|" + accountID
+			targetByKey[key] = target{site: site, accountID: accountID}
+			if _, exists := seenStudentKeys[key]; exists {
+				continue
+			}
+			seenStudentKeys[key] = struct{}{}
+			studentKeys[student.ID] = append(studentKeys[student.ID], key)
+		}
+	}
+
+	if len(targetByKey) == 0 {
+		return result, nil
+	}
+
+	statusesByKey := make(map[string]accountStatuses, len(targetByKey))
+	statusesMu := sync.Mutex{}
+	sem := make(chan struct{}, b.maxConcurrent)
+	wg := sync.WaitGroup{}
+
+	for key, t := range targetByKey {
+		wg.Add(1)
+		go func(key string, t target) {
+			defer wg.Done()
+
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+
+			statuses, err := b.fetchAccountStatuses(ctx, t.site, t.accountID)
+			if err != nil {
+				b.logger.Printf("WARN site=%s account_id=%s fetch error: %v", t.site, t.accountID, err)
+				return
+			}
+
+			statusesMu.Lock()
+			statusesByKey[key] = statuses
+			statusesMu.Unlock()
+		}(key, t)
+	}
+
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, student := range students {
+		agg := result[student.ID]
+		for _, key := range studentKeys[student.ID] {
+			statuses, ok := statusesByKey[key]
+			if !ok {
+				continue
+			}
+			mergeStatuses(agg, statuses)
+		}
+	}
+
+	return result, nil
+}
+
+func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, accountID string) (accountStatuses, error) {
+	client, ok := b.sources.Site(site)
+	if !ok {
+		b.logger.Printf("WARN unknown site=%s account_id=%s", site, accountID)
+		return newAccountStatusesValue(), nil
+	}
+
+	results, err := client.FetchUserResults(ctx, accountID)
+	if err != nil {
+		return accountStatuses{}, err
+	}
+
+	out := newAccountStatusesValue()
+	for _, result := range results {
+		normalized := domain.NormalizeTaskURL(result.TaskURL)
+		if normalized == "" {
+			continue
+		}
+
+		attempted := result.Attempted || result.Solved || result.Score != nil
+		if attempted {
+			out.attempted[normalized] = struct{}{}
+		}
+		if result.Solved {
+			out.solved[normalized] = struct{}{}
+		}
+
+		hasScore := false
+		score := 0
+		if result.Score != nil {
+			score = domain.ClampScore(*result.Score)
+			hasScore = true
+		} else if attempted {
+			if result.Solved {
+				score = 100
+			}
+			hasScore = true
+		}
+
+		if hasScore {
+			if prev, exists := out.scores[normalized]; !exists || score > prev {
+				out.scores[normalized] = score
+			}
+		}
+	}
+
+	return out, nil
+}
+
+func (b *Builder) buildGroupStandings(
 	ctx context.Context,
 	data *domain.SourceData,
-	group domain.GroupDefinition,
-	contests []domain.Contest,
-	students []domain.Student,
+	pg preparedGroup,
 	statusByStudent map[string]*accountStatuses,
 ) (domain.GeneratedGroupStandings, error) {
 	out := domain.GeneratedGroupStandings{
-		GroupSlug:  group.Slug,
-		GroupTitle: group.Title,
-		Contests:   make([]domain.GeneratedContestStandings, 0, len(contests)),
+		GroupSlug:  pg.group.Slug,
+		GroupTitle: pg.group.Title,
+		Contests:   make([]domain.GeneratedContestStandings, 0, len(pg.contests)),
 	}
 
-	for _, contest := range contests {
-		typ := contest.TypeOrDefault()
-		switch typ {
+	for _, contest := range pg.contests {
+		switch contest.TypeOrDefault() {
 		case domain.ContestTypeTasks:
-			out.Contests = append(out.Contests, b.buildTaskContestStandings(contest, students, statusByStudent))
+			out.Contests = append(out.Contests, b.buildTaskContestStandings(contest, pg.students, statusByStudent))
 		case domain.ContestTypeProvider:
-			generated, err := b.buildProviderContestStandings(ctx, data, group, contest, students)
+			generated, err := b.buildProviderContestStandings(ctx, data, pg.group, contest, pg.students)
 			if err != nil {
-				b.logger.Printf("WARN group=%s contest_id=%s provider build failed; keep previous generated version if available: %v", group.Slug, contest.ID, err)
+				b.logger.Printf("WARN group=%s contest_id=%s provider build failed; keep previous generated version if available: %v", pg.group.Slug, contest.ID, err)
 				continue
 			}
 			out.Contests = append(out.Contests, generated)
 		default:
-			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, typ)
+			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())
 		}
 	}
 
@@ -293,19 +366,19 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	}
 
 	taskUsesSiteScores := make([]bool, 0)
-	for _, sc := range contest.Subcontests {
-		genSub := domain.GeneratedSubcontest{
-			Title: sc.Title,
-			Tasks: make([]domain.GeneratedTask, 0, len(sc.Tasks)),
+	for _, subcontest := range contest.Subcontests {
+		generatedSubcontest := domain.GeneratedSubcontest{
+			Title: subcontest.Title,
+			Tasks: make([]domain.GeneratedTask, 0, len(subcontest.Tasks)),
 		}
-		for i, taskURL := range sc.Tasks {
-			normalized := domain.NormalizeTaskURL(taskURL)
+		for i, rawTaskURL := range subcontest.Tasks {
+			normalized := domain.NormalizeTaskURL(rawTaskURL)
 			task := domain.GeneratedTask{
 				Label:         domain.AlphabetLabel(i),
-				URL:           strings.TrimSpace(taskURL),
+				URL:           strings.TrimSpace(rawTaskURL),
 				NormalizedURL: normalized,
 			}
-			genSub.Tasks = append(genSub.Tasks, task)
+			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
 			out.Tasks = append(out.Tasks, task)
 
 			useRealScores := false
@@ -317,8 +390,8 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			}
 			taskUsesSiteScores = append(taskUsesSiteScores, useRealScores)
 		}
-		genSub.TaskCount = len(genSub.Tasks)
-		out.Subcontests = append(out.Subcontests, genSub)
+		generatedSubcontest.TaskCount = len(generatedSubcontest.Tasks)
+		out.Subcontests = append(out.Subcontests, generatedSubcontest)
 	}
 
 	for _, student := range students {
@@ -330,8 +403,8 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		row := domain.GeneratedRow{
 			StudentID:   student.ID,
 			PublicName:  student.PublicName,
-			SolvedCount: 0,
 			Statuses:    make([]string, len(out.Tasks)),
+			SolvedCount: 0,
 		}
 		if contest.Olympiad {
 			row.Scores = make([]*int, len(out.Tasks))
@@ -349,11 +422,12 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 
 			if contest.Olympiad {
 				score, ok := resolveTaskScore(status, combined, task.NormalizedURL, taskUsesSiteScores[i])
-				if ok {
-					value := score
-					row.Scores[i] = &value
-					row.TotalScore += score
+				if !ok {
+					continue
 				}
+				value := score
+				row.Scores[i] = &value
+				row.TotalScore += score
 			}
 		}
 
@@ -401,227 +475,9 @@ func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskUR
 	return 0, true
 }
 
-func (b *Builder) collectStudentStatusesBySiteSelection(ctx context.Context, data *domain.SourceData, requiredSitesByStudent map[string]map[string]struct{}) (map[string]map[string]*accountStatuses, error) {
-	result := make(map[string]map[string]*accountStatuses, len(requiredSitesByStudent))
-
-	resultsCh := make(chan accountFetchResult)
-	sem := make(chan struct{}, b.maxConcurrent)
-	wg := sync.WaitGroup{}
-
-	seenFetches := make(map[string]struct{})
-	for studentID, requiredSites := range requiredSitesByStudent {
-		if len(requiredSites) == 0 {
-			continue
-		}
-
-		student, ok := data.Students[studentID]
-		if !ok {
-			b.logger.Printf("WARN unknown student_id=%s while collecting statuses", studentID)
-			continue
-		}
-
-		for _, account := range student.Accounts {
-			site := domain.NormalizeSite(account.Site)
-			if _, need := requiredSites[site]; !need {
-				continue
-			}
-
-			accountID := strings.TrimSpace(account.AccountID)
-			if accountID == "" {
-				continue
-			}
-
-			fetchKey := studentID + "|" + site + "|" + accountID
-			if _, already := seenFetches[fetchKey]; already {
-				continue
-			}
-			seenFetches[fetchKey] = struct{}{}
-
-			wg.Add(1)
-			go func(studentID string, site string, accountID string) {
-				defer wg.Done()
-
-				select {
-				case sem <- struct{}{}:
-				case <-ctx.Done():
-					return
-				}
-				defer func() { <-sem }()
-
-				statuses, err := b.fetchAccountStatuses(ctx, site, accountID)
-				if err != nil {
-					b.logger.Printf("WARN student_id=%s site=%s account_id=%s fetch error: %v", studentID, site, accountID, err)
-					return
-				}
-
-				select {
-				case resultsCh <- accountFetchResult{studentID: studentID, site: site, statuses: statuses}:
-				case <-ctx.Done():
-				}
-			}(studentID, site, accountID)
-		}
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultsCh)
-	}()
-
-	for res := range resultsCh {
-		studentSites := result[res.studentID]
-		if studentSites == nil {
-			studentSites = make(map[string]*accountStatuses)
-			result[res.studentID] = studentSites
-		}
-		agg := studentSites[res.site]
-		if agg == nil {
-			agg = newAccountStatuses()
-			studentSites[res.site] = agg
-		}
-		mergeStatuses(agg, res.statuses)
-	}
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func (b *Builder) buildCombinedStatusesByStudent(students []domain.Student, statusByStudentSite map[string]map[string]*accountStatuses) map[string]*accountStatuses {
-	result := make(map[string]*accountStatuses, len(students))
-	for _, student := range students {
-		agg := newAccountStatuses()
-		for _, statuses := range statusByStudentSite[student.ID] {
-			if statuses == nil {
-				continue
-			}
-			mergeStatuses(agg, *statuses)
-		}
-		result[student.ID] = agg
-	}
-	return result
-}
-
-func (b *Builder) pickCombinedStatuses(students []domain.Student, combinedByStudent map[string]*accountStatuses) map[string]*accountStatuses {
-	result := make(map[string]*accountStatuses, len(students))
-	for _, student := range students {
-		if statuses, ok := combinedByStudent[student.ID]; ok && statuses != nil {
-			result[student.ID] = statuses
-			continue
-		}
-		result[student.ID] = newAccountStatuses()
-	}
-	return result
-}
-
-func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, accountID string) (accountStatuses, error) {
-	site = domain.NormalizeSite(site)
-	accountID = strings.TrimSpace(accountID)
-	cacheKey := site + ":" + accountID
-
-	if cached, ok := b.cache.Get(cacheKey); ok {
-		return cloneStatuses(cached), nil
-	}
-
-	call := b.acquireInflight(cacheKey)
-	if call != nil {
-		select {
-		case <-call.done:
-			return cloneStatuses(call.res), call.err
-		case <-ctx.Done():
-			return accountStatuses{}, ctx.Err()
-		}
-	}
-
-	res, err := b.loadFromSite(ctx, site, accountID)
-	if err == nil {
-		b.cache.Set(cacheKey, res)
-	}
-	b.resolveInflight(cacheKey, res, err)
-	return cloneStatuses(res), err
-}
-
-func (b *Builder) loadFromSite(ctx context.Context, site string, accountID string) (accountStatuses, error) {
-	client, ok := b.sources.Site(site)
-	if !ok {
-		b.logger.Printf("WARN unknown site=%s account_id=%s", site, accountID)
-		return newAccountStatusesValue(), nil
-	}
-
-	results, err := client.FetchUserResults(ctx, accountID)
-	if err != nil {
-		return accountStatuses{}, err
-	}
-
-	out := newAccountStatusesValue()
-	for _, result := range results {
-		normalized := domain.NormalizeTaskURL(result.TaskURL)
-		if normalized == "" {
-			continue
-		}
-
-		attempted := result.Attempted || result.Solved || result.Score != nil
-		if attempted {
-			out.attempted[normalized] = struct{}{}
-		}
-		if result.Solved {
-			out.solved[normalized] = struct{}{}
-		}
-
-		hasScore := false
-		score := 0
-		if result.Score != nil {
-			score = domain.ClampScore(*result.Score)
-			hasScore = true
-		} else if attempted {
-			if result.Solved {
-				score = 100
-			} else {
-				score = 0
-			}
-			hasScore = true
-		}
-
-		if hasScore {
-			if prev, ok := out.scores[normalized]; !ok || score > prev {
-				out.scores[normalized] = score
-			}
-		}
-	}
-
-	return out, nil
-}
-
-func (b *Builder) acquireInflight(cacheKey string) *inflightCall {
-	b.inflightMu.Lock()
-	defer b.inflightMu.Unlock()
-
-	if call, ok := b.inflight[cacheKey]; ok {
-		return call
-	}
-
-	b.inflight[cacheKey] = &inflightCall{done: make(chan struct{})}
-	return nil
-}
-
-func (b *Builder) resolveInflight(cacheKey string, res accountStatuses, err error) {
-	b.inflightMu.Lock()
-	call := b.inflight[cacheKey]
-	delete(b.inflight, cacheKey)
-	b.inflightMu.Unlock()
-
-	if call == nil {
-		return
-	}
-	call.res = res
-	call.err = err
-	close(call.done)
-}
-
 func newAccountStatuses() *accountStatuses {
-	statuses := newAccountStatusesValue()
-	return &statuses
+	value := newAccountStatusesValue()
+	return &value
 }
 
 func newAccountStatusesValue() accountStatuses {
@@ -632,33 +488,19 @@ func newAccountStatusesValue() accountStatuses {
 	}
 }
 
-func cloneStatuses(in accountStatuses) accountStatuses {
-	out := newAccountStatusesValue()
-	for k := range in.solved {
-		out.solved[k] = struct{}{}
-	}
-	for k := range in.attempted {
-		out.attempted[k] = struct{}{}
-	}
-	for k, v := range in.scores {
-		out.scores[k] = v
-	}
-	return out
-}
-
 func mergeStatuses(dst *accountStatuses, src accountStatuses) {
 	if dst == nil {
 		return
 	}
-	for k := range src.solved {
-		dst.solved[k] = struct{}{}
+	for key := range src.solved {
+		dst.solved[key] = struct{}{}
 	}
-	for k := range src.attempted {
-		dst.attempted[k] = struct{}{}
+	for key := range src.attempted {
+		dst.attempted[key] = struct{}{}
 	}
-	for k, v := range src.scores {
-		if prev, ok := dst.scores[k]; !ok || v > prev {
-			dst.scores[k] = v
+	for key, value := range src.scores {
+		if prev, ok := dst.scores[key]; !ok || value > prev {
+			dst.scores[key] = value
 		}
 	}
 }

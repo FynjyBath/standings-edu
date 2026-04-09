@@ -475,30 +475,24 @@ func idTakenByOther(students []domain.Student, currentIdx int, id string) bool {
 
 func loadOrCreateGroupFile(dataDir, groupSlug string) (string, domain.GroupFile, error) {
 	groupDir := filepath.Join(dataDir, "groups", groupSlug)
-	paths := []string{
-		filepath.Join(groupDir, "group.json"),
-		filepath.Join(groupDir, "groups.json"),
-	}
+	path := filepath.Join(groupDir, "group.json")
 
-	for _, path := range paths {
-		groupFile, err := readGroupFile(path)
-		if err == nil {
-			if err := ensureGroupContestsFile(groupDir); err != nil {
-				return "", domain.GroupFile{}, err
-			}
-			return path, groupFile, nil
-		}
-		if !errors.Is(err, os.ErrNotExist) {
+	groupFile, err := readGroupFile(path)
+	if err == nil {
+		if err := ensureGroupContestsFile(groupDir); err != nil {
 			return "", domain.GroupFile{}, err
 		}
+		return path, groupFile, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", domain.GroupFile{}, err
 	}
 
 	if err := os.MkdirAll(groupDir, 0o755); err != nil {
 		return "", domain.GroupFile{}, fmt.Errorf("mkdir group dir %q: %w", groupDir, err)
 	}
 
-	path := filepath.Join(groupDir, "group.json")
-	groupFile := domain.GroupFile{
+	groupFile = domain.GroupFile{
 		Title:      groupSlug,
 		Update:     boolPtr(true),
 		StudentIDs: nil,

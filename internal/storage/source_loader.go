@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,9 +19,7 @@ func NewSourceLoader(dataDir string) *SourceLoader {
 	return &SourceLoader{DataDir: dataDir}
 }
 
-func (l *SourceLoader) Load(ctx context.Context) (*domain.SourceData, error) {
-	_ = ctx
-
+func (l *SourceLoader) Load() (*domain.SourceData, error) {
 	students, err := l.loadStudents()
 	if err != nil {
 		return nil, err
@@ -133,9 +130,8 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 }
 
 type groupContestJSON struct {
-	ID        string `json:"id"`
-	ContestID string `json:"contest_id"`
-	Update    *bool  `json:"update,omitempty"`
+	ID     string `json:"id"`
+	Update *bool  `json:"update,omitempty"`
 }
 
 func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef, error) {
@@ -145,14 +141,16 @@ func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef,
 	}
 
 	out := make([]domain.GroupContestRef, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
 	for i, item := range items {
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
-			id = strings.TrimSpace(item.ContestID)
-		}
-		if id == "" {
 			return nil, fmt.Errorf("contest item #%d in %q has empty id", i, path)
 		}
+		if _, exists := seen[id]; exists {
+			return nil, fmt.Errorf("contest item #%d in %q duplicates id %q", i, path, id)
+		}
+		seen[id] = struct{}{}
 
 		update := true
 		if item.Update != nil {

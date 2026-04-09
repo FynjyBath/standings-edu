@@ -34,7 +34,7 @@ func NewPipeline(loader *storage.SourceLoader, writer *storage.GeneratedWriter, 
 }
 
 func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
-	data, err := p.loader.Load(ctx)
+	data, err := p.loader.Load()
 	if err != nil {
 		return fmt.Errorf("load source data: %w", err)
 	}
@@ -70,10 +70,7 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 		return fmt.Errorf("write groups list: %w", err)
 	}
 
-	fullGroupBySlug := make(map[string]domain.GroupDefinition, len(groupsToUpdate))
-	for _, group := range groupsToUpdate {
-		fullGroupBySlug[group.Slug] = group
-	}
+	fullGroupBySlug := mapGroupsBySlug(groupsToUpdate)
 
 	generatedCount := 0
 	for _, group := range buildGroups {
@@ -85,7 +82,11 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 			continue
 		}
 
-		fullGroup := fullGroupBySlug[group.Slug]
+		fullGroup, ok := fullGroupBySlug[group.Slug]
+		if !ok {
+			p.logger.Printf("ERROR group=%s source group not found", group.Slug)
+			continue
+		}
 		mergedStandings, ok := p.mergeWithNonUpdatedContests(fullGroup, updatedStandings)
 		if !ok {
 			p.logger.Printf("ERROR group=%s merge failed; skip writing to avoid data loss", group.Slug)
@@ -135,10 +136,18 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 		return domain.GeneratedGroupStandings{}, false
 	}
 
-	updatedByID := makeContestBuckets(updated.Contests)
-	existingByID := map[string][]domain.GeneratedContestStandings{}
+	updatedByID, err := mapContestsByID(updated.Contests)
+	if err != nil {
+		p.logger.Printf("WARN group=%s updated standings have duplicate contest ids: %v", group.Slug, err)
+		return domain.GeneratedGroupStandings{}, false
+	}
+	existingByID := map[string]domain.GeneratedContestStandings{}
 	if hasExisting {
-		existingByID = makeContestBuckets(existing.Contests)
+		existingByID, err = mapContestsByID(existing.Contests)
+		if err != nil {
+			p.logger.Printf("WARN group=%s existing standings have duplicate contest ids: %v", group.Slug, err)
+			return domain.GeneratedGroupStandings{}, false
+		}
 	}
 
 	merged := domain.GeneratedGroupStandings{
@@ -149,24 +158,22 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 
 	for _, contestRef := range group.Contests {
 		if contestRef.Update {
-			contest, ok := takeFirstContest(updatedByID, contestRef.ID)
-			if !ok {
-				if hasExisting {
-					existingContest, oldOK := takeFirstContest(existingByID, contestRef.ID)
-					if oldOK {
-						p.logger.Printf("WARN group=%s contest=%s update=true but not built; keep previous generated version", group.Slug, contestRef.ID)
-						merged.Contests = append(merged.Contests, existingContest)
-						continue
-					}
-				}
-				p.logger.Printf("WARN group=%s contest=%s update=true but not built and no previous version found", group.Slug, contestRef.ID)
+			if contest, ok := updatedByID[contestRef.ID]; ok {
+				merged.Contests = append(merged.Contests, contest)
 				continue
 			}
-			merged.Contests = append(merged.Contests, contest)
+			if hasExisting {
+				if oldContest, oldOK := existingByID[contestRef.ID]; oldOK {
+					p.logger.Printf("WARN group=%s contest=%s update=true but not built; keep previous generated version", group.Slug, contestRef.ID)
+					merged.Contests = append(merged.Contests, oldContest)
+					continue
+				}
+			}
+			p.logger.Printf("WARN group=%s contest=%s update=true but not built and no previous version found", group.Slug, contestRef.ID)
 			continue
 		}
 
-		contest, ok := takeFirstContest(existingByID, contestRef.ID)
+		contest, ok := existingByID[contestRef.ID]
 		if !ok {
 			p.logger.Printf("WARN group=%s contest=%s update=false but missing in previous standings", group.Slug, contestRef.ID)
 			continue
@@ -175,6 +182,25 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 	}
 
 	return merged, true
+}
+
+func mapContestsByID(contests []domain.GeneratedContestStandings) (map[string]domain.GeneratedContestStandings, error) {
+	out := make(map[string]domain.GeneratedContestStandings, len(contests))
+	for _, contest := range contests {
+		if _, exists := out[contest.ID]; exists {
+			return nil, fmt.Errorf("duplicate contest id %q", contest.ID)
+		}
+		out[contest.ID] = contest
+	}
+	return out, nil
+}
+
+func mapGroupsBySlug(groups []domain.GroupDefinition) map[string]domain.GroupDefinition {
+	out := make(map[string]domain.GroupDefinition, len(groups))
+	for _, group := range groups {
+		out[group.Slug] = group
+	}
+	return out
 }
 
 func filterGroupsToUpdate(groups []domain.GroupDefinition) []domain.GroupDefinition {
@@ -205,28 +231,6 @@ func selectGroupsWithUpdatableContests(groups []domain.GroupDefinition) []domain
 		out = append(out, groupCopy)
 	}
 	return out
-}
-
-func makeContestBuckets(contests []domain.GeneratedContestStandings) map[string][]domain.GeneratedContestStandings {
-	buckets := make(map[string][]domain.GeneratedContestStandings, len(contests))
-	for _, contest := range contests {
-		buckets[contest.ID] = append(buckets[contest.ID], contest)
-	}
-	return buckets
-}
-
-func takeFirstContest(buckets map[string][]domain.GeneratedContestStandings, contestID string) (domain.GeneratedContestStandings, bool) {
-	list := buckets[contestID]
-	if len(list) == 0 {
-		return domain.GeneratedContestStandings{}, false
-	}
-	item := list[0]
-	if len(list) == 1 {
-		delete(buckets, contestID)
-	} else {
-		buckets[contestID] = list[1:]
-	}
-	return item, true
 }
 
 func selectGroups(all []domain.GroupDefinition, onlyGroup string) []domain.GroupDefinition {

@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"standings-edu/internal/source"
 	"standings-edu/internal/standings"
@@ -21,7 +20,6 @@ func main() {
 		outDir           = flag.String("generated-dir", "./generated", "path to generated output directory")
 		onlyGroup        = flag.String("group", "", "optional group slug to generate")
 		parallelism      = flag.Int("parallelism", 8, "max concurrent account fetches")
-		cacheTTL         = flag.Duration("cache-ttl", 5*time.Minute, "TTL for account status cache")
 		informaticsCreds = flag.String("informatics-creds-file", "./data/sites/informatics_credentials.json", "path to informatics credentials JSON")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 	)
@@ -58,7 +56,7 @@ func main() {
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)
-	builder := standings.NewBuilder(registry, logger, *parallelism, *cacheTTL)
+	builder := standings.NewBuilder(registry, logger, *parallelism)
 	pipeline := standings.NewPipeline(loader, writer, builder, logger)
 
 	if err := pipeline.Run(ctx, *onlyGroup); err != nil {

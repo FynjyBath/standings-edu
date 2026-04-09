@@ -75,20 +75,12 @@ type InformaticsAPIClient struct {
 	accountState map[string]informaticsAccountState
 }
 
-func NewInformaticsAPIClientFromFile(path string) (*InformaticsAPIClient, error) {
-	return NewInformaticsAPIClientFromFileWithState(path, "")
-}
-
 func NewInformaticsAPIClientFromFileWithState(path string, statePath string) (*InformaticsAPIClient, error) {
 	creds, err := LoadInformaticsCredentials(path)
 	if err != nil {
 		return nil, err
 	}
 	return NewInformaticsAPIClientWithState(creds, statePath)
-}
-
-func NewInformaticsAPIClient(creds InformaticsCredentials) (*InformaticsAPIClient, error) {
-	return NewInformaticsAPIClientWithState(creds, "")
 }
 
 func NewInformaticsAPIClientWithState(creds InformaticsCredentials, statePath string) (*InformaticsAPIClient, error) {

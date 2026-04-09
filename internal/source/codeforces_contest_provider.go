@@ -15,15 +15,11 @@ import (
 
 const CodeforcesContestProviderID = "codeforces_contest"
 
-type codeforcesContestStandingsClient interface {
-	FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (CodeforcesContestStandings, error)
-}
-
 type CodeforcesContestProvider struct {
-	client codeforcesContestStandingsClient
+	client *CodeforcesAPIClient
 }
 
-func NewCodeforcesContestProvider(client codeforcesContestStandingsClient) *CodeforcesContestProvider {
+func NewCodeforcesContestProvider(client *CodeforcesAPIClient) *CodeforcesContestProvider {
 	return &CodeforcesContestProvider{client: client}
 }
 

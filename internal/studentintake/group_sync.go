@@ -17,15 +17,25 @@ func (s *Store) syncGroupMembership(intakeStudent domain.Student, fields map[str
 		return nil
 	}
 	if !isValidGroupSlug(groupSlug) {
-		return fmt.Errorf("invalid group slug %q", groupSlug)
+		return fmt.Errorf("%w: %q", ErrInvalidGroupSlug, groupSlug)
 	}
 
-	groupPath, groupFile, err := loadGroupFile(s.dataDir, groupSlug)
+	dataDir := strings.TrimSpace(s.dataDir)
+	if dataDir == "" {
+		dataDir = filepath.Dir(s.path)
+	} else if _, statErr := os.Stat(filepath.Join(dataDir, "students.json")); errors.Is(statErr, os.ErrNotExist) {
+		altDataDir := filepath.Dir(s.path)
+		if _, altErr := os.Stat(filepath.Join(altDataDir, "students.json")); altErr == nil {
+			dataDir = altDataDir
+		}
+	}
+
+	groupPath, groupFile, err := loadGroupFile(dataDir, groupSlug)
 	if err != nil {
 		return fmt.Errorf("load group %q: %w", groupSlug, err)
 	}
 
-	studentsPath := filepath.Join(s.dataDir, "students.json")
+	studentsPath := filepath.Join(dataDir, "students.json")
 	sourceStudents, err := LoadStudentsFile(studentsPath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

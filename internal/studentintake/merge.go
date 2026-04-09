@@ -58,6 +58,8 @@ func mergeExistingStudent(existing domain.Student, incoming domain.Student) doma
 	}
 	if incoming.PublicName != "" {
 		existing.PublicName = incoming.PublicName
+	} else if strings.TrimSpace(existing.PublicName) == "" {
+		existing.PublicName = GeneratePublicNameFromFullName(existing.FullName)
 	}
 	existing.Accounts = mergeAccountUpdates(existing.Accounts, incoming.Accounts)
 	return existing
@@ -69,10 +71,15 @@ func buildNewStudent(current []domain.Student, incoming domain.Student) domain.S
 		id = nextUniqueID(current, incoming.FullName, -1)
 	}
 
+	publicName := incoming.PublicName
+	if strings.TrimSpace(publicName) == "" {
+		publicName = GeneratePublicNameFromFullName(incoming.FullName)
+	}
+
 	return normalizeStudent(domain.Student{
 		ID:         id,
 		FullName:   incoming.FullName,
-		PublicName: incoming.PublicName,
+		PublicName: publicName,
 		Accounts:   incoming.Accounts,
 	})
 }

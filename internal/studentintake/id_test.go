@@ -64,3 +64,45 @@ func TestGenerateUniqueID(t *testing.T) {
 		t.Fatalf("GenerateUniqueID() = %q, want %q", got, "ivanov-ip-3")
 	}
 }
+
+func TestGeneratePublicNameFromFullName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		fullName string
+		want     string
+	}{
+		{
+			name:     "fio in cyrillic",
+			fullName: "Иванов Иван Петрович",
+			want:     "Иванов И. П.",
+		},
+		{
+			name:     "trim and collapse spaces",
+			fullName: "  Соловьев   Артем Юрьевич  ",
+			want:     "Соловьев А. Ю.",
+		},
+		{
+			name:     "single word",
+			fullName: "Платон",
+			want:     "Платон",
+		},
+		{
+			name:     "empty",
+			fullName: "   ",
+			want:     "",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := GeneratePublicNameFromFullName(tc.fullName)
+			if got != tc.want {
+				t.Fatalf("GeneratePublicNameFromFullName(%q) = %q, want %q", tc.fullName, got, tc.want)
+			}
+		})
+	}
+}

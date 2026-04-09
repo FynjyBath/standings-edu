@@ -85,6 +85,9 @@ func TestMergeStudentsNewStudent(t *testing.T) {
 	if merged[1].FullName != "Петров Петр Петрович" {
 		t.Fatalf("merged[1].FullName = %q", merged[1].FullName)
 	}
+	if merged[1].PublicName != "Петров П. П." {
+		t.Fatalf("merged[1].PublicName = %q, want %q", merged[1].PublicName, "Петров П. П.")
+	}
 }
 
 func TestMergeStudentsSiteAccounts(t *testing.T) {

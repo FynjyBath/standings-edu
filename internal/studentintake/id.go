@@ -76,6 +76,38 @@ func GenerateIDFromFullName(fullName string) string {
 	return id
 }
 
+func GeneratePublicNameFromFullName(fullName string) string {
+	parts := strings.Fields(normalizeWhitespace(fullName))
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+
+	var b strings.Builder
+	b.WriteString(parts[0])
+
+	for _, part := range parts[1:] {
+		if part == "" {
+			continue
+		}
+		var initial rune
+		for _, r := range part {
+			initial = r
+			break
+		}
+		if initial == 0 {
+			continue
+		}
+		b.WriteByte(' ')
+		b.WriteRune(initial)
+		b.WriteByte('.')
+	}
+
+	return b.String()
+}
+
 func GenerateUniqueID(fullName string, isTaken func(id string) bool) string {
 	base := GenerateIDFromFullName(fullName)
 	if !isTaken(base) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"standings-edu/internal/domain"
@@ -44,6 +45,8 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 
 		if publicName := normalizeWhitespace(fields["public_name"]); publicName != "" {
 			updated.PublicName = publicName
+		} else if strings.TrimSpace(updated.PublicName) == "" {
+			updated.PublicName = GeneratePublicNameFromFullName(updated.FullName)
 		}
 		updated.Accounts = mergeAccountUpdates(updated.Accounts, accountsFromFields(fields))
 		if updated.ID == "" || idTakenByOther(students, idx, updated.ID) {
@@ -64,6 +67,9 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 		FullName:   fullName,
 		PublicName: normalizeWhitespace(fields["public_name"]),
 		Accounts:   accountsFromFields(fields),
+	}
+	if strings.TrimSpace(student.PublicName) == "" {
+		student.PublicName = GeneratePublicNameFromFullName(student.FullName)
 	}
 	student = normalizeStudent(student)
 

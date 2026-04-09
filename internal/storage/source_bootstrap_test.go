@@ -15,18 +15,28 @@ func TestEnsureInitialSourceFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureInitialSourceFiles() error = %v", err)
 	}
-	if len(created) != 2 {
-		t.Fatalf("len(created) = %d, want 2", len(created))
+	if len(created) != 4 {
+		t.Fatalf("len(created) = %d, want 4", len(created))
 	}
 
-	for _, name := range []string{"students.json", "contests.json"} {
-		path := filepath.Join(dataDir, name)
+	cases := []struct {
+		path string
+		want string
+	}{
+		{path: filepath.Join(dataDir, "students.json"), want: "[]\n"},
+		{path: filepath.Join(dataDir, "contests.json"), want: "[]\n"},
+		{path: filepath.Join(dataDir, "groups", "group_example", "contests.json"), want: "[]\n"},
+		{path: filepath.Join(dataDir, "groups", "group_example", "groups.json"), want: "{}\n"},
+	}
+
+	for _, tc := range cases {
+		path := tc.path
 		b, readErr := os.ReadFile(path)
 		if readErr != nil {
 			t.Fatalf("read %q: %v", path, readErr)
 		}
-		if string(b) != "[]\n" {
-			t.Fatalf("%q content = %q, want %q", path, string(b), "[]\n")
+		if string(b) != tc.want {
+			t.Fatalf("%q content = %q, want %q", path, string(b), tc.want)
 		}
 	}
 

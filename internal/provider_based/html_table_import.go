@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"standings-edu/internal/domain"
 )
@@ -34,10 +35,10 @@ func (p *HTMLTableImportProvider) ProviderID() string {
 }
 
 type htmlTableImportConfig struct {
-	PageURL          string   `json:"page_url"`
-	Columns          []string `json:"columns"`
-	AutoFind         bool     `json:"auto_find"`
-	SearchSubstrings []string `json:"search_substrings,omitempty"`
+	PageURL        string   `json:"page_url"`
+	Columns        []string `json:"columns"`
+	AutoFind       bool     `json:"auto_find"`
+	SearchPrefixes []string `json:"search_prefixes,omitempty"`
 }
 
 type htmlImportColumnKind int
@@ -84,6 +85,16 @@ type matchedStudentRow struct {
 	hasPlace bool
 }
 
+type prefixTrieNode struct {
+	children map[rune]*prefixTrieNode
+	terminal bool
+}
+
+type prefixTrieMatcher struct {
+	root   *prefixTrieNode
+	hasAny bool
+}
+
 var (
 	reTags  = regexp.MustCompile(`(?is)<[^>]+>`)
 	reSpace = regexp.MustCompile(`\s+`)
@@ -116,11 +127,12 @@ func (p *HTMLTableImportProvider) BuildStandings(ctx context.Context, input Prov
 	}
 
 	matchers := buildStudentMatchers(input.Students)
-	extraSubstrings := normalizeSubstrings(cfg.SearchSubstrings)
+	extraPrefixes := normalizePrefixes(cfg.SearchPrefixes)
+	autoFindMatcher := newPrefixTrieMatcher(collectAutoFindPrefixes(matchers, extraPrefixes))
 
 	matchesByTable := make([]map[string]matchedStudentRow, 0, len(parsedTables))
 	for _, table := range parsedTables {
-		matchesByTable = append(matchesByTable, matchRowsToStudents(table.rows, matchers, cfg.AutoFind, extraSubstrings))
+		matchesByTable = append(matchesByTable, matchRowsToStudents(table.rows, matchers, cfg.AutoFind, autoFindMatcher))
 	}
 
 	return buildImportedStandings(input.Contest, cfg.PageURL, schema, parsedTables, input.Students, matchesByTable), nil
@@ -336,7 +348,6 @@ func buildStudentMatchers(students []domain.Student) []studentMatcher {
 	for _, s := range students {
 		full := normalizeForMatch(s.FullName)
 		public := normalizeForMatch(s.PublicName)
-		surname := firstToken(full)
 
 		patterns := make([]string, 0, 6)
 		if full != "" {
@@ -348,14 +359,16 @@ func buildStudentMatchers(students []domain.Student) []studentMatcher {
 		patterns = append(patterns, buildInitialPatterns(s.FullName)...)
 		patterns = uniqueStrings(patterns)
 
-		fullParts := make([]string, 0, 2)
+		fullParts := make([]string, 0, 3)
 		if full != "" {
 			fullParts = append(fullParts, full)
 		}
-		if surname != "" {
-			fullParts = append(fullParts, surname)
+		if public != "" {
+			fullParts = append(fullParts, public)
 		}
-		fullParts = append(fullParts, buildInitialPatterns(s.FullName)...)
+		if compacted := compactPublicNameInitials(public); compacted != "" && compacted != public {
+			fullParts = append(fullParts, compacted)
+		}
 		fullParts = uniqueStrings(fullParts)
 
 		out = append(out, studentMatcher{
@@ -365,17 +378,6 @@ func buildStudentMatchers(students []domain.Student) []studentMatcher {
 		})
 	}
 	return out
-}
-
-func firstToken(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	if idx := strings.IndexByte(s, ' '); idx >= 0 {
-		return strings.TrimSpace(s[:idx])
-	}
-	return s
 }
 
 func buildInitialPatterns(fullName string) []string {
@@ -398,7 +400,44 @@ func buildInitialPatterns(fullName string) []string {
 	}
 }
 
-func normalizeSubstrings(items []string) []string {
+func compactPublicNameInitials(publicName string) string {
+	publicName = strings.TrimSpace(publicName)
+	if publicName == "" {
+		return ""
+	}
+
+	lastSpace := strings.LastIndexByte(publicName, ' ')
+	if lastSpace <= 0 || lastSpace >= len(publicName)-1 {
+		return ""
+	}
+
+	left := strings.TrimSpace(publicName[:lastSpace])
+	right := strings.TrimSpace(publicName[lastSpace+1:])
+	if left == "" || right == "" {
+		return ""
+	}
+
+	leftFields := strings.Fields(left)
+	if len(leftFields) == 0 {
+		return ""
+	}
+	lastLeft := leftFields[len(leftFields)-1]
+	if !isInitialToken(lastLeft) || !isInitialToken(right) {
+		return ""
+	}
+
+	return left + right
+}
+
+func isInitialToken(token string) bool {
+	runes := []rune(strings.TrimSpace(token))
+	if len(runes) != 2 {
+		return false
+	}
+	return unicode.IsLetter(runes[0]) && runes[1] == '.'
+}
+
+func normalizePrefixes(items []string) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
 		s := normalizeForMatch(item)
@@ -410,7 +449,63 @@ func normalizeSubstrings(items []string) []string {
 	return uniqueStrings(out)
 }
 
-func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, autoFind bool, extraSubstrings []string) map[string]matchedStudentRow {
+func collectAutoFindPrefixes(matchers []studentMatcher, extraPrefixes []string) []string {
+	out := make([]string, 0, len(extraPrefixes)+len(matchers)*3)
+	for _, matcher := range matchers {
+		out = append(out, matcher.fullNameParts...)
+	}
+	out = append(out, extraPrefixes...)
+	return uniqueStrings(out)
+}
+
+func newPrefixTrieMatcher(prefixes []string) *prefixTrieMatcher {
+	root := &prefixTrieNode{}
+	matcher := &prefixTrieMatcher{
+		root:   root,
+		hasAny: false,
+	}
+	for _, prefix := range prefixes {
+		if prefix == "" {
+			continue
+		}
+		node := root
+		for _, r := range prefix {
+			if node.children == nil {
+				node.children = make(map[rune]*prefixTrieNode)
+			}
+			next, ok := node.children[r]
+			if !ok {
+				next = &prefixTrieNode{}
+				node.children[r] = next
+			}
+			node = next
+		}
+		node.terminal = true
+		matcher.hasAny = true
+	}
+	return matcher
+}
+
+func (m *prefixTrieMatcher) hasPrefix(nameNorm string) bool {
+	if m == nil || !m.hasAny || m.root == nil {
+		return false
+	}
+
+	node := m.root
+	for _, r := range nameNorm {
+		next, ok := node.children[r]
+		if !ok {
+			return false
+		}
+		node = next
+		if node.terminal {
+			return true
+		}
+	}
+	return node.terminal
+}
+
+func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, autoFind bool, autoFindMatcher *prefixTrieMatcher) map[string]matchedStudentRow {
 	matched := make(map[string]matchedStudentRow)
 	for _, row := range rows {
 		nameNorm := normalizeForMatch(row.name)
@@ -418,7 +513,7 @@ func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, au
 			continue
 		}
 
-		if autoFind && !passesAutoFind(nameNorm, matchers, extraSubstrings) {
+		if autoFind && !passesAutoFind(nameNorm, autoFindMatcher) {
 			continue
 		}
 
@@ -449,20 +544,8 @@ func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, au
 	return matched
 }
 
-func passesAutoFind(nameNorm string, matchers []studentMatcher, extraSubstrings []string) bool {
-	for _, matcher := range matchers {
-		for _, part := range matcher.fullNameParts {
-			if part != "" && strings.Contains(nameNorm, part) {
-				return true
-			}
-		}
-	}
-	for _, part := range extraSubstrings {
-		if strings.Contains(nameNorm, part) {
-			return true
-		}
-	}
-	return false
+func passesAutoFind(nameNorm string, autoFindMatcher *prefixTrieMatcher) bool {
+	return autoFindMatcher.hasPrefix(nameNorm)
 }
 
 func bestPatternLength(nameNorm string, patterns []string) int {

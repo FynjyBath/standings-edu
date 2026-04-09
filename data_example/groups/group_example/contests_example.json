@@ -10,5 +10,9 @@
   {
     "id": "contest_cf_provider",
     "update": true
+  },
+  {
+    "id": "contest_html_table_provider",
+    "update": true
   }
 ]

@@ -88,6 +88,15 @@ type matchedStudentRow struct {
 	hasPlace bool
 }
 
+type extraMatchedRow struct {
+	row parsedImportedRow
+}
+
+type tableMatchResult struct {
+	byStudent map[string]matchedStudentRow
+	extraRows []extraMatchedRow
+}
+
 type prefixTrieNode struct {
 	children map[rune]*prefixTrieNode
 	terminal bool
@@ -131,11 +140,12 @@ func (p *HTMLTableImportProvider) BuildStandings(ctx context.Context, input Prov
 
 	matchers := buildStudentMatchers(input.Students)
 	extraPrefixes := normalizePrefixes(cfg.SearchPrefixes)
-	autoFindMatcher := newPrefixTrieMatcher(collectAutoFindPrefixes(matchers, extraPrefixes))
+	studentAutoFindMatcher := newPrefixTrieMatcher(collectStudentAutoFindPrefixes(matchers))
+	extraPrefixMatcher := newPrefixTrieMatcher(extraPrefixes)
 
-	matchesByTable := make([]map[string]matchedStudentRow, 0, len(parsedTables))
+	matchesByTable := make([]tableMatchResult, 0, len(parsedTables))
 	for _, table := range parsedTables {
-		matchesByTable = append(matchesByTable, matchRowsToStudents(table.rows, matchers, cfg.AutoFind, autoFindMatcher))
+		matchesByTable = append(matchesByTable, matchRowsToStudents(table.rows, matchers, cfg.AutoFind, studentAutoFindMatcher, extraPrefixMatcher))
 	}
 
 	return buildImportedStandings(input.Contest, cfg.PageURL, schema, parsedTables, input.Students, matchesByTable), nil
@@ -462,12 +472,11 @@ func normalizePrefixes(items []string) []string {
 	return uniqueStrings(out)
 }
 
-func collectAutoFindPrefixes(matchers []studentMatcher, extraPrefixes []string) []string {
-	out := make([]string, 0, len(extraPrefixes)+len(matchers)*3)
+func collectStudentAutoFindPrefixes(matchers []studentMatcher) []string {
+	out := make([]string, 0, len(matchers)*3)
 	for _, matcher := range matchers {
 		out = append(out, matcher.fullNameParts...)
 	}
-	out = append(out, extraPrefixes...)
 	return uniqueStrings(out)
 }
 
@@ -518,16 +527,36 @@ func (m *prefixTrieMatcher) hasPrefix(nameNorm string) bool {
 	return node.terminal
 }
 
-func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, autoFind bool, autoFindMatcher *prefixTrieMatcher) map[string]matchedStudentRow {
+func matchRowsToStudents(
+	rows []parsedImportedRow,
+	matchers []studentMatcher,
+	autoFind bool,
+	studentAutoFindMatcher *prefixTrieMatcher,
+	extraPrefixMatcher *prefixTrieMatcher,
+) tableMatchResult {
 	matched := make(map[string]matchedStudentRow)
+	extraRows := make([]extraMatchedRow, 0)
+	seenExtra := make(map[string]struct{})
+
 	for _, row := range rows {
 		nameNorm := normalizeForMatch(row.name)
 		if nameNorm == "" {
 			continue
 		}
 
-		if autoFind && !passesAutoFind(nameNorm, autoFindMatcher) {
+		matchedByStudentPrefix := studentAutoFindMatcher.hasPrefix(nameNorm)
+		matchedByExtraPrefix := extraPrefixMatcher.hasPrefix(nameNorm)
+		if autoFind && !matchedByStudentPrefix && !matchedByExtraPrefix {
 			continue
+		}
+
+		placeOrd, hasPlace := parsePlaceOrder(row.place)
+		if matchedByExtraPrefix {
+			extraKey := nameNorm + "|" + strings.TrimSpace(row.place) + "|" + strings.TrimSpace(row.providerStatus)
+			if _, ok := seenExtra[extraKey]; !ok {
+				seenExtra[extraKey] = struct{}{}
+				extraRows = append(extraRows, extraMatchedRow{row: row})
+			}
 		}
 
 		bestStudentID := ""
@@ -543,7 +572,6 @@ func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, au
 			continue
 		}
 
-		placeOrd, hasPlace := parsePlaceOrder(row.place)
 		existing, ok := matched[bestStudentID]
 		if !ok || bestLen > existing.matchLen || (bestLen == existing.matchLen && comparePlaceOrder(placeOrd, hasPlace, existing.placeOrd, existing.hasPlace) < 0) {
 			matched[bestStudentID] = matchedStudentRow{
@@ -554,11 +582,10 @@ func matchRowsToStudents(rows []parsedImportedRow, matchers []studentMatcher, au
 			}
 		}
 	}
-	return matched
-}
-
-func passesAutoFind(nameNorm string, autoFindMatcher *prefixTrieMatcher) bool {
-	return autoFindMatcher.hasPrefix(nameNorm)
+	return tableMatchResult{
+		byStudent: matched,
+		extraRows: extraRows,
+	}
 }
 
 func bestPatternLength(nameNorm string, patterns []string) int {
@@ -580,7 +607,7 @@ func buildImportedStandings(
 	schema htmlTableImportSchema,
 	tables []parsedImportedTable,
 	students []domain.Student,
-	matchesByTable []map[string]matchedStudentRow,
+	matchesByTable []tableMatchResult,
 ) domain.GeneratedContestStandings {
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
@@ -630,7 +657,7 @@ func buildImportedStandings(
 		}
 
 		for tableIdx := range tables {
-			match := matchesByTable[tableIdx][student.ID]
+			match := matchesByTable[tableIdx].byStudent[student.ID]
 			if match.matchLen == 0 {
 				continue
 			}
@@ -661,6 +688,49 @@ func buildImportedStandings(
 		}
 
 		out.Rows = append(out.Rows, row)
+	}
+
+	extraRowIndex := 0
+	for tableIdx := range tables {
+		offset := tableTaskOffsets[tableIdx]
+		for _, extra := range matchesByTable[tableIdx].extraRows {
+			extraRowIndex++
+
+			row := domain.GeneratedRow{
+				StudentID:   fmt.Sprintf("extra_prefix_row_%d", extraRowIndex),
+				PublicName:  strings.TrimSpace(extra.row.name),
+				Statuses:    make([]string, totalTasks),
+				SolvedCount: 0,
+			}
+			for i := range row.Statuses {
+				row.Statuses[i] = domain.TaskStatusNone
+			}
+			if contest.Olympiad {
+				row.Scores = make([]*int, totalTasks)
+			}
+
+			row.Place = strings.TrimSpace(extra.row.place)
+			if extra.row.penalty != nil {
+				p := *extra.row.penalty
+				row.Penalty = &p
+			}
+			row.ProviderStatus = strings.TrimSpace(extra.row.providerStatus)
+
+			for i := range extra.row.statuses {
+				status := extra.row.statuses[i]
+				row.Statuses[offset+i] = status
+				if status == domain.TaskStatusSolved {
+					row.SolvedCount++
+				}
+				if contest.Olympiad && extra.row.scores[i] != nil {
+					val := *extra.row.scores[i]
+					row.Scores[offset+i] = &val
+					row.TotalScore += val
+				}
+			}
+
+			out.Rows = append(out.Rows, row)
+		}
 	}
 
 	sortProviderRows(out.Rows, contest.Olympiad)

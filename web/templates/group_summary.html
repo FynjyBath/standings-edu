@@ -88,34 +88,58 @@
       return rowMap;
     });
 
+    function clampScore(v) {
+      if (!Number.isFinite(v)) {
+        return 0;
+      }
+      if (v < 0) {
+        return 0;
+      }
+      if (v > 100) {
+        return 100;
+      }
+      return v;
+    }
+
+    function contestSubcontests(contest) {
+      if (Array.isArray(contest.subcontests) && contest.subcontests.length > 0) {
+        return contest.subcontests;
+      }
+      return [{
+        title: "Результаты",
+        tasks: Array.isArray(contest.tasks) ? contest.tasks : []
+      }];
+    }
+
     var table = document.createElement("table");
     table.className = "standings-table summary-table";
 
     var thead = document.createElement("thead");
     var trTop = document.createElement("tr");
+    var trMid = document.createElement("tr");
     var trBottom = document.createElement("tr");
 
     var thStudent = document.createElement("th");
     thStudent.className = "student-col";
-    thStudent.rowSpan = 2;
+    thStudent.rowSpan = 3;
     thStudent.textContent = "Ученик";
     trTop.appendChild(thStudent);
 
     var thScore = document.createElement("th");
     thScore.className = "count-col";
-    thScore.rowSpan = 2;
+    thScore.rowSpan = 3;
     thScore.textContent = "Σ баллов";
     trTop.appendChild(thScore);
 
     var thPlus = document.createElement("th");
     thPlus.className = "count-col";
-    thPlus.rowSpan = 2;
+    thPlus.rowSpan = 3;
     thPlus.textContent = "Σ +";
     trTop.appendChild(thPlus);
 
     var totalTaskCount = 0;
     contests.forEach(function (contest) {
-      var tasks = contest.tasks || [];
+      var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
       if (tasks.length === 0) {
         return;
       }
@@ -127,16 +151,28 @@
       top.textContent = contest.title || contest.id || "Контест";
       trTop.appendChild(top);
 
-      tasks.forEach(function (task) {
-        var th = document.createElement("th");
-        th.className = "task-col";
-        var a = document.createElement("a");
-        a.href = task.url || "#";
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.textContent = task.label || "?";
-        th.appendChild(a);
-        trBottom.appendChild(th);
+      contestSubcontests(contest).forEach(function (subcontest) {
+        var subTasks = Array.isArray(subcontest.tasks) ? subcontest.tasks : [];
+        if (subTasks.length === 0) {
+          return;
+        }
+        var mid = document.createElement("th");
+        mid.className = "subcontest-head";
+        mid.colSpan = subTasks.length;
+        mid.textContent = subcontest.title || "Подконтест";
+        trMid.appendChild(mid);
+
+        subTasks.forEach(function (task) {
+          var th = document.createElement("th");
+          th.className = "task-col";
+          var a = document.createElement("a");
+          a.href = task.url || "#";
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = task.label || "?";
+          th.appendChild(a);
+          trBottom.appendChild(th);
+        });
       });
     });
 
@@ -147,6 +183,7 @@
     }
 
     thead.appendChild(trTop);
+    thead.appendChild(trMid);
     thead.appendChild(trBottom);
     table.appendChild(thead);
 
@@ -164,7 +201,7 @@
       var cells = [];
 
       contests.forEach(function (contest, contestIdx) {
-        var tasks = contest.tasks || [];
+        var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
         var row = contestRowMaps[contestIdx].get(student.student_id) || null;
         for (var i = 0; i < tasks.length; i++) {
           var status = "none";
@@ -179,7 +216,7 @@
               score = s;
             }
           }
-          if (score !== null) {
+          if (contest.olympiad && score !== null) {
             totalScore += score;
           }
 
@@ -188,13 +225,24 @@
           }
 
           var td = document.createElement("td");
-          td.className = "status-cell " + status;
-          if (status === "solved") {
-            td.textContent = "+";
-          } else if (status === "attempted") {
-            td.textContent = "×";
+          if (contest.olympiad) {
+            td.className = "score-cell";
+            if (score !== null) {
+              td.textContent = String(score);
+              td.style.setProperty("--score-alpha", String(clampScore(score) / 100));
+            } else {
+              td.textContent = "";
+              td.style.setProperty("--score-alpha", "0");
+            }
           } else {
-            td.textContent = "";
+            td.className = "status-cell " + status;
+            if (status === "solved") {
+              td.textContent = "+";
+            } else if (status === "attempted") {
+              td.textContent = "×";
+            } else {
+              td.textContent = "";
+            }
           }
           cells.push(td);
         }

@@ -1,0 +1,13 @@
+[
+  {
+    "full_name": "Иванов Иван Иванович",
+    "codeforces": "tourist",
+    "informatics": "12345",
+    "group": "group_example"
+  },
+  {
+    "full_name": "Петрова Анна Андреевна",
+    "public_name": "Петрова А. А.",
+    "acmp": "777"
+  }
+]

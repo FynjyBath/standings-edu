@@ -1,0 +1,42 @@
+[
+  {
+    "id": "contest_basics_tasks",
+    "title": "Базовые задачи (tasks)",
+    "olympiad": false,
+    "subcontests": [
+      {
+        "title": "Разминка",
+        "tasks": [
+          "https://codeforces.com/problemset/problem/4/A",
+          "https://acmp.ru/?main=task&id_task=1"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "contest_olymp_tasks",
+    "title": "Олимпиадный блок (tasks + score)",
+    "olympiad": true,
+    "subcontests": [
+      {
+        "title": "Отбор",
+        "tasks": [
+          "https://codeforces.com/problemset/problem/71/A",
+          "https://informatics.msk.ru/mod/statements/view.php?chapterid=100#1"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "contest_cf_provider",
+    "title": "Codeforces standings (provider)",
+    "olympiad": true,
+    "contest_type": "provider",
+    "provider": "codeforces_contest",
+    "provider_config": {
+      "contest_id": 1711,
+      "show_unofficial": true
+    },
+    "subcontests": []
+  }
+]

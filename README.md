@@ -35,11 +35,25 @@
 - `data/groups/<group_slug>/group.json` — информация о группе;
 - `data/groups/<group_slug>/contests.json` — контесты группы.
 
-Полезные примеры лежат в `data/*_example.json`.
+Полезные примеры лежат в `data_example/`.
+Этот каталог используется только как шаблон: команды проекта читают данные из `data/`.
 
 Важно:
 - при первом запуске генератор автоматически создаст пустые `data/students.json` и `data/contests.json`, если их нет;
-- группы нужно создать отдельно (можно по примеру из `data/groups/group_example/`).
+- группы нужно создать отдельно (можно по примеру из `data_example/groups/group_example/`).
+
+Быстрый старт из примеров:
+
+```bash
+mkdir -p data/groups/group_example
+cp data_example/students_example.json data/students.json
+cp data_example/contests_example.json data/contests.json
+cp data_example/groups/group_example/group_example.json data/groups/group_example/group.json
+cp data_example/groups/group_example/contests_example.json data/groups/group_example/contests.json
+cp data_example/student_intake_example.json data/student_intake.json
+```
+
+После этого можно сразу запускать генерацию и сервер.
 
 ### Как сгенерировать standings
 
@@ -55,7 +69,7 @@ go run ./cmd/generate
 go run ./cmd/generate \
   -data-dir ./data \
   -generated-dir ./generated \
-  -group group_10a
+  -group group_example
 ```
 
 Что произойдёт:
@@ -98,7 +112,7 @@ API:
     "full_name": "Иванов Иван Иванович",
     "codeforces": "tourist",
     "informatics": "12345",
-    "group": "group_10a"
+    "group": "group_example"
   }
 }
 ```
@@ -250,4 +264,4 @@ go run ./cmd/merge_students -write
 - Да: `go run ./cmd/generate -group <group_slug>`.
 
 **Где смотреть примеры входных данных?**
-- В каталоге `data/` есть `*_example.json`.
+- Все примеры лежат в `data_example/` и не используются автоматически.

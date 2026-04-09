@@ -1,0 +1,14 @@
+[
+  {
+    "id": "contest_basics_tasks",
+    "update": true
+  },
+  {
+    "id": "contest_olymp_tasks",
+    "update": true
+  },
+  {
+    "id": "contest_cf_provider",
+    "update": true
+  }
+]

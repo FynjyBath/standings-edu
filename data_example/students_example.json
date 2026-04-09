@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ivanov-ii",
+    "full_name": "Иванов Иван Иванович",
+    "public_name": "Иванов И. И.",
+    "accounts": [
+      {
+        "site": "codeforces",
+        "account_id": "tourist"
+      },
+      {
+        "site": "informatics",
+        "account_id": "12345"
+      }
+    ]
+  },
+  {
+    "id": "petrova-aa",
+    "full_name": "Петрова Анна Андреевна",
+    "public_name": "Петрова А. А.",
+    "accounts": [
+      {
+        "site": "codeforces",
+        "account_id": "Petr"
+      },
+      {
+        "site": "acmp",
+        "account_id": "777"
+      }
+    ]
+  }
+]

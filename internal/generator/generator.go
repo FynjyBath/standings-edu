@@ -111,28 +111,29 @@ func (g *Generator) Run(ctx context.Context, onlyGroup string) error {
 }
 
 func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings) (domain.GeneratedGroupStandings, bool) {
-	needExisting := false
+	hasNonUpdatedContests := false
 	for _, contest := range group.Contests {
 		if !contest.Update {
-			needExisting = true
+			hasNonUpdatedContests = true
 			break
 		}
 	}
 
 	existing := domain.GeneratedGroupStandings{}
 	hasExisting := false
-	if needExisting {
-		var err error
-		existing, err = g.generatedLoader.LoadGroupStandings(group.Slug)
-		hasExisting = err == nil
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				g.logger.Printf("WARN group=%s has contests with update=false but previous standings are missing", group.Slug)
-			} else {
-				g.logger.Printf("WARN group=%s load existing standings failed: %v", group.Slug, err)
-			}
-			return domain.GeneratedGroupStandings{}, false
+	existingLoaded, loadErr := g.generatedLoader.LoadGroupStandings(group.Slug)
+	if loadErr == nil {
+		existing = existingLoaded
+		hasExisting = true
+	} else if !errors.Is(loadErr, os.ErrNotExist) {
+		g.logger.Printf("WARN group=%s load existing standings failed: %v", group.Slug, loadErr)
+	}
+
+	if hasNonUpdatedContests && !hasExisting {
+		if errors.Is(loadErr, os.ErrNotExist) {
+			g.logger.Printf("WARN group=%s has contests with update=false but previous standings are missing", group.Slug)
 		}
+		return domain.GeneratedGroupStandings{}, false
 	}
 
 	updatedByID := makeContestBuckets(updated.Contests)
@@ -151,7 +152,15 @@ func (g *Generator) mergeWithNonUpdatedContests(group domain.GroupDefinition, up
 		if contestRef.Update {
 			contest, ok := takeFirstContest(updatedByID, contestRef.ID)
 			if !ok {
-				g.logger.Printf("WARN group=%s contest=%s marked update=true but not built", group.Slug, contestRef.ID)
+				if hasExisting {
+					existingContest, oldOK := takeFirstContest(existingByID, contestRef.ID)
+					if oldOK {
+						g.logger.Printf("WARN group=%s contest=%s update=true but not built; keep previous generated version", group.Slug, contestRef.ID)
+						merged.Contests = append(merged.Contests, existingContest)
+						continue
+					}
+				}
+				g.logger.Printf("WARN group=%s contest=%s update=true but not built and no previous version found", group.Slug, contestRef.ID)
 				continue
 			}
 			merged.Contests = append(merged.Contests, contest)

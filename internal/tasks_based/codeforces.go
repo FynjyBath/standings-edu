@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,9 @@ const codeforcesPageSize = 10000
 type CodeforcesAPIClient struct {
 	baseURL    string
 	httpClient *http.Client
+	minGap     time.Duration
+	rateMu     sync.Mutex
+	lastReqAt  time.Time
 }
 
 type CodeforcesContestStandings struct {
@@ -53,6 +57,7 @@ func NewCodeforcesAPIClient() *CodeforcesAPIClient {
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
+		minGap: 350 * time.Millisecond,
 	}
 }
 
@@ -85,6 +90,10 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
+		return CodeforcesContestStandings{}, err
+	}
+
+	if err := c.waitRateLimit(ctx); err != nil {
 		return CodeforcesContestStandings{}, err
 	}
 
@@ -251,6 +260,10 @@ func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from
 		return codeforcesAPIResponse{}, err
 	}
 
+	if err := c.waitRateLimit(ctx); err != nil {
+		return codeforcesAPIResponse{}, err
+	}
+
 	res, err := c.httpClient.Do(req)
 	if err != nil {
 		return codeforcesAPIResponse{}, err
@@ -320,6 +333,31 @@ func normalizeCodeforcesHandles(handles []string) []string {
 		out = append(out, handle)
 	}
 	return out
+}
+
+func (c *CodeforcesAPIClient) waitRateLimit(ctx context.Context) error {
+	if c == nil || c.minGap <= 0 {
+		return nil
+	}
+
+	for {
+		c.rateMu.Lock()
+		wait := c.minGap - time.Since(c.lastReqAt)
+		if c.lastReqAt.IsZero() || wait <= 0 {
+			c.lastReqAt = time.Now()
+			c.rateMu.Unlock()
+			return nil
+		}
+		c.rateMu.Unlock()
+
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 type codeforcesAPIResponse struct {

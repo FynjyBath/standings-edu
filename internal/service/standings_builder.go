@@ -239,6 +239,10 @@ func (b *StandingsBuilder) buildGroupStandingsPrepared(ctx context.Context, sour
 			statusByStudent: statusByStudent,
 		})
 		if err != nil {
+			if contest.TypeOrDefault() == domain.ContestTypeProvider {
+				b.logger.Printf("WARN group=%s contest_id=%s provider build failed; keep previous generated version if available: %v", group.Slug, contest.ID, err)
+				continue
+			}
 			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s builder=%s: %w", contest.ID, layer.Name(), err)
 		}
 		out.Contests = append(out.Contests, generatedContest)

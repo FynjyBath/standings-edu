@@ -51,7 +51,6 @@
     <button type="button" id="admin-file-validate" class="admin-btn admin-btn--secondary">Проверить JSON</button>
     <button type="button" id="admin-file-save" class="admin-btn">Сохранить</button>
     <button type="button" id="admin-intake-merge-confirm" class="admin-btn" hidden>Сохранить и сделать merge intake</button>
-    <button type="button" id="admin-intake-merge-cancel" class="admin-btn admin-btn--secondary" hidden>Выйти из merge-режима</button>
   </div>
   <div id="admin-editor" class="admin-editor" aria-label="JSON editor"></div>
   <p id="admin-editor-status" class="admin-editor-status">Выберите файл для редактирования.</p>
@@ -91,13 +90,12 @@
     var saveButton = document.getElementById("admin-file-save");
     var intakePrepareButton = document.getElementById("admin-intake-prepare");
     var intakeMergeConfirmButton = document.getElementById("admin-intake-merge-confirm");
-    var intakeMergeCancelButton = document.getElementById("admin-intake-merge-cancel");
     var statusNode = document.getElementById("admin-editor-status");
     var editorRoot = document.getElementById("admin-editor");
     var intakeStagingPath = "data/student_intake_admin.json";
-    var intakeMergeMode = false;
+    var activePath = "";
 
-    if (!select || !validateButton || !saveButton || !intakePrepareButton || !intakeMergeConfirmButton || !intakeMergeCancelButton || !statusNode || !editorRoot) {
+    if (!select || !validateButton || !saveButton || !intakePrepareButton || !intakeMergeConfirmButton || !statusNode || !editorRoot) {
       return;
     }
 
@@ -161,28 +159,8 @@
       });
     }
 
-    function ensureFileOption(path) {
-      if (!path) {
-        return;
-      }
-      for (var i = 0; i < select.options.length; i++) {
-        if (select.options[i].value === path) {
-          return;
-        }
-      }
-      var option = document.createElement("option");
-      option.value = path;
-      option.textContent = path;
-      select.appendChild(option);
-    }
-
-    function setIntakeMergeMode(enabled) {
-      intakeMergeMode = !!enabled;
-      intakeMergeConfirmButton.hidden = !intakeMergeMode;
-      intakeMergeCancelButton.hidden = !intakeMergeMode;
-      if (!intakeMergeMode) {
-        setStatus("Обычный режим JSON-редактора", false);
-      }
+    function updateIntakeMergeActionVisibility() {
+      intakeMergeConfirmButton.hidden = (activePath !== intakeStagingPath);
     }
 
     async function refreshFileList() {
@@ -192,10 +170,14 @@
       if (files.length === 0) {
         buildFileOptions([], "");
         editor.setValue("", -1);
+        activePath = "";
         setStatus("Нет доступных файлов для редактирования", true);
+        updateIntakeMergeActionVisibility();
         return;
       }
-      var selected = files.indexOf(current) >= 0 ? current : files[0];
+      var selected = files.indexOf(current) >= 0 ? current : (
+        files.indexOf(activePath) >= 0 ? activePath : files[0]
+      );
       buildFileOptions(files, selected);
       await loadFile(selected);
     }
@@ -203,17 +185,21 @@
     async function loadFile(path) {
       if (!path) {
         editor.setValue("", -1);
+        activePath = "";
+        updateIntakeMergeActionVisibility();
         setStatus("Выберите файл", true);
         return;
       }
       var payload = await fetchJSON("/api/admin/file?path=" + encodeURIComponent(path));
+      activePath = payload.path || path;
       editor.setValue(payload.content || "", -1);
       editor.clearSelection();
-      setStatus("Файл загружен: " + payload.path, false);
+      updateIntakeMergeActionVisibility();
+      setStatus("Файл загружен: " + activePath, false);
     }
 
     async function validateCurrentFile() {
-      var path = select.value;
+      var path = activePath || select.value;
       var content = editor.getValue();
       await fetchJSON("/api/admin/file/validate", {
         method: "POST",
@@ -224,7 +210,7 @@
     }
 
     async function saveCurrentFile() {
-      var path = select.value;
+      var path = activePath || select.value;
       var content = editor.getValue();
       var payload = await fetchJSON("/api/admin/file/save", {
         method: "POST",
@@ -238,18 +224,16 @@
       var payload = await fetchJSON("/api/admin/actions/intake/prepare", {
         method: "POST"
       });
-      var path = payload.path || intakeStagingPath;
-      ensureFileOption(path);
-      select.value = path;
+      activePath = payload.path || intakeStagingPath;
       editor.setValue(payload.content || "", -1);
       editor.clearSelection();
-      setIntakeMergeMode(true);
-      setStatus("Merge-режим: редактируется " + path, false);
+      updateIntakeMergeActionVisibility();
+      setStatus("Merge-режим: редактируется " + activePath, false);
     }
 
     async function saveAndMergeIntakeStaging() {
-      if (!intakeMergeMode) {
-        setStatus("Сначала включите merge-режим intake", true);
+      if (activePath !== intakeStagingPath) {
+        setStatus("Выберите intake staging через кнопку", true);
         return;
       }
       await fetchJSON("/api/admin/actions/intake/merge", {
@@ -261,9 +245,6 @@
     }
 
     select.addEventListener("change", function () {
-      if (intakeMergeMode && select.value !== intakeStagingPath) {
-        setIntakeMergeMode(false);
-      }
       loadFile(select.value).catch(function (err) {
         setStatus(err.message, true);
       });
@@ -291,10 +272,6 @@
       saveAndMergeIntakeStaging().catch(function (err) {
         setStatus(err.message, true);
       });
-    });
-
-    intakeMergeCancelButton.addEventListener("click", function () {
-      setIntakeMergeMode(false);
     });
 
     var defaultPath = {{printf "%q" .DefaultPath}};

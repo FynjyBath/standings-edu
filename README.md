@@ -189,7 +189,8 @@ API:
 
 Что есть в админке:
 - действия `update/build` (git pull + сборка бинарников), `generate`, `create_group`;
-- JSON-редактор для `data/students.json`, `data/contests.json`, `data/student_intake_admin.json` и group-файлов;
+- JSON-редактор для `data/students.json`, `data/contests.json` и group-файлов;
+- отдельная кнопка для открытия `data/student_intake_admin.json` в merge-сценарии intake;
 - блок результата последнего admin-действия с кодом выхода и полным stdout/stderr.
 
 Отдельный flow для intake merge через staging:

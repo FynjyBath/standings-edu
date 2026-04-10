@@ -131,7 +131,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 	files, err := h.listEditableFiles()
 	if err != nil {
 		h.logger.Printf("ERROR list editable files: %v", err)
-		files = []string{"data/students.json", "data/contests.json", adminIntakeStagingPath}
+		files = []string{"data/students.json", "data/contests.json"}
 	}
 
 	defaultPath := ""
@@ -573,7 +573,7 @@ func (h *Handlers) listEditableFiles() ([]string, error) {
 		return nil, fmt.Errorf("admin is not configured")
 	}
 
-	files := []string{"data/students.json", "data/contests.json", adminIntakeStagingPath}
+	files := []string{"data/students.json", "data/contests.json"}
 	groupsDir := filepath.Join(h.admin.cfg.DataDir, "groups")
 	entries, err := os.ReadDir(groupsDir)
 	if err != nil {

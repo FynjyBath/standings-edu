@@ -433,7 +433,12 @@ func (h *Handlers) buildUpdateCommands() ([]adminCommand, error) {
 
 		commands = append(commands, adminCommand{
 			Path: "go",
-			Args: []string{"build", "-o", filepath.ToSlash(filepath.Join("./bin", target)), filepath.ToSlash(filepath.Join("./cmd", target))},
+			Args: []string{
+				"build",
+				"-o",
+				"./bin/" + target,
+				"./cmd/" + target,
+			},
 		})
 	}
 

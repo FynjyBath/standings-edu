@@ -21,6 +21,7 @@ func main() {
 		onlyGroup        = flag.String("group", "", "optional group slug to generate")
 		parallelism      = flag.Int("parallelism", 8, "max concurrent account fetches")
 		informaticsCreds = flag.String("informatics-creds-file", "./data/sites/informatics_credentials.json", "path to informatics credentials JSON")
+		codeforcesCreds  = flag.String("codeforces-creds-file", "./data/sites/codeforces_credentials.json", "path to optional codeforces credentials JSON")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 	)
 	flag.Parse()
@@ -37,7 +38,10 @@ func main() {
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)
 	}
-	cfClient := source.NewCodeforcesAPIClient()
+	cfClient, err := source.NewCodeforcesAPIClientFromFile(*codeforcesCreds)
+	if err != nil {
+		logger.Fatalf("failed to init codeforces client: %v", err)
+	}
 
 	registry := source.NewRegistry()
 	registry.RegisterSite("informatics", infClient)

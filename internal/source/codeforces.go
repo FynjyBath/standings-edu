@@ -2,12 +2,17 @@ package source
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,13 +24,22 @@ import (
 
 const defaultCodeforcesBaseURL = "https://codeforces.com/api"
 const codeforcesPageSize = 10000
+const codeforcesAPIRandBytes = 3
 
 type CodeforcesAPIClient struct {
 	baseURL    string
 	httpClient *http.Client
+	apiKey     string
+	apiSecret  string
 	minGap     time.Duration
 	rateMu     sync.Mutex
 	lastReqAt  time.Time
+}
+
+type CodeforcesCredentials struct {
+	Key     string `json:"key"`
+	Secret  string `json:"secret"`
+	BaseURL string `json:"base_url,omitempty"`
 }
 
 type CodeforcesContestStandings struct {
@@ -63,6 +77,70 @@ func NewCodeforcesAPIClient() *CodeforcesAPIClient {
 	}
 }
 
+func LoadCodeforcesCredentials(path string) (CodeforcesCredentials, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return CodeforcesCredentials{}, fmt.Errorf("read codeforces credentials: %w", err)
+	}
+
+	if strings.TrimSpace(string(b)) == "" {
+		return CodeforcesCredentials{}, nil
+	}
+
+	var creds CodeforcesCredentials
+	if err := json.Unmarshal(b, &creds); err != nil {
+		return CodeforcesCredentials{}, fmt.Errorf("decode codeforces credentials: %w", err)
+	}
+
+	creds.Key = strings.TrimSpace(creds.Key)
+	creds.Secret = strings.TrimSpace(creds.Secret)
+	creds.BaseURL = strings.TrimRight(strings.TrimSpace(creds.BaseURL), "/")
+	if creds.BaseURL == "" {
+		creds.BaseURL = defaultCodeforcesBaseURL
+	}
+
+	if (creds.Key == "") != (creds.Secret == "") {
+		return CodeforcesCredentials{}, errors.New("codeforces credentials require both key and secret")
+	}
+
+	return creds, nil
+}
+
+func NewCodeforcesAPIClientFromFile(path string) (*CodeforcesAPIClient, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return NewCodeforcesAPIClient(), nil
+	}
+
+	creds, err := LoadCodeforcesCredentials(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return NewCodeforcesAPIClient(), nil
+		}
+		return nil, err
+	}
+	return NewCodeforcesAPIClientWithCredentials(creds)
+}
+
+func NewCodeforcesAPIClientWithCredentials(creds CodeforcesCredentials) (*CodeforcesAPIClient, error) {
+	key := strings.TrimSpace(creds.Key)
+	secret := strings.TrimSpace(creds.Secret)
+	if (key == "") != (secret == "") {
+		return nil, errors.New("codeforces credentials require both key and secret")
+	}
+
+	baseURL := strings.TrimRight(strings.TrimSpace(creds.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = defaultCodeforcesBaseURL
+	}
+
+	client := NewCodeforcesAPIClient()
+	client.baseURL = baseURL
+	client.apiKey = key
+	client.apiSecret = secret
+	return client, nil
+}
+
 func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contestID int, handles []string, showUnofficial bool) (CodeforcesContestStandings, error) {
 	if contestID <= 0 {
 		return CodeforcesContestStandings{}, fmt.Errorf("invalid contest_id=%d", contestID)
@@ -73,12 +151,7 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 		return CodeforcesContestStandings{}, fmt.Errorf("empty handles list")
 	}
 
-	u, err := url.Parse(c.baseURL + "/contest.standings")
-	if err != nil {
-		return CodeforcesContestStandings{}, err
-	}
-
-	q := u.Query()
+	q := make(url.Values)
 	q.Set("contestId", strconv.Itoa(contestID))
 	q.Set("from", "1")
 	q.Set("count", strconv.Itoa(len(normalizedHandles)))
@@ -88,9 +161,8 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 	} else {
 		q.Set("showUnofficial", "false")
 	}
-	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := c.newAPIRequest(ctx, "contest.standings", q)
 	if err != nil {
 		return CodeforcesContestStandings{}, err
 	}
@@ -246,18 +318,12 @@ func (c *CodeforcesAPIClient) MatchTaskURL(taskURL string) bool {
 }
 
 func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from int, count int) (codeforcesAPIResponse, error) {
-	u, err := url.Parse(c.baseURL + "/user.status")
-	if err != nil {
-		return codeforcesAPIResponse{}, err
-	}
-
-	q := u.Query()
+	q := make(url.Values)
 	q.Set("handle", handle)
 	q.Set("from", strconv.Itoa(from))
 	q.Set("count", strconv.Itoa(count))
-	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := c.newAPIRequest(ctx, "user.status", q)
 	if err != nil {
 		return codeforcesAPIResponse{}, err
 	}
@@ -286,6 +352,90 @@ func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from
 	}
 
 	return decoded, nil
+}
+
+func (c *CodeforcesAPIClient) newAPIRequest(ctx context.Context, methodName string, params url.Values) (*http.Request, error) {
+	methodName = strings.TrimSpace(strings.TrimLeft(methodName, "/"))
+	if methodName == "" {
+		return nil, errors.New("codeforces method name is required")
+	}
+
+	u, err := url.Parse(c.baseURL + "/" + methodName)
+	if err != nil {
+		return nil, err
+	}
+
+	if params == nil {
+		params = make(url.Values)
+	}
+	if err := c.addSignedQueryParams(methodName, params); err != nil {
+		return nil, err
+	}
+
+	u.RawQuery = params.Encode()
+	return http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+}
+
+func (c *CodeforcesAPIClient) addSignedQueryParams(methodName string, params url.Values) error {
+	if c == nil || c.apiKey == "" || c.apiSecret == "" {
+		return nil
+	}
+
+	params.Set("apiKey", c.apiKey)
+	params.Set("time", strconv.FormatInt(time.Now().Unix(), 10))
+
+	randPrefix, err := generateCodeforcesAPIRand()
+	if err != nil {
+		return fmt.Errorf("generate codeforces api rand: %w", err)
+	}
+
+	signatureBase := fmt.Sprintf("%s/%s?%s#%s", randPrefix, methodName, encodeCodeforcesQueryParams(params), c.apiSecret)
+	hash := sha512.Sum512([]byte(signatureBase))
+	params.Set("apiSig", randPrefix+hex.EncodeToString(hash[:]))
+	return nil
+}
+
+func encodeCodeforcesQueryParams(params url.Values) string {
+	type pair struct {
+		key   string
+		value string
+	}
+
+	pairs := make([]pair, 0, len(params))
+	for key, values := range params {
+		if key == "apiSig" {
+			continue
+		}
+		for _, value := range values {
+			pairs = append(pairs, pair{key: key, value: value})
+		}
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].key != pairs[j].key {
+			return pairs[i].key < pairs[j].key
+		}
+		return pairs[i].value < pairs[j].value
+	})
+
+	var b strings.Builder
+	for i, p := range pairs {
+		if i > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(url.QueryEscape(p.key))
+		b.WriteByte('=')
+		b.WriteString(url.QueryEscape(p.value))
+	}
+	return b.String()
+}
+
+func generateCodeforcesAPIRand() (string, error) {
+	buf := make([]byte, codeforcesAPIRandBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func buildCodeforcesProblemURL(p codeforcesProblem) string {

@@ -116,12 +116,36 @@ go run ./cmd/generate
 go run ./cmd/generate \
   -data-dir ./data \
   -generated-dir ./generated \
-  -group group_example
+  -group group_example \
+  -codeforces-creds-file ./data/sites/codeforces_credentials.json
 ```
 
 Что произойдёт:
 - в `generated/groups.json` появится список групп;
 - в `generated/standings/<group>.json` появятся таблицы по группам.
+
+### Credentials для источников
+
+- `informatics`:
+  - используется `-informatics-creds-file` (по умолчанию `./data/sites/informatics_credentials.json`);
+  - файл должен содержать `username` и `password`.
+- `codeforces`:
+  - используется `-codeforces-creds-file` (по умолчанию `./data/sites/codeforces_credentials.json`);
+  - файл опциональный;
+  - если файл отсутствует или в нём пустые `key`/`secret`, клиент работает в anonymous mode;
+  - если файл существует, но JSON невалидный, `cmd/generate` завершится с ошибкой.
+
+Формат `codeforces_credentials.json`:
+
+```json
+{
+  "key": "YOUR_CODEFORCES_API_KEY",
+  "secret": "YOUR_CODEFORCES_API_SECRET",
+  "base_url": "https://codeforces.com/api"
+}
+```
+
+`base_url` опционален: если не задан, используется `https://codeforces.com/api`.
 
 ### Как запустить сервер
 
@@ -325,6 +349,9 @@ go run ./cmd/merge_students -write
 
 **Нужны ли креды Informatics всегда?**
 - Нет, только если вы используете `informatics` как источник задач.
+
+**Нужны ли креды Codeforces всегда?**
+- Нет. Публичные методы работают анонимно, а API-ключ/секрет нужны только для signed requests.
 
 **Можно ли запускать только одну группу?**
 - Да: `go run ./cmd/generate -group <group_slug>`.

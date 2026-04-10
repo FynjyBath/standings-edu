@@ -3,7 +3,7 @@
   <h1>{{.Standings.GroupTitle}}</h1>
   <p>Slug: <code>{{.Standings.GroupSlug}}</code></p>
   {{if .Standings.FormLink}}
-  <p>Форма: <a href="{{.Standings.FormLink}}" target="_blank" rel="noopener noreferrer">{{.Standings.FormLink}}</a></p>
+  <p>Форма добавления/обновления данных аккаунтов: <a href="{{.Standings.FormLink}}" target="_blank" rel="noopener noreferrer">{{.Standings.FormLink}}</a></p>
   {{end}}
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary">Все</a>
@@ -17,6 +17,16 @@
   {{$contest := .}}
   <section class="contest-block">
     <h2>{{.Title}}</h2>
+    {{if .Materials}}
+    <div class="contest-materials-block">
+      <p class="contest-materials-title">Полезные ссылки:</p>
+      <ul class="contest-materials-list">
+        {{range .Materials}}
+        <li><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a></li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
     <div class="table-wrap">
       <table class="standings-table">
         <thead>

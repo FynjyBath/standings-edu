@@ -35,6 +35,39 @@
 - `data/groups/<group_slug>/group.json` — информация о группе (включая `form_link`);
 - `data/groups/<group_slug>/contests.json` — контесты группы.
 
+Поле `materials` в `data/contests.json` (опционально):
+- формат: массив объектов `{ "title": "...", "url": "..." }`;
+- если `materials` отсутствует или пустой, всё работает как раньше;
+- ссылки из `materials` отображаются на странице группы `GET /standings/<group_slug>` внутри блока контеста.
+
+Пример контеста с `materials`:
+
+```json
+{
+  "id": "contest_basics_tasks",
+  "title": "Базовые задачи",
+  "olympiad": false,
+  "materials": [
+    {
+      "title": "Разбор",
+      "url": "https://example.com/review"
+    },
+    {
+      "title": "Видеозапись",
+      "url": "https://example.com/video"
+    }
+  ],
+  "subcontests": [
+    {
+      "title": "Разминка",
+      "tasks": [
+        "https://codeforces.com/problemset/problem/4/A"
+      ]
+    }
+  ]
+}
+```
+
 Полезные примеры лежат в `data_example/`.
 Этот каталог используется только как шаблон: команды проекта читают данные из `data/`.
 
@@ -243,6 +276,7 @@ go run ./cmd/merge_students -write
    - `contest_type: "provider"`
    - `provider: "<provider_id>"`
    - `provider_config: {...}`
+   - при необходимости `materials: [{ "title": "...", "url": "..." }]`
 5. Подключите контест к группе через `data/groups/<group>/contests.json`.
 
 ### На что смотреть при расширении

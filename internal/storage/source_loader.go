@@ -75,9 +75,11 @@ func (l *SourceLoader) loadContests() (map[string]domain.Contest, error) {
 
 	out := make(map[string]domain.Contest, len(contests))
 	for _, c := range contests {
+		c.ID = strings.TrimSpace(c.ID)
 		if c.ID == "" {
 			continue
 		}
+		c.Materials = domain.NormalizeContestMaterials(c.Materials)
 		out[c.ID] = c
 	}
 	return out, nil

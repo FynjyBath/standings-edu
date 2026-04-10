@@ -352,6 +352,7 @@ func (b *Builder) buildProviderContestStandings(
 		return domain.GeneratedContestStandings{}, err
 	}
 	standings.ContestType = domain.ContestTypeProvider
+	standings.Materials = domain.NormalizeContestMaterials(contest.Materials)
 	return standings, nil
 }
 
@@ -361,6 +362,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		Title:       contest.Title,
 		Olympiad:    contest.Olympiad,
 		ContestType: domain.ContestTypeTasks,
+		Materials:   domain.NormalizeContestMaterials(contest.Materials),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),

@@ -358,6 +358,35 @@ main.container {
   color: var(--accent-strong);
 }
 
+.contest-materials-block {
+  margin: 0 0 0.8rem;
+}
+
+.contest-materials-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.contest-materials-list {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.contest-materials-list li + li {
+  margin-top: 0.15rem;
+}
+
+.contest-materials-list a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.contest-materials-list a:hover {
+  color: var(--accent);
+}
+
 .table-wrap {
   overflow-x: auto;
   border-radius: 12px;

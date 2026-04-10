@@ -23,14 +23,20 @@ type Subcontest struct {
 	Tasks []string `json:"tasks"`
 }
 
+type ContestMaterial struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
 type Contest struct {
-	ID             string          `json:"id"`
-	Title          string          `json:"title"`
-	Olympiad       bool            `json:"olympiad"`
-	ContestType    string          `json:"contest_type,omitempty"`
-	Provider       string          `json:"provider,omitempty"`
-	ProviderConfig json.RawMessage `json:"provider_config,omitempty"`
-	Subcontests    []Subcontest    `json:"subcontests"`
+	ID             string            `json:"id"`
+	Title          string            `json:"title"`
+	Olympiad       bool              `json:"olympiad"`
+	ContestType    string            `json:"contest_type,omitempty"`
+	Provider       string            `json:"provider,omitempty"`
+	ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
+	Materials      []ContestMaterial `json:"materials,omitempty"`
+	Subcontests    []Subcontest      `json:"subcontests"`
 }
 
 const (
@@ -44,6 +50,34 @@ func (c Contest) TypeOrDefault() string {
 		return ContestTypeTasks
 	}
 	return typ
+}
+
+func NormalizeContestMaterials(materials []ContestMaterial) []ContestMaterial {
+	if len(materials) == 0 {
+		return nil
+	}
+
+	out := make([]ContestMaterial, 0, len(materials))
+	for _, material := range materials {
+		url := strings.TrimSpace(material.URL)
+		if url == "" {
+			continue
+		}
+
+		title := strings.TrimSpace(material.Title)
+		if title == "" {
+			title = url
+		}
+
+		out = append(out, ContestMaterial{
+			Title: title,
+			URL:   url,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 type GroupFile struct {
@@ -113,6 +147,7 @@ type GeneratedContestStandings struct {
 	Title       string                `json:"title"`
 	Olympiad    bool                  `json:"olympiad"`
 	ContestType string                `json:"contest_type,omitempty"`
+	Materials   []ContestMaterial     `json:"materials,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`

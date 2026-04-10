@@ -3,6 +3,16 @@
     "id": "contest_basics_tasks",
     "title": "Базовые задачи (tasks)",
     "olympiad": false,
+    "materials": [
+      {
+        "title": "Разбор занятия",
+        "url": "https://example.com/materials/basics-review"
+      },
+      {
+        "title": "Подборка похожих задач",
+        "url": "https://example.com/materials/basics-extra"
+      }
+    ],
     "subcontests": [
       {
         "title": "Разминка",
@@ -33,6 +43,12 @@
     "olympiad": true,
     "contest_type": "provider",
     "provider": "codeforces_contest",
+    "materials": [
+      {
+        "title": "Официальный разбор Codeforces",
+        "url": "https://codeforces.com/blog"
+      }
+    ],
     "provider_config": {
       "contest_id": 1711,
       "show_unofficial": true

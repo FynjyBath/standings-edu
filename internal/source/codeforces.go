@@ -423,9 +423,9 @@ func encodeCodeforcesQueryParams(params url.Values) string {
 		if i > 0 {
 			b.WriteByte('&')
 		}
-		b.WriteString(url.QueryEscape(p.key))
+		b.WriteString(p.key)
 		b.WriteByte('=')
-		b.WriteString(url.QueryEscape(p.value))
+		b.WriteString(p.value)
 	}
 	return b.String()
 }

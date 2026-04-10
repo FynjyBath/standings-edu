@@ -195,7 +195,7 @@ API:
 
 Отдельный flow для intake merge через staging:
 1. Нажмите кнопку `Редактировать intake staging для merge`.
-2. Если `data/student_intake_admin.json` пустой или отсутствует, админка копирует в него текущее содержимое `data/student_intake.json`.
+2. Если `data/student_intake_admin.json` пустой или отсутствует, админка переносит в него текущее содержимое `data/student_intake.json` и очищает `data/student_intake.json`.
 3. В редактор открывается `data/student_intake_admin.json`.
 4. После правок нажмите `Сохранить и сделать merge intake`.
 5. Админка сохраняет staging-файл и запускает:

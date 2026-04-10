@@ -86,8 +86,6 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 	return savedIntake, nil
 }
 
-// PrepareAdminIntakeStaging ensures a non-empty staging file for manual admin merge.
-// If staging is empty or missing, it is atomically filled from the current intake file.
 func (s *Store) PrepareAdminIntakeStaging(stagingPath string) ([]byte, error) {
 	stagingPath = filepath.Clean(strings.TrimSpace(stagingPath))
 	if stagingPath == "" || stagingPath == "." {
@@ -122,6 +120,14 @@ func (s *Store) PrepareAdminIntakeStaging(stagingPath string) ([]byte, error) {
 	}
 	if err := writeFileAtomically(stagingPath, sourceBody, mode); err != nil {
 		return nil, fmt.Errorf("write staging file %q: %w", stagingPath, err)
+	}
+
+	intakeMode, err := detectFileMode(s.intakePath, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeFileAtomically(s.intakePath, []byte("[]\n"), intakeMode); err != nil {
+		return nil, fmt.Errorf("clear source intake file %q: %w", s.intakePath, err)
 	}
 	return append([]byte(nil), sourceBody...), nil
 }

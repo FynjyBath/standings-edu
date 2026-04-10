@@ -357,12 +357,12 @@ func (b *Builder) buildProviderContestStandings(
 }
 
 func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
-	isIOI := contest.Olympiad.IsIOI()
+	isIOI := contest.ScoreSystem.IsIOI()
 
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
-		Olympiad:    contest.Olympiad.Normalized(),
+		ScoreSystem: contest.ScoreSystem.Normalized(),
 		ContestType: domain.ContestTypeTasks,
 		Materials:   domain.NormalizeContestMaterials(contest.Materials),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),

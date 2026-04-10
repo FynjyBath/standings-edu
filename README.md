@@ -1,4 +1,4 @@
-# Olympiad Standings
+# Standings EDU
 
 Простой сервис для ведения таблиц результатов по олимпиадным задачам.
 
@@ -46,7 +46,7 @@
 {
   "id": "contest_basics_tasks",
   "title": "Базовые задачи",
-  "olympiad": "edu",
+  "score_system": "edu",
   "materials": [
     {
       "title": "Разбор",

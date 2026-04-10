@@ -35,7 +35,7 @@
             <th rowspan="2" class="count-col">Место</th>
             {{end}}
             <th rowspan="2" class="student-col">Ученик</th>
-            <th rowspan="2" class="count-col">{{if eq .Olympiad "ioi"}}Баллы{{else}}Решено{{end}}</th>
+            <th rowspan="2" class="count-col">{{if eq .ScoreSystem "ioi"}}Баллы{{else}}Решено{{end}}</th>
             {{if and (eq .ContestType "provider") (hasPenaltyColumn .Rows)}}
             <th rowspan="2" class="count-col">Штраф</th>
             {{end}}
@@ -67,11 +67,11 @@
             <td class="solved-count">{{placeText .Place}}</td>
             {{end}}
             <td class="student-name">{{.PublicName}}</td>
-            <td class="solved-count">{{if eq $contest.Olympiad "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
+            <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if and (eq $contest.ContestType "provider") (hasPenaltyColumn $contest.Rows)}}
             <td class="solved-count">{{penaltyText .Penalty}}</td>
             {{end}}
-            {{if eq $contest.Olympiad "ioi"}}
+            {{if eq $contest.ScoreSystem "ioi"}}
               {{range .Scores}}
               <td class="score-cell" style="--score-alpha: {{scoreAlpha .}};">{{scoreText .}}</td>
               {{end}}

@@ -29,69 +29,91 @@ type ContestMaterial struct {
 	URL   string `json:"url"`
 }
 
-type OlympiadMode string
+type ScoreSystem string
 
 const (
-	OlympiadModeEdu OlympiadMode = "edu"
-	OlympiadModeIOI OlympiadMode = "ioi"
+	ScoreSystemEdu ScoreSystem = "edu"
+	ScoreSystemIOI ScoreSystem = "ioi"
 )
 
-func (m OlympiadMode) Normalized() OlympiadMode {
+func (m ScoreSystem) Normalized() ScoreSystem {
 	switch strings.ToLower(strings.TrimSpace(string(m))) {
-	case "", string(OlympiadModeEdu):
-		return OlympiadModeEdu
-	case string(OlympiadModeIOI):
-		return OlympiadModeIOI
+	case "", string(ScoreSystemEdu):
+		return ScoreSystemEdu
+	case string(ScoreSystemIOI):
+		return ScoreSystemIOI
 	default:
-		return OlympiadModeEdu
+		return ScoreSystemEdu
 	}
 }
 
-func (m OlympiadMode) IsIOI() bool {
-	return m.Normalized() == OlympiadModeIOI
+func (m ScoreSystem) IsIOI() bool {
+	return m.Normalized() == ScoreSystemIOI
 }
 
-func (m OlympiadMode) MarshalJSON() ([]byte, error) {
+func (m ScoreSystem) MarshalJSON() ([]byte, error) {
 	return json.Marshal(string(m.Normalized()))
 }
 
-func (m *OlympiadMode) UnmarshalJSON(data []byte) error {
+func (m *ScoreSystem) UnmarshalJSON(data []byte) error {
 	var asString string
 	if err := json.Unmarshal(data, &asString); err == nil {
 		switch strings.ToLower(strings.TrimSpace(asString)) {
-		case "", string(OlympiadModeEdu):
-			*m = OlympiadModeEdu
+		case "", string(ScoreSystemEdu):
+			*m = ScoreSystemEdu
 			return nil
-		case string(OlympiadModeIOI):
-			*m = OlympiadModeIOI
+		case string(ScoreSystemIOI):
+			*m = ScoreSystemIOI
 			return nil
 		default:
-			return fmt.Errorf("olympiad must be %q or %q", OlympiadModeEdu, OlympiadModeIOI)
+			return fmt.Errorf("score_system must be %q or %q", ScoreSystemEdu, ScoreSystemIOI)
 		}
 	}
-
-	var asBool bool
-	if err := json.Unmarshal(data, &asBool); err == nil {
-		if asBool {
-			*m = OlympiadModeIOI
-		} else {
-			*m = OlympiadModeEdu
-		}
-		return nil
-	}
-
-	return fmt.Errorf("olympiad must be string (%q/%q) or bool", OlympiadModeEdu, OlympiadModeIOI)
+	return fmt.Errorf("score_system must be string (%q/%q)", ScoreSystemEdu, ScoreSystemIOI)
 }
 
 type Contest struct {
 	ID             string            `json:"id"`
 	Title          string            `json:"title"`
-	Olympiad       OlympiadMode      `json:"olympiad"`
+	ScoreSystem    ScoreSystem       `json:"score_system"`
 	ContestType    string            `json:"contest_type,omitempty"`
 	Provider       string            `json:"provider,omitempty"`
 	ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
 	Materials      []ContestMaterial `json:"materials,omitempty"`
 	Subcontests    []Subcontest      `json:"subcontests"`
+}
+
+func (c *Contest) UnmarshalJSON(data []byte) error {
+	type rawContest struct {
+		ID             string            `json:"id"`
+		Title          string            `json:"title"`
+		ScoreSystem    *ScoreSystem      `json:"score_system"`
+		ContestType    string            `json:"contest_type,omitempty"`
+		Provider       string            `json:"provider,omitempty"`
+		ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
+		Materials      []ContestMaterial `json:"materials,omitempty"`
+		Subcontests    []Subcontest      `json:"subcontests"`
+	}
+
+	var raw rawContest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*c = Contest{
+		ID:             raw.ID,
+		Title:          raw.Title,
+		ContestType:    raw.ContestType,
+		Provider:       raw.Provider,
+		ProviderConfig: raw.ProviderConfig,
+		Materials:      raw.Materials,
+		Subcontests:    raw.Subcontests,
+		ScoreSystem:    ScoreSystemEdu,
+	}
+	if raw.ScoreSystem != nil {
+		c.ScoreSystem = raw.ScoreSystem.Normalized()
+	}
+	return nil
 }
 
 const (
@@ -200,12 +222,45 @@ type GeneratedRow struct {
 type GeneratedContestStandings struct {
 	ID          string                `json:"id"`
 	Title       string                `json:"title"`
-	Olympiad    OlympiadMode          `json:"olympiad"`
+	ScoreSystem ScoreSystem           `json:"score_system"`
 	ContestType string                `json:"contest_type,omitempty"`
 	Materials   []ContestMaterial     `json:"materials,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`
+}
+
+func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
+	type rawGeneratedContest struct {
+		ID          string                `json:"id"`
+		Title       string                `json:"title"`
+		ScoreSystem *ScoreSystem          `json:"score_system"`
+		ContestType string                `json:"contest_type,omitempty"`
+		Materials   []ContestMaterial     `json:"materials,omitempty"`
+		Subcontests []GeneratedSubcontest `json:"subcontests"`
+		Tasks       []GeneratedTask       `json:"tasks"`
+		Rows        []GeneratedRow        `json:"rows"`
+	}
+
+	var raw rawGeneratedContest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*c = GeneratedContestStandings{
+		ID:          raw.ID,
+		Title:       raw.Title,
+		ContestType: raw.ContestType,
+		Materials:   raw.Materials,
+		Subcontests: raw.Subcontests,
+		Tasks:       raw.Tasks,
+		Rows:        raw.Rows,
+		ScoreSystem: ScoreSystemEdu,
+	}
+	if raw.ScoreSystem != nil {
+		c.ScoreSystem = raw.ScoreSystem.Normalized()
+	}
+	return nil
 }
 
 type GeneratedGroupStandings struct {

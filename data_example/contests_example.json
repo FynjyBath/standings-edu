@@ -2,7 +2,7 @@
   {
     "id": "contest_basics_tasks",
     "title": "Базовые задачи (tasks)",
-    "olympiad": "edu",
+    "score_system": "edu",
     "materials": [
       {
         "title": "Разбор занятия",
@@ -26,7 +26,7 @@
   {
     "id": "contest_olymp_tasks",
     "title": "Олимпиадный блок (tasks + score)",
-    "olympiad": "ioi",
+    "score_system": "ioi",
     "subcontests": [
       {
         "title": "Отбор",
@@ -40,7 +40,7 @@
   {
     "id": "contest_cf_provider",
     "title": "Codeforces standings (provider)",
-    "olympiad": "ioi",
+    "score_system": "ioi",
     "contest_type": "provider",
     "provider": "codeforces_contest",
     "materials": [
@@ -58,7 +58,7 @@
   {
     "id": "contest_html_table_provider",
     "title": "ROI 2024 standings (html table provider)",
-    "olympiad": "ioi",
+    "score_system": "ioi",
     "contest_type": "provider",
     "provider": "html_table_import",
     "provider_config": {

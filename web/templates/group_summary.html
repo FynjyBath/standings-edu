@@ -209,7 +209,8 @@
       contests.forEach(function (contest, contestIdx) {
         var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
         var row = contestRowMaps[contestIdx].get(student.student_id) || null;
-        var isIoi = String(contest.olympiad || "edu").toLowerCase() === "ioi";
+        var scoreSystem = contest.score_system;
+        var isIoi = String(scoreSystem || "edu").toLowerCase() === "ioi";
         for (var i = 0; i < tasks.length; i++) {
           var status = "none";
           if (row && Array.isArray(row.statuses) && i < row.statuses.length && row.statuses[i]) {

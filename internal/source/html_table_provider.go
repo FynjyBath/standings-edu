@@ -609,12 +609,12 @@ func buildImportedStandings(
 	students []domain.Student,
 	matchesByTable []tableMatchResult,
 ) domain.GeneratedContestStandings {
-	isIOI := contest.Olympiad.IsIOI()
+	isIOI := contest.ScoreSystem.IsIOI()
 
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
-		Olympiad:    contest.Olympiad.Normalized(),
+		ScoreSystem: contest.ScoreSystem.Normalized(),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(tables)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
@@ -739,7 +739,7 @@ func buildImportedStandings(
 	return out
 }
 
-func sortProviderRows(rows []domain.GeneratedRow, olympiad bool) {
+func sortProviderRows(rows []domain.GeneratedRow, isIOI bool) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		iOrd, iHas := parsePlaceOrder(rows[i].Place)
 		jOrd, jHas := parsePlaceOrder(rows[j].Place)
@@ -747,7 +747,7 @@ func sortProviderRows(rows []domain.GeneratedRow, olympiad bool) {
 			return c < 0
 		}
 
-		if olympiad {
+		if isIOI {
 			if rows[i].TotalScore != rows[j].TotalScore {
 				return rows[i].TotalScore > rows[j].TotalScore
 			}

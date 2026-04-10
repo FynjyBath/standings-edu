@@ -167,7 +167,7 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 
 func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
 	page := IndexPageData{
-		PageTitle: "Доска почёта",
+		PageTitle: "Standings",
 		Footer:    h.buildFooterInfo(),
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "index.html", page); err != nil {

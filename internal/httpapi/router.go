@@ -15,6 +15,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /standings/admin", handlers.AdminAuth(handlers.AdminPage))
 	mux.HandleFunc("POST /api/admin/actions/update", handlers.AdminAuth(handlers.AdminActionUpdate))
 	mux.HandleFunc("POST /api/admin/actions/generate", handlers.AdminAuth(handlers.AdminActionGenerate))
+	mux.HandleFunc("POST /api/admin/actions/intake/prepare", handlers.AdminAuth(handlers.AdminIntakeStagingPrepare))
+	mux.HandleFunc("POST /api/admin/actions/intake/merge", handlers.AdminAuth(handlers.AdminIntakeStagingMerge))
 	mux.HandleFunc("POST /api/admin/groups/create", handlers.AdminAuth(handlers.AdminGroupCreate))
 	mux.HandleFunc("GET /api/admin/files", handlers.AdminAuth(handlers.AdminFiles))
 	mux.HandleFunc("GET /api/admin/file", handlers.AdminAuth(handlers.AdminFile))

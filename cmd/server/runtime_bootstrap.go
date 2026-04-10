@@ -6,19 +6,24 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type serverRuntimeLayout struct {
-	GeneratedDir string
-	DataDir      string
-	StudentsPath string
-	ContestsPath string
-	IntakePath   string
+	GeneratedDir    string
+	DataDir         string
+	StudentsPath    string
+	ContestsPath    string
+	IntakePath      string
+	IntakeAdminPath string
 }
 
 func ensureServerRuntimeLayout(layout serverRuntimeLayout, logger *log.Logger) error {
 	if logger == nil {
 		logger = log.Default()
+	}
+	if strings.TrimSpace(layout.IntakeAdminPath) == "" {
+		layout.IntakeAdminPath = filepath.Join(layout.DataDir, "student_intake_admin.json")
 	}
 
 	if err := ensureDir(layout.GeneratedDir, true, logger); err != nil {
@@ -44,6 +49,9 @@ func ensureServerRuntimeLayout(layout serverRuntimeLayout, logger *log.Logger) e
 	}
 	if err := ensureJSONFile(layout.IntakePath, []byte("[]\n"), logger); err != nil {
 		return fmt.Errorf("intake file: %w", err)
+	}
+	if err := ensureJSONFile(layout.IntakeAdminPath, []byte("[]\n"), logger); err != nil {
+		return fmt.Errorf("admin intake staging file: %w", err)
 	}
 	return nil
 }

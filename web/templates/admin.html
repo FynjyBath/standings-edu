@@ -12,6 +12,7 @@
     <form method="post" action="/api/admin/actions/generate">
       <button type="submit" class="admin-btn">Сгенерировать все таблицы</button>
     </form>
+    <button type="button" id="admin-intake-prepare" class="admin-btn">Редактировать intake staging для merge</button>
   </div>
 </section>
 
@@ -49,6 +50,8 @@
     </label>
     <button type="button" id="admin-file-validate" class="admin-btn admin-btn--secondary">Проверить JSON</button>
     <button type="button" id="admin-file-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="admin-intake-merge-confirm" class="admin-btn" hidden>Сохранить и сделать merge intake</button>
+    <button type="button" id="admin-intake-merge-cancel" class="admin-btn admin-btn--secondary" hidden>Выйти из merge-режима</button>
   </div>
   <div id="admin-editor" class="admin-editor" aria-label="JSON editor"></div>
   <p id="admin-editor-status" class="admin-editor-status">Выберите файл для редактирования.</p>
@@ -86,10 +89,15 @@
     var select = document.getElementById("admin-file-select");
     var validateButton = document.getElementById("admin-file-validate");
     var saveButton = document.getElementById("admin-file-save");
+    var intakePrepareButton = document.getElementById("admin-intake-prepare");
+    var intakeMergeConfirmButton = document.getElementById("admin-intake-merge-confirm");
+    var intakeMergeCancelButton = document.getElementById("admin-intake-merge-cancel");
     var statusNode = document.getElementById("admin-editor-status");
     var editorRoot = document.getElementById("admin-editor");
+    var intakeStagingPath = "data/student_intake_admin.json";
+    var intakeMergeMode = false;
 
-    if (!select || !validateButton || !saveButton || !statusNode || !editorRoot) {
+    if (!select || !validateButton || !saveButton || !intakePrepareButton || !intakeMergeConfirmButton || !intakeMergeCancelButton || !statusNode || !editorRoot) {
       return;
     }
 
@@ -153,6 +161,30 @@
       });
     }
 
+    function ensureFileOption(path) {
+      if (!path) {
+        return;
+      }
+      for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === path) {
+          return;
+        }
+      }
+      var option = document.createElement("option");
+      option.value = path;
+      option.textContent = path;
+      select.appendChild(option);
+    }
+
+    function setIntakeMergeMode(enabled) {
+      intakeMergeMode = !!enabled;
+      intakeMergeConfirmButton.hidden = !intakeMergeMode;
+      intakeMergeCancelButton.hidden = !intakeMergeMode;
+      if (!intakeMergeMode) {
+        setStatus("Обычный режим JSON-редактора", false);
+      }
+    }
+
     async function refreshFileList() {
       var current = select.value;
       var payload = await fetchJSON("/api/admin/files");
@@ -202,7 +234,36 @@
       setStatus("Сохранено: " + payload.path, false);
     }
 
+    async function prepareIntakeStaging() {
+      var payload = await fetchJSON("/api/admin/actions/intake/prepare", {
+        method: "POST"
+      });
+      var path = payload.path || intakeStagingPath;
+      ensureFileOption(path);
+      select.value = path;
+      editor.setValue(payload.content || "", -1);
+      editor.clearSelection();
+      setIntakeMergeMode(true);
+      setStatus("Merge-режим: редактируется " + path, false);
+    }
+
+    async function saveAndMergeIntakeStaging() {
+      if (!intakeMergeMode) {
+        setStatus("Сначала включите merge-режим intake", true);
+        return;
+      }
+      await fetchJSON("/api/admin/actions/intake/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editor.getValue() })
+      });
+      window.location.href = "/standings/admin";
+    }
+
     select.addEventListener("change", function () {
+      if (intakeMergeMode && select.value !== intakeStagingPath) {
+        setIntakeMergeMode(false);
+      }
       loadFile(select.value).catch(function (err) {
         setStatus(err.message, true);
       });
@@ -218,6 +279,22 @@
       saveCurrentFile().catch(function (err) {
         setStatus(err.message, true);
       });
+    });
+
+    intakePrepareButton.addEventListener("click", function () {
+      prepareIntakeStaging().catch(function (err) {
+        setStatus(err.message, true);
+      });
+    });
+
+    intakeMergeConfirmButton.addEventListener("click", function () {
+      saveAndMergeIntakeStaging().catch(function (err) {
+        setStatus(err.message, true);
+      });
+    });
+
+    intakeMergeCancelButton.addEventListener("click", function () {
+      setIntakeMergeMode(false);
     });
 
     var defaultPath = {{printf "%q" .DefaultPath}};

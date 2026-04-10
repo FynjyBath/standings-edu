@@ -163,6 +163,7 @@ go run ./cmd/server
 - создаёт `data/`, `data/groups/` и `data/credentials/`, если их нет;
 - создаёт `data/students.json` и `data/contests.json` со значением `[]`, если файлов нет;
 - создаёт `data/student_intake.json` со значением `[]`, если файла нет.
+- создаёт `data/student_intake_admin.json` со значением `[]`, если файла нет.
 
 Важно:
 - существующие файлы не перезаписываются;
@@ -181,6 +182,28 @@ API:
 - `GET /api/groups`
 - `GET /api/groups/{group_name}/standings`
 - `POST /api/rpc`
+
+### Админка
+
+Админка доступна по `GET /standings/admin` и закрыта Basic Auth (логин/пароль из `data/credentials/admin_credentials.json`).
+
+Что есть в админке:
+- действия `update/build` (git pull + сборка бинарников), `generate`, `create_group`;
+- JSON-редактор для `data/students.json`, `data/contests.json`, `data/student_intake_admin.json` и group-файлов;
+- блок результата последнего admin-действия с кодом выхода и полным stdout/stderr.
+
+Отдельный flow для intake merge через staging:
+1. Нажмите кнопку `Редактировать intake staging для merge`.
+2. Если `data/student_intake_admin.json` пустой или отсутствует, админка копирует в него текущее содержимое `data/student_intake.json`.
+3. В редактор открывается `data/student_intake_admin.json`.
+4. После правок нажмите `Сохранить и сделать merge intake`.
+5. Админка сохраняет staging-файл и запускает:
+   - `./bin/merge_students -data-dir <dataDir> -intake-file <dataDir>/student_intake_admin.json -write`
+6. Логи merge показываются в блоке `Результат последнего действия`.
+
+Важно:
+- новые анкеты из `POST /api/rpc` продолжают записываться в обычный `data/student_intake.json`;
+- staging-flow работает с отдельным `data/student_intake_admin.json` и не перетирает новые submit’ы.
 
 ### Как отправлять анкеты (intake)
 

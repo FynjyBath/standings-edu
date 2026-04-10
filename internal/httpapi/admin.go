@@ -21,6 +21,10 @@ import (
 
 const maxAdminJSONBodyBytes = 8 << 20
 
+const (
+	adminIntakeStagingPath = "data/student_intake_admin.json"
+)
+
 type AdminConfig struct {
 	Login        string
 	Password     string
@@ -57,6 +61,10 @@ type AdminPageData struct {
 
 type adminFileRequest struct {
 	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type adminIntakeMergeRequest struct {
 	Content string `json:"content"`
 }
 
@@ -123,7 +131,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 	files, err := h.listEditableFiles()
 	if err != nil {
 		h.logger.Printf("ERROR list editable files: %v", err)
-		files = []string{"data/students.json", "data/contests.json"}
+		files = []string{"data/students.json", "data/contests.json", adminIntakeStagingPath}
 	}
 
 	defaultPath := ""
@@ -314,6 +322,77 @@ func (h *Handlers) AdminFileSave(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handlers) AdminIntakeStagingPrepare(w http.ResponseWriter, _ *http.Request) {
+	if h.intake == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"ok":    false,
+			"error": "intake store is not configured",
+		})
+		return
+	}
+
+	stagingPath := filepath.Join(h.admin.cfg.DataDir, "student_intake_admin.json")
+	body, err := h.intake.PrepareAdminIntakeStaging(stagingPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"path":    adminIntakeStagingPath,
+		"content": string(body),
+	})
+}
+
+func (h *Handlers) AdminIntakeStagingMerge(w http.ResponseWriter, r *http.Request) {
+	if h.intake == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"ok":    false,
+			"error": "intake store is not configured",
+		})
+		return
+	}
+
+	req, err := decodeAdminIntakeMergeRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+	if err := validateJSONSyntax(req.Content); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	stagingPath := filepath.Join(h.admin.cfg.DataDir, "student_intake_admin.json")
+	if err := h.intake.SaveAdminIntakeStaging(stagingPath, []byte(req.Content)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	result := h.runAdminAction("merge_intake_staging", func() AdminActionResult {
+		return h.executeMergeIntakeStagingAction(stagingPath)
+	})
+	h.setAdminResult(result)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":             true,
+		"action_success": result.Success,
+	})
+}
+
 func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult) AdminActionResult {
 	started := time.Now()
 	if h.admin == nil {
@@ -366,6 +445,21 @@ func (h *Handlers) executeCreateGroupAction(slug, name, formLink string) AdminAc
 		},
 	}
 	return h.runCommandSequence("create_group", commands)
+}
+
+func (h *Handlers) executeMergeIntakeStagingAction(stagingPath string) AdminActionResult {
+	mergeBinary := filepath.Join(h.admin.cfg.ProjectRoot, "bin", "merge_students")
+	commands := []adminCommand{
+		{
+			Path: mergeBinary,
+			Args: []string{
+				"-data-dir", h.admin.cfg.DataDir,
+				"-intake-file", stagingPath,
+				"-write",
+			},
+		},
+	}
+	return h.runCommandSequence("merge_intake_staging", commands)
 }
 
 func (h *Handlers) runCommandSequence(action string, commands []adminCommand) AdminActionResult {
@@ -479,7 +573,7 @@ func (h *Handlers) listEditableFiles() ([]string, error) {
 		return nil, fmt.Errorf("admin is not configured")
 	}
 
-	files := []string{"data/students.json", "data/contests.json"}
+	files := []string{"data/students.json", "data/contests.json", adminIntakeStagingPath}
 	groupsDir := filepath.Join(h.admin.cfg.DataDir, "groups")
 	entries, err := os.ReadDir(groupsDir)
 	if err != nil {
@@ -525,6 +619,8 @@ func (h *Handlers) resolveEditablePath(path string) (string, string, error) {
 		return path, filepath.Join(h.admin.cfg.DataDir, "students.json"), nil
 	case "data/contests.json":
 		return path, filepath.Join(h.admin.cfg.DataDir, "contests.json"), nil
+	case adminIntakeStagingPath:
+		return path, filepath.Join(h.admin.cfg.DataDir, "student_intake_admin.json"), nil
 	}
 
 	const groupPrefix = "data/groups/"
@@ -568,6 +664,22 @@ func decodeAdminFileRequest(r *http.Request) (adminFileRequest, error) {
 	req.Path = strings.TrimSpace(req.Path)
 	if req.Path == "" {
 		return adminFileRequest{}, fmt.Errorf("path is required")
+	}
+
+	return req, nil
+}
+
+func decodeAdminIntakeMergeRequest(r *http.Request) (adminIntakeMergeRequest, error) {
+	var req adminIntakeMergeRequest
+
+	decoder := json.NewDecoder(io.LimitReader(r.Body, maxAdminJSONBodyBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		return adminIntakeMergeRequest{}, fmt.Errorf("invalid request body: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return adminIntakeMergeRequest{}, fmt.Errorf("request body must contain a single JSON object")
 	}
 
 	return req, nil

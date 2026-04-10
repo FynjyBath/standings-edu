@@ -1,6 +1,7 @@
 package studentintake
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +84,65 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 		return domain.Student{}, fmt.Errorf("write intake file: %w", err)
 	}
 	return savedIntake, nil
+}
+
+// PrepareAdminIntakeStaging ensures a non-empty staging file for manual admin merge.
+// If staging is empty or missing, it is atomically filled from the current intake file.
+func (s *Store) PrepareAdminIntakeStaging(stagingPath string) ([]byte, error) {
+	stagingPath = filepath.Clean(strings.TrimSpace(stagingPath))
+	if stagingPath == "" || stagingPath == "." {
+		return nil, fmt.Errorf("staging path is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stagingBody, err := os.ReadFile(stagingPath)
+	if err == nil && !isEmptyIntakeFile(stagingBody) {
+		return append([]byte(nil), stagingBody...), nil
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("read staging file %q: %w", stagingPath, err)
+	}
+
+	sourceBody, err := os.ReadFile(s.intakePath)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("read intake file %q: %w", s.intakePath, err)
+		}
+		sourceBody = []byte("[]\n")
+	}
+	if len(bytes.TrimSpace(sourceBody)) == 0 {
+		sourceBody = []byte("[]\n")
+	}
+
+	mode, err := detectFileMode(stagingPath, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeFileAtomically(stagingPath, sourceBody, mode); err != nil {
+		return nil, fmt.Errorf("write staging file %q: %w", stagingPath, err)
+	}
+	return append([]byte(nil), sourceBody...), nil
+}
+
+func (s *Store) SaveAdminIntakeStaging(stagingPath string, body []byte) error {
+	stagingPath = filepath.Clean(strings.TrimSpace(stagingPath))
+	if stagingPath == "" || stagingPath == "." {
+		return fmt.Errorf("staging path is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	mode, err := detectFileMode(stagingPath, 0o644)
+	if err != nil {
+		return err
+	}
+	if err := writeFileAtomically(stagingPath, body, mode); err != nil {
+		return fmt.Errorf("write staging file %q: %w", stagingPath, err)
+	}
+	return nil
 }
 
 func (s *Store) syncGroup(intakeStudent domain.Student, groupSlug string) error {
@@ -613,6 +673,68 @@ func decodeIntakeItem(item map[string]json.RawMessage) (domain.Student, error) {
 	student = normalizeStudent(student)
 	student.Accounts = mergeAccounts(student.Accounts, extraAccounts)
 	return student, nil
+}
+
+func isEmptyIntakeFile(body []byte) bool {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return true
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(body, &items); err != nil {
+		return false
+	}
+	return len(items) == 0
+}
+
+func detectFileMode(path string, defaultMode os.FileMode) (os.FileMode, error) {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.Mode().Perm(), nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return defaultMode, nil
+	}
+	return 0, fmt.Errorf("stat file %q: %w", path, err)
+}
+
+func writeFileAtomically(path string, body []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %q: %w", dir, err)
+	}
+
+	tmpFile, err := os.CreateTemp(dir, ".studentintake-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	cleanup := func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+	}
+
+	if _, err := tmpFile.Write(body); err != nil {
+		cleanup()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmpFile.Chmod(mode); err != nil {
+		cleanup()
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		cleanup()
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
 }
 
 func boolPtr(v bool) *bool {

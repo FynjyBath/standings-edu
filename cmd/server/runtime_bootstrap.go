@@ -39,8 +39,8 @@ func ensureServerRuntimeLayout(layout serverRuntimeLayout, logger *log.Logger) e
 	if err := ensureDir(filepath.Join(layout.DataDir, "groups"), true, logger); err != nil {
 		return fmt.Errorf("data groups dir: %w", err)
 	}
-	if err := ensureDir(filepath.Join(layout.DataDir, "sites"), true, logger); err != nil {
-		return fmt.Errorf("data sites dir: %w", err)
+	if err := ensureDir(filepath.Join(layout.DataDir, "credentials"), true, logger); err != nil {
+		return fmt.Errorf("data credentials dir: %w", err)
 	}
 	if err := ensureJSONFile(layout.IntakePath, []byte("[]\n"), logger); err != nil {
 		return fmt.Errorf("intake file: %w", err)

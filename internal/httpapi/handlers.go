@@ -30,6 +30,7 @@ type Handlers struct {
 	intake   *studentintake.Store
 	renderer *web.TemplateRenderer
 	logger   *log.Logger
+	admin    *adminState
 }
 
 func NewHandlers(loader *storage.GeneratedLoader, intake *studentintake.Store, renderer *web.TemplateRenderer, logger *log.Logger) *Handlers {

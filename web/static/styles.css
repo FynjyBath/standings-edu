@@ -532,6 +532,152 @@ main.container {
   margin: 0.8rem 0 0;
 }
 
+.admin-block {
+  margin: 1.1rem 0 1.4rem;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 65%, transparent 35%);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.admin-block h2 {
+  margin: 0 0 0.8rem;
+  color: var(--accent-strong);
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 58%, var(--accent) 42%);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-strong) 82%);
+  color: var(--accent-strong);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line) 38%);
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface-strong) 72%);
+}
+
+.admin-btn--secondary {
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-strong) 12%);
+}
+
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.admin-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--muted);
+}
+
+.admin-form-grid input,
+.admin-form-grid select {
+  min-height: 2.2rem;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent 26%);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+}
+
+.admin-form-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.admin-editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: flex-end;
+  margin-bottom: 0.7rem;
+}
+
+.admin-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--muted);
+  min-width: min(560px, 100%);
+  flex: 1 1 420px;
+}
+
+.admin-select-wrap select {
+  min-height: 2.2rem;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 74%, transparent 26%);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+}
+
+.admin-editor {
+  height: min(62vh, 560px);
+  min-height: 280px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent 40%);
+  overflow: hidden;
+}
+
+.admin-editor-status {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.admin-editor-status--ok {
+  color: color-mix(in srgb, var(--text) 72%, #1f8f4b 28%);
+}
+
+.admin-editor-status--error {
+  color: #b03535;
+}
+
+.admin-result-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.45rem 0.8rem;
+  margin-bottom: 0.65rem;
+  color: var(--muted);
+}
+
+.admin-errors {
+  margin: 0.3rem 0 0.8rem;
+  padding-left: 1.2rem;
+}
+
+.admin-errors li + li {
+  margin-top: 0.2rem;
+}
+
+.admin-log {
+  margin: 0;
+  padding: 0.7rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 64%, transparent 36%);
+  background: color-mix(in srgb, var(--surface-strong) 62%, transparent 38%);
+  color: var(--text);
+  overflow: auto;
+  max-height: 48vh;
+}
+
 @media (max-width: 768px) {
   .container {
     width: calc(100% - 1rem);
@@ -570,5 +716,13 @@ main.container {
   .footer-inner {
     font-size: 0.8rem;
     gap: 0.15rem;
+  }
+
+  .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-editor {
+    height: min(58vh, 460px);
   }
 }

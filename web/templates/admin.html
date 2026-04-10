@@ -1,0 +1,234 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Admin Panel</h1>
+  <p>Управление обновлением бинарников, генерацией таблиц, созданием групп и редактированием JSON.</p>
+</section>
+
+<section class="admin-block">
+  <h2>Действия</h2>
+  <div class="admin-actions">
+    <form method="post" action="/api/admin/actions/update">
+      <button type="submit" class="admin-btn">Обновить проект и собрать бинарники</button>
+    </form>
+    <form method="post" action="/api/admin/actions/generate">
+      <button type="submit" class="admin-btn">Сгенерировать все таблицы</button>
+    </form>
+  </div>
+</section>
+
+<section class="admin-block">
+  <h2>Создать группу</h2>
+  <form method="post" action="/api/admin/groups/create" class="admin-form-grid">
+    <label>
+      <span>slug</span>
+      <input type="text" name="slug" required placeholder="group_10a" />
+    </label>
+    <label>
+      <span>title / name</span>
+      <input type="text" name="name" required placeholder="Группа 10А" />
+    </label>
+    <label class="admin-form-grid__wide">
+      <span>form_link</span>
+      <input type="url" name="form_link" required placeholder="https://example.com/forms/group_10a" />
+    </label>
+    <div class="admin-form-grid__wide">
+      <button type="submit" class="admin-btn">Создать группу</button>
+    </div>
+  </form>
+</section>
+
+<section class="admin-block">
+  <h2>JSON-редактор</h2>
+  <div class="admin-editor-tools">
+    <label class="admin-select-wrap">
+      <span>Файл</span>
+      <select id="admin-file-select">
+        {{range .Editable}}
+        <option value="{{.}}">{{.}}</option>
+        {{end}}
+      </select>
+    </label>
+    <button type="button" id="admin-file-validate" class="admin-btn admin-btn--secondary">Проверить JSON</button>
+    <button type="button" id="admin-file-save" class="admin-btn">Сохранить</button>
+  </div>
+  <div id="admin-editor" class="admin-editor" aria-label="JSON editor"></div>
+  <p id="admin-editor-status" class="admin-editor-status">Выберите файл для редактирования.</p>
+</section>
+
+<section class="admin-block">
+  <h2>Результат последнего действия</h2>
+  {{if .LastResult}}
+  <div class="admin-result-meta">
+    <div><strong>Action:</strong> {{.LastResult.Action}}</div>
+    <div><strong>Status:</strong> {{if .LastResult.Success}}success{{else}}error{{end}}</div>
+    <div><strong>Exit code:</strong> {{.LastResult.ExitCode}}</div>
+    <div><strong>Started:</strong> {{.LastResult.StartedAt}}</div>
+    <div><strong>Duration:</strong> {{.LastResult.Duration}}</div>
+  </div>
+  {{if .LastResult.Errors}}
+  <ul class="admin-errors">
+    {{range .LastResult.Errors}}
+    <li>{{.}}</li>
+    {{end}}
+  </ul>
+  {{end}}
+  <pre class="admin-log">{{.LastResult.Output}}</pre>
+  {{else}}
+  <p class="empty-hint">Действия через админку ещё не запускались.</p>
+  {{end}}
+</section>
+
+<script src="/static/vendor/ace/ace.js"></script>
+<script src="/static/vendor/ace/mode-json.js"></script>
+<script src="/static/vendor/ace/theme-github.js"></script>
+<script src="/static/vendor/ace/theme-tomorrow_night.js"></script>
+<script>
+  (function () {
+    var select = document.getElementById("admin-file-select");
+    var validateButton = document.getElementById("admin-file-validate");
+    var saveButton = document.getElementById("admin-file-save");
+    var statusNode = document.getElementById("admin-editor-status");
+    var editorRoot = document.getElementById("admin-editor");
+
+    if (!select || !validateButton || !saveButton || !statusNode || !editorRoot) {
+      return;
+    }
+
+    if (!window.ace) {
+      statusNode.textContent = "ACE editor не загрузился";
+      statusNode.className = "admin-editor-status admin-editor-status--error";
+      return;
+    }
+
+    var editor = ace.edit(editorRoot);
+    editor.session.setMode("ace/mode/json");
+    editor.session.setUseWorker(false);
+    editor.setOptions({
+      fontSize: "14px",
+      tabSize: 2,
+      useSoftTabs: true,
+      showPrintMargin: false,
+      wrap: false
+    });
+
+    function updateTheme() {
+      var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      editor.setTheme(isDark ? "ace/theme/tomorrow_night" : "ace/theme/github");
+    }
+
+    updateTheme();
+    var observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+    function setStatus(message, isError) {
+      statusNode.textContent = message;
+      statusNode.className = isError
+        ? "admin-editor-status admin-editor-status--error"
+        : "admin-editor-status admin-editor-status--ok";
+    }
+
+    async function fetchJSON(url, options) {
+      var response = await fetch(url, options);
+      var payload = null;
+      try {
+        payload = await response.json();
+      } catch (e) {
+        throw new Error("invalid JSON response");
+      }
+      if (!response.ok || !payload.ok) {
+        throw new Error((payload && payload.error) || ("HTTP " + response.status));
+      }
+      return payload;
+    }
+
+    function buildFileOptions(files, selected) {
+      select.innerHTML = "";
+      files.forEach(function (path) {
+        var option = document.createElement("option");
+        option.value = path;
+        option.textContent = path;
+        if (path === selected) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+    }
+
+    async function refreshFileList() {
+      var current = select.value;
+      var payload = await fetchJSON("/api/admin/files");
+      var files = Array.isArray(payload.files) ? payload.files : [];
+      if (files.length === 0) {
+        buildFileOptions([], "");
+        editor.setValue("", -1);
+        setStatus("Нет доступных файлов для редактирования", true);
+        return;
+      }
+      var selected = files.indexOf(current) >= 0 ? current : files[0];
+      buildFileOptions(files, selected);
+      await loadFile(selected);
+    }
+
+    async function loadFile(path) {
+      if (!path) {
+        editor.setValue("", -1);
+        setStatus("Выберите файл", true);
+        return;
+      }
+      var payload = await fetchJSON("/api/admin/file?path=" + encodeURIComponent(path));
+      editor.setValue(payload.content || "", -1);
+      editor.clearSelection();
+      setStatus("Файл загружен: " + payload.path, false);
+    }
+
+    async function validateCurrentFile() {
+      var path = select.value;
+      var content = editor.getValue();
+      await fetchJSON("/api/admin/file/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path, content: content })
+      });
+      setStatus("JSON валиден", false);
+    }
+
+    async function saveCurrentFile() {
+      var path = select.value;
+      var content = editor.getValue();
+      var payload = await fetchJSON("/api/admin/file/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path, content: content })
+      });
+      setStatus("Сохранено: " + payload.path, false);
+    }
+
+    select.addEventListener("change", function () {
+      loadFile(select.value).catch(function (err) {
+        setStatus(err.message, true);
+      });
+    });
+
+    validateButton.addEventListener("click", function () {
+      validateCurrentFile().catch(function (err) {
+        setStatus(err.message, true);
+      });
+    });
+
+    saveButton.addEventListener("click", function () {
+      saveCurrentFile().catch(function (err) {
+        setStatus(err.message, true);
+      });
+    });
+
+    var defaultPath = {{printf "%q" .DefaultPath}};
+    if (defaultPath && select.options.length > 0) {
+      select.value = defaultPath;
+    }
+
+    refreshFileList().catch(function (err) {
+      setStatus(err.message, true);
+    });
+  })();
+</script>
+{{end}}

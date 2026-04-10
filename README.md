@@ -117,7 +117,7 @@ go run ./cmd/generate \
   -data-dir ./data \
   -generated-dir ./generated \
   -group group_example \
-  -codeforces-creds-file ./data/sites/codeforces_credentials.json
+  -codeforces-creds-file ./data/credentials/codeforces_credentials.json
 ```
 
 Что произойдёт:
@@ -127,10 +127,10 @@ go run ./cmd/generate \
 ### Credentials для источников
 
 - `informatics`:
-  - используется `-informatics-creds-file` (по умолчанию `./data/sites/informatics_credentials.json`);
+  - используется `-informatics-creds-file` (по умолчанию `./data/credentials/informatics_credentials.json`);
   - файл должен содержать `username` и `password`.
 - `codeforces`:
-  - используется `-codeforces-creds-file` (по умолчанию `./data/sites/codeforces_credentials.json`);
+  - используется `-codeforces-creds-file` (по умолчанию `./data/credentials/codeforces_credentials.json`);
   - файл опциональный;
   - если файл отсутствует или в нём пустые `key`/`secret`, клиент работает в anonymous mode;
   - если файл существует, но JSON невалидный, `cmd/generate` завершится с ошибкой.
@@ -160,7 +160,7 @@ go run ./cmd/server
 При старте сервер делает bootstrap runtime-структуры:
 - создаёт `generated/`, если каталога нет;
 - создаёт `generated/standings/`, если каталога нет;
-- создаёт `data/`, `data/groups/` и `data/sites/`, если их нет;
+- создаёт `data/`, `data/groups/` и `data/credentials/`, если их нет;
 - создаёт `data/students.json` и `data/contests.json` со значением `[]`, если файлов нет;
 - создаёт `data/student_intake.json` со значением `[]`, если файла нет.
 

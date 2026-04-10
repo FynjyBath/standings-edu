@@ -56,8 +56,15 @@ type AdminPageData struct {
 	PageTitle   string
 	Footer      FooterInfo
 	Editable    []string
+	Groups      []AdminGroupLink
 	LastResult  *AdminActionResult
 	DefaultPath string
+}
+
+type AdminGroupLink struct {
+	Slug  string
+	Title string
+	URL   string
 }
 
 type adminFileRequest struct {
@@ -134,6 +141,11 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		h.logger.Printf("ERROR list editable files: %v", err)
 		files = []string{"data/students.json", "data/contests.json", adminIntakePath}
 	}
+	groupLinks, err := h.listAdminGroupLinks()
+	if err != nil {
+		h.logger.Printf("ERROR list admin groups: %v", err)
+		groupLinks = nil
+	}
 
 	defaultPath := ""
 	if len(files) > 0 {
@@ -144,6 +156,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		PageTitle:   "Admin",
 		Footer:      h.buildFooterInfo(),
 		Editable:    files,
+		Groups:      groupLinks,
 		LastResult:  h.lastAdminResult(),
 		DefaultPath: defaultPath,
 	}
@@ -605,6 +618,55 @@ func (h *Handlers) listEditableFiles() ([]string, error) {
 	}
 
 	return files, nil
+}
+
+func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
+	if h.admin == nil {
+		return nil, fmt.Errorf("admin is not configured")
+	}
+
+	groupsDir := filepath.Join(h.admin.cfg.DataDir, "groups")
+	entries, err := os.ReadDir(groupsDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read groups dir: %w", err)
+	}
+
+	out := make([]AdminGroupLink, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		slug := strings.TrimSpace(entry.Name())
+		if !domain.IsValidSlug(slug) {
+			continue
+		}
+
+		title := slug
+		groupPath := filepath.Join(groupsDir, slug, "group.json")
+		body, readErr := os.ReadFile(groupPath)
+		if readErr == nil {
+			var groupFile domain.GroupFile
+			if unmarshalErr := json.Unmarshal(body, &groupFile); unmarshalErr == nil {
+				if groupTitle := strings.TrimSpace(groupFile.Title); groupTitle != "" {
+					title = groupTitle
+				}
+			}
+		}
+
+		out = append(out, AdminGroupLink{
+			Slug:  slug,
+			Title: title,
+			URL:   "/standings/" + slug,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Slug < out[j].Slug
+	})
+	return out, nil
 }
 
 func (h *Handlers) resolveEditablePath(path string) (string, string, error) {

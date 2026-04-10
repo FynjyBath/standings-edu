@@ -38,6 +38,22 @@
 </section>
 
 <section class="admin-block">
+  <h2>Группы</h2>
+  {{if .Groups}}
+  <ul class="admin-groups-list">
+    {{range .Groups}}
+    <li>
+      <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+      <span>({{.Slug}})</span>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="empty-hint">Группы не найдены.</p>
+  {{end}}
+</section>
+
+<section class="admin-block">
   <h2>JSON-редактор</h2>
   <div class="admin-editor-tools">
     <label class="admin-select-wrap">

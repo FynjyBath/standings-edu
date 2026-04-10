@@ -93,6 +93,7 @@
     var statusNode = document.getElementById("admin-editor-status");
     var editorRoot = document.getElementById("admin-editor");
     var intakeStagingPath = "data/student_intake_admin.json";
+    var intakeStagingSelectValue = "__intake_staging_merge_mode__";
     var activePath = "";
 
     if (!select || !validateButton || !saveButton || !intakePrepareButton || !intakeMergeConfirmButton || !statusNode || !editorRoot) {
@@ -159,10 +160,33 @@
       });
     }
 
+    function ensureStagingSelectOption() {
+      var existing = select.querySelector("option[value=\"" + intakeStagingSelectValue + "\"]");
+      if (!existing) {
+        existing = document.createElement("option");
+        existing.value = intakeStagingSelectValue;
+        existing.textContent = intakeStagingPath + " (merge mode)";
+        select.appendChild(existing);
+      }
+      select.value = intakeStagingSelectValue;
+    }
+
+    function removeStagingSelectOption() {
+      var existing = select.querySelector("option[value=\"" + intakeStagingSelectValue + "\"]");
+      if (existing) {
+        existing.remove();
+      }
+    }
+
     function updateIntakeMergeActionVisibility() {
       var visible = (activePath === intakeStagingPath);
       intakeMergeConfirmButton.style.display = visible ? "inline-flex" : "none";
       intakeMergeConfirmButton.setAttribute("aria-hidden", visible ? "false" : "true");
+      if (visible) {
+        ensureStagingSelectOption();
+      } else {
+        removeStagingSelectOption();
+      }
     }
 
     async function refreshFileList() {

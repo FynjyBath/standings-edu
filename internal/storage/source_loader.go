@@ -116,6 +116,7 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 		groups = append(groups, domain.GroupDefinition{
 			Slug:       slug,
 			Title:      gf.Title,
+			FormLink:   strings.TrimSpace(gf.FormLink),
 			Update:     update,
 			StudentIDs: gf.StudentIDs,
 			Contests:   contests,

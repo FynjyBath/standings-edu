@@ -1,5 +1,6 @@
 {
   "title": "Группа 10А (пример)",
+  "form_link": "https://example.com/forms/group_example",
   "update": true,
   "student_ids": [
     "ivanov-ii",

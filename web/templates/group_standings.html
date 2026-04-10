@@ -2,6 +2,9 @@
 <section class="page-head">
   <h1>{{.Standings.GroupTitle}}</h1>
   <p>Slug: <code>{{.Standings.GroupSlug}}</code></p>
+  {{if .Standings.FormLink}}
+  <p>Форма: <a href="{{.Standings.FormLink}}" target="_blank" rel="noopener noreferrer">{{.Standings.FormLink}}</a></p>
+  {{end}}
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary">Все</a>
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary-edu">Тематические</a>

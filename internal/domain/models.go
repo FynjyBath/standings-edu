@@ -48,6 +48,7 @@ func (c Contest) TypeOrDefault() string {
 
 type GroupFile struct {
 	Title      string   `json:"title"`
+	FormLink   string   `json:"form_link,omitempty"`
 	Update     *bool    `json:"update,omitempty"`
 	StudentIDs []string `json:"student_ids"`
 }
@@ -55,6 +56,7 @@ type GroupFile struct {
 type GroupDefinition struct {
 	Slug       string
 	Title      string
+	FormLink   string
 	Update     bool
 	StudentIDs []string
 	Contests   []GroupContestRef
@@ -119,5 +121,6 @@ type GeneratedContestStandings struct {
 type GeneratedGroupStandings struct {
 	GroupSlug  string                      `json:"group_slug"`
 	GroupTitle string                      `json:"group_title"`
+	FormLink   string                      `json:"form_link,omitempty"`
 	Contests   []GeneratedContestStandings `json:"contests"`
 }

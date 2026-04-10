@@ -302,6 +302,7 @@ func (b *Builder) buildGroupStandings(
 	out := domain.GeneratedGroupStandings{
 		GroupSlug:  pg.group.Slug,
 		GroupTitle: pg.group.Title,
+		FormLink:   pg.group.FormLink,
 		Contests:   make([]domain.GeneratedContestStandings, 0, len(pg.contests)),
 	}
 

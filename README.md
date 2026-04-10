@@ -32,7 +32,7 @@
 Минимально важные файлы:
 - `data/students.json` — ученики и их аккаунты;
 - `data/contests.json` — список контестов;
-- `data/groups/<group_slug>/group.json` — информация о группе;
+- `data/groups/<group_slug>/group.json` — информация о группе (включая `form_link`);
 - `data/groups/<group_slug>/contests.json` — контесты группы.
 
 Полезные примеры лежат в `data_example/`.
@@ -54,6 +54,20 @@ cp data_example/student_intake_example.json data/student_intake.json
 ```
 
 После этого можно сразу запускать генерацию и сервер.
+
+### Как создать пустую группу одной командой
+
+```bash
+go run ./cmd/create_group \
+  -data-dir ./data \
+  -slug group_10a \
+  -name "Группа 10А" \
+  -form-link "https://example.com/forms/group_10a"
+```
+
+Команда создаёт:
+- `data/groups/<slug>/group.json` c полями `title`, `form_link`, `update=true`, `student_ids=[]`;
+- `data/groups/<slug>/contests.json` со значением `[]`.
 
 ### Как сгенерировать standings
 
@@ -175,6 +189,7 @@ go run ./cmd/merge_students -write
 На высоком уровне:
 - `cmd/generate` — офлайн pipeline генерации;
 - `cmd/server` — веб и API над уже сгенерированными файлами;
+- `cmd/create_group` — создание пустой группы (директория + `group.json` + `contests.json`);
 - `cmd/merge_students` — merge intake в основную базу учеников.
 
 ### Основные директории и ответственность
@@ -256,13 +271,16 @@ go run ./cmd/merge_students -write
 # 1) Генерация standings
 go run ./cmd/generate
 
-# 2) Запуск сервера
+# 2) Создание пустой группы
+go run ./cmd/create_group -slug group_10a -name "Группа 10А" -form-link "https://example.com/forms/group_10a"
+
+# 3) Запуск сервера
 go run ./cmd/server
 
-# 3) Проверка intake merge без записи
+# 4) Проверка intake merge без записи
 go run ./cmd/merge_students -dry-run
 
-# 4) Merge с записью
+# 5) Merge с записью
 go run ./cmd/merge_students -write
 ```
 

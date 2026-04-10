@@ -153,6 +153,7 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 	merged := domain.GeneratedGroupStandings{
 		GroupSlug:  group.Slug,
 		GroupTitle: group.Title,
+		FormLink:   group.FormLink,
 		Contests:   make([]domain.GeneratedContestStandings, 0, len(group.Contests)),
 	}
 

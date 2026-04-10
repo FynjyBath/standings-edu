@@ -50,7 +50,7 @@
     </label>
     <button type="button" id="admin-file-validate" class="admin-btn admin-btn--secondary">Проверить JSON</button>
     <button type="button" id="admin-file-save" class="admin-btn">Сохранить</button>
-    <button type="button" id="admin-intake-merge-confirm" class="admin-btn" hidden>Сохранить и сделать merge intake</button>
+    <button type="button" id="admin-intake-merge-confirm" class="admin-btn" style="display:none" aria-hidden="true">Сохранить и сделать merge intake</button>
   </div>
   <div id="admin-editor" class="admin-editor" aria-label="JSON editor"></div>
   <p id="admin-editor-status" class="admin-editor-status">Выберите файл для редактирования.</p>
@@ -160,7 +160,9 @@
     }
 
     function updateIntakeMergeActionVisibility() {
-      intakeMergeConfirmButton.hidden = (activePath !== intakeStagingPath);
+      var visible = (activePath === intakeStagingPath);
+      intakeMergeConfirmButton.style.display = visible ? "inline-flex" : "none";
+      intakeMergeConfirmButton.setAttribute("aria-hidden", visible ? "false" : "true");
     }
 
     async function refreshFileList() {

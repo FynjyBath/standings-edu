@@ -537,11 +537,6 @@ func (h *Handlers) buildUpdateCommands() ([]adminCommand, error) {
 		})
 	}
 
-	commands = append(commands, adminCommand{
-		Path: "systemctl",
-		Args: []string{"restart", "standings-edu"},
-	})
-
 	return commands, nil
 }
 

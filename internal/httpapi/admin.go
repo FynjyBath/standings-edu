@@ -22,6 +22,7 @@ import (
 const maxAdminJSONBodyBytes = 8 << 20
 
 const (
+	adminIntakePath        = "data/student_intake.json"
 	adminIntakeStagingPath = "data/student_intake_admin.json"
 )
 
@@ -131,7 +132,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 	files, err := h.listEditableFiles()
 	if err != nil {
 		h.logger.Printf("ERROR list editable files: %v", err)
-		files = []string{"data/students.json", "data/contests.json"}
+		files = []string{"data/students.json", "data/contests.json", adminIntakePath}
 	}
 
 	defaultPath := ""
@@ -573,7 +574,7 @@ func (h *Handlers) listEditableFiles() ([]string, error) {
 		return nil, fmt.Errorf("admin is not configured")
 	}
 
-	files := []string{"data/students.json", "data/contests.json"}
+	files := []string{"data/students.json", "data/contests.json", adminIntakePath}
 	groupsDir := filepath.Join(h.admin.cfg.DataDir, "groups")
 	entries, err := os.ReadDir(groupsDir)
 	if err != nil {
@@ -619,6 +620,8 @@ func (h *Handlers) resolveEditablePath(path string) (string, string, error) {
 		return path, filepath.Join(h.admin.cfg.DataDir, "students.json"), nil
 	case "data/contests.json":
 		return path, filepath.Join(h.admin.cfg.DataDir, "contests.json"), nil
+	case adminIntakePath:
+		return path, filepath.Join(h.admin.cfg.DataDir, "student_intake.json"), nil
 	case adminIntakeStagingPath:
 		return path, filepath.Join(h.admin.cfg.DataDir, "student_intake_admin.json"), nil
 	}

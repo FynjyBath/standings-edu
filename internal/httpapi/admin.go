@@ -148,7 +148,7 @@ func (h *Handlers) AdminActionUpdate(w http.ResponseWriter, r *http.Request) {
 		return h.executeUpdateAction()
 	})
 	h.setAdminResult(result)
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
 func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
 		return h.executeGenerateAction()
 	})
 	h.setAdminResult(result)
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
 func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +170,7 @@ func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 			[]string{fmt.Sprintf("parse form: %v", err)},
 		)
 		h.setAdminResult(result)
-		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 		return h.executeCreateGroupAction(slug, name, formLink)
 	})
 	h.setAdminResult(result)
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
 func (h *Handlers) AdminFiles(w http.ResponseWriter, _ *http.Request) {

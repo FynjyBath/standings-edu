@@ -357,10 +357,12 @@ func (b *Builder) buildProviderContestStandings(
 }
 
 func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
+	isIOI := contest.Olympiad.IsIOI()
+
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
-		Olympiad:    contest.Olympiad,
+		Olympiad:    contest.Olympiad.Normalized(),
 		ContestType: domain.ContestTypeTasks,
 		Materials:   domain.NormalizeContestMaterials(contest.Materials),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
@@ -385,7 +387,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			out.Tasks = append(out.Tasks, task)
 
 			useRealScores := false
-			if contest.Olympiad {
+			if isIOI {
 				_, client, ok := b.sources.ResolveSiteByTaskURL(normalized)
 				if ok && client != nil && client.SupportsTaskScores() {
 					useRealScores = true
@@ -409,7 +411,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			Statuses:    make([]string, len(out.Tasks)),
 			SolvedCount: 0,
 		}
-		if contest.Olympiad {
+		if isIOI {
 			row.Scores = make([]*int, len(out.Tasks))
 		}
 
@@ -423,7 +425,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			}
 			row.Statuses[i] = status
 
-			if contest.Olympiad {
+			if isIOI {
 				score, ok := resolveTaskScore(status, combined, task.NormalizedURL, taskUsesSiteScores[i])
 				if !ok {
 					continue
@@ -438,7 +440,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	}
 
 	sort.Slice(out.Rows, func(i, j int) bool {
-		if contest.Olympiad {
+		if isIOI {
 			if out.Rows[i].TotalScore != out.Rows[j].TotalScore {
 				return out.Rows[i].TotalScore > out.Rows[j].TotalScore
 			}

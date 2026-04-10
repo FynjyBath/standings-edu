@@ -138,6 +138,8 @@ func buildCodeforcesGeneratedStandings(
 	participants []codeforcesContestParticipant,
 	standings CodeforcesContestStandings,
 ) domain.GeneratedContestStandings {
+	isIOI := contest.Olympiad.IsIOI()
+
 	actualContestID := standings.ContestID
 	if actualContestID <= 0 {
 		actualContestID = configContestID
@@ -146,7 +148,7 @@ func buildCodeforcesGeneratedStandings(
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
-		Olympiad:    contest.Olympiad,
+		Olympiad:    contest.Olympiad.Normalized(),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, 1),
 		Tasks:       make([]domain.GeneratedTask, 0, len(standings.Problems)),
 		Rows:        make([]domain.GeneratedRow, 0, len(participants)),
@@ -218,7 +220,7 @@ func buildCodeforcesGeneratedStandings(
 		for i := range row.Statuses {
 			row.Statuses[i] = domain.TaskStatusNone
 		}
-		if contest.Olympiad {
+		if isIOI {
 			row.Scores = make([]*int, len(out.Tasks))
 		}
 
@@ -259,7 +261,7 @@ func buildCodeforcesGeneratedStandings(
 				}
 				row.Statuses[taskIdx] = status
 
-				if contest.Olympiad && attempted {
+				if isIOI && attempted {
 					value := score
 					row.Scores[taskIdx] = &value
 					row.TotalScore += value

@@ -46,7 +46,7 @@
 {
   "id": "contest_basics_tasks",
   "title": "Базовые задачи",
-  "olympiad": false,
+  "olympiad": "edu",
   "materials": [
     {
       "title": "Разбор",

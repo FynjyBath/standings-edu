@@ -609,10 +609,12 @@ func buildImportedStandings(
 	students []domain.Student,
 	matchesByTable []tableMatchResult,
 ) domain.GeneratedContestStandings {
+	isIOI := contest.Olympiad.IsIOI()
+
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
-		Olympiad:    contest.Olympiad,
+		Olympiad:    contest.Olympiad.Normalized(),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(tables)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
@@ -652,7 +654,7 @@ func buildImportedStandings(
 		for i := range row.Statuses {
 			row.Statuses[i] = domain.TaskStatusNone
 		}
-		if contest.Olympiad {
+		if isIOI {
 			row.Scores = make([]*int, totalTasks)
 		}
 
@@ -679,7 +681,7 @@ func buildImportedStandings(
 				if status == domain.TaskStatusSolved {
 					row.SolvedCount++
 				}
-				if contest.Olympiad && match.row.scores[i] != nil {
+				if isIOI && match.row.scores[i] != nil {
 					val := *match.row.scores[i]
 					row.Scores[offset+i] = &val
 					row.TotalScore += val
@@ -705,7 +707,7 @@ func buildImportedStandings(
 			for i := range row.Statuses {
 				row.Statuses[i] = domain.TaskStatusNone
 			}
-			if contest.Olympiad {
+			if isIOI {
 				row.Scores = make([]*int, totalTasks)
 			}
 
@@ -722,7 +724,7 @@ func buildImportedStandings(
 				if status == domain.TaskStatusSolved {
 					row.SolvedCount++
 				}
-				if contest.Olympiad && extra.row.scores[i] != nil {
+				if isIOI && extra.row.scores[i] != nil {
 					val := *extra.row.scores[i]
 					row.Scores[offset+i] = &val
 					row.TotalScore += val
@@ -733,7 +735,7 @@ func buildImportedStandings(
 		}
 	}
 
-	sortProviderRows(out.Rows, contest.Olympiad)
+	sortProviderRows(out.Rows, isIOI)
 	return out
 }
 

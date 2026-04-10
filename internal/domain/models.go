@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -28,10 +29,64 @@ type ContestMaterial struct {
 	URL   string `json:"url"`
 }
 
+type OlympiadMode string
+
+const (
+	OlympiadModeEdu OlympiadMode = "edu"
+	OlympiadModeIOI OlympiadMode = "ioi"
+)
+
+func (m OlympiadMode) Normalized() OlympiadMode {
+	switch strings.ToLower(strings.TrimSpace(string(m))) {
+	case "", string(OlympiadModeEdu):
+		return OlympiadModeEdu
+	case string(OlympiadModeIOI):
+		return OlympiadModeIOI
+	default:
+		return OlympiadModeEdu
+	}
+}
+
+func (m OlympiadMode) IsIOI() bool {
+	return m.Normalized() == OlympiadModeIOI
+}
+
+func (m OlympiadMode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(m.Normalized()))
+}
+
+func (m *OlympiadMode) UnmarshalJSON(data []byte) error {
+	var asString string
+	if err := json.Unmarshal(data, &asString); err == nil {
+		switch strings.ToLower(strings.TrimSpace(asString)) {
+		case "", string(OlympiadModeEdu):
+			*m = OlympiadModeEdu
+			return nil
+		case string(OlympiadModeIOI):
+			*m = OlympiadModeIOI
+			return nil
+		default:
+			return fmt.Errorf("olympiad must be %q or %q", OlympiadModeEdu, OlympiadModeIOI)
+		}
+	}
+
+	var asBool bool
+	if err := json.Unmarshal(data, &asBool); err == nil {
+		if asBool {
+			*m = OlympiadModeIOI
+		} else {
+			*m = OlympiadModeEdu
+		}
+		return nil
+	}
+
+	return fmt.Errorf("olympiad must be string (%q/%q) or bool", OlympiadModeEdu, OlympiadModeIOI)
+}
+
 type Contest struct {
 	ID             string            `json:"id"`
 	Title          string            `json:"title"`
-	Olympiad       bool              `json:"olympiad"`
+	Olympiad       OlympiadMode      `json:"olympiad"`
 	ContestType    string            `json:"contest_type,omitempty"`
 	Provider       string            `json:"provider,omitempty"`
 	ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
@@ -145,7 +200,7 @@ type GeneratedRow struct {
 type GeneratedContestStandings struct {
 	ID          string                `json:"id"`
 	Title       string                `json:"title"`
-	Olympiad    bool                  `json:"olympiad"`
+	Olympiad    OlympiadMode          `json:"olympiad"`
 	ContestType string                `json:"contest_type,omitempty"`
 	Materials   []ContestMaterial     `json:"materials,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`

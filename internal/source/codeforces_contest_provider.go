@@ -49,7 +49,6 @@ func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input Co
 	for _, participant := range participants {
 		handles = append(handles, participant.Handle)
 	}
-
 	contestStandings, err := p.client.FetchContestStandings(ctx, cfg.ContestID, handles, cfg.showUnofficialOrDefault())
 	if err != nil {
 		primaryErr := err

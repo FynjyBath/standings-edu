@@ -304,28 +304,35 @@ func (c *CodeforcesAPIClient) FetchContestStatusSubmissions(ctx context.Context,
 	}
 
 	out := make([]codeforcesContestStatusSubmission, 0, codeforcesContestStatusPageSize)
-	from := 1
+	seenSubmissionIDs := make(map[int]struct{}, codeforcesContestStatusPageSize)
 
-	for {
-		page, err := c.fetchContestStatusPage(ctx, contestID, from, codeforcesContestStatusPageSize)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, submission := range page.Result {
-			if !showUnofficial && !isCodeforcesStatusOfficialParticipant(submission.Author.ParticipantType) {
-				continue
+	for _, handle := range normalizedHandles {
+		from := 1
+		for {
+			page, err := c.fetchContestStatusPage(ctx, contestID, handle, from, codeforcesContestStatusPageSize)
+			if err != nil {
+				return nil, err
 			}
-			if !codeforcesSubmissionHasAnyTargetHandle(submission, targetHandleSet) {
-				continue
-			}
-			out = append(out, submission)
-		}
 
-		if len(page.Result) < codeforcesContestStatusPageSize {
-			break
+			for _, submission := range page.Result {
+				if !showUnofficial && !isCodeforcesStatusOfficialParticipant(submission.Author.ParticipantType) {
+					continue
+				}
+				if !codeforcesSubmissionHasAnyTargetHandle(submission, targetHandleSet) {
+					continue
+				}
+				if _, exists := seenSubmissionIDs[submission.ID]; exists {
+					continue
+				}
+				seenSubmissionIDs[submission.ID] = struct{}{}
+				out = append(out, submission)
+			}
+
+			if len(page.Result) < codeforcesContestStatusPageSize {
+				break
+			}
+			from += codeforcesContestStatusPageSize
 		}
-		from += codeforcesContestStatusPageSize
 	}
 
 	return out, nil
@@ -451,11 +458,14 @@ func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from
 	return decoded, nil
 }
 
-func (c *CodeforcesAPIClient) fetchContestStatusPage(ctx context.Context, contestID int, from int, count int) (codeforcesContestStatusAPIResponse, error) {
+func (c *CodeforcesAPIClient) fetchContestStatusPage(ctx context.Context, contestID int, handle string, from int, count int) (codeforcesContestStatusAPIResponse, error) {
 	q := make(url.Values)
 	q.Set("contestId", strconv.Itoa(contestID))
 	q.Set("from", strconv.Itoa(from))
 	q.Set("count", strconv.Itoa(count))
+	if strings.TrimSpace(handle) != "" {
+		q.Set("handle", handle)
+	}
 
 	req, err := c.newAPIRequest(ctx, "contest.status", q)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 const defaultCodeforcesBaseURL = "https://codeforces.com/api"
 const codeforcesPageSize = 10000
+const codeforcesContestStatusPageSize = 1000
 const codeforcesAPIRandBytes = 3
 
 type CodeforcesAPIClient struct {
@@ -65,6 +67,39 @@ type CodeforcesContestRow struct {
 type CodeforcesContestProblemResult struct {
 	Points               float64
 	RejectedAttemptCount int
+}
+
+type codeforcesAPIRequestError struct {
+	MethodName string
+	HTTPStatus int
+	APIComment string
+	Err        error
+}
+
+func (e *codeforcesAPIRequestError) Error() string {
+	if e == nil {
+		return ""
+	}
+
+	switch {
+	case e.HTTPStatus > 0 && e.Err != nil:
+		return fmt.Sprintf("codeforces %s status=%d: %v", e.MethodName, e.HTTPStatus, e.Err)
+	case e.HTTPStatus > 0:
+		return fmt.Sprintf("codeforces %s status=%d", e.MethodName, e.HTTPStatus)
+	case strings.TrimSpace(e.APIComment) != "":
+		return fmt.Sprintf("codeforces %s api error: %s", e.MethodName, e.APIComment)
+	case e.Err != nil:
+		return fmt.Sprintf("codeforces %s: %v", e.MethodName, e.Err)
+	default:
+		return fmt.Sprintf("codeforces %s request failed", e.MethodName)
+	}
+}
+
+func (e *codeforcesAPIRequestError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
 }
 
 func NewCodeforcesAPIClient() *CodeforcesAPIClient {
@@ -164,30 +199,49 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 
 	req, err := c.newAPIRequest(ctx, "contest.standings", q)
 	if err != nil {
-		return CodeforcesContestStandings{}, err
+		return CodeforcesContestStandings{}, &codeforcesAPIRequestError{
+			MethodName: "contest.standings",
+			Err:        err,
+		}
 	}
 
 	if err := c.waitRateLimit(ctx); err != nil {
-		return CodeforcesContestStandings{}, err
+		return CodeforcesContestStandings{}, &codeforcesAPIRequestError{
+			MethodName: "contest.standings",
+			Err:        err,
+		}
 	}
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return CodeforcesContestStandings{}, err
+		return CodeforcesContestStandings{}, &codeforcesAPIRequestError{
+			MethodName: "contest.standings",
+			Err:        err,
+		}
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(res.Body, 1024))
-		return CodeforcesContestStandings{}, fmt.Errorf("codeforces api status=%d body=%q", res.StatusCode, strings.TrimSpace(string(body)))
+		return CodeforcesContestStandings{}, &codeforcesAPIRequestError{
+			MethodName: "contest.standings",
+			HTTPStatus: res.StatusCode,
+			Err:        fmt.Errorf("body=%q", strings.TrimSpace(string(body))),
+		}
 	}
 
 	var decoded codeforcesContestStandingsAPIResponse
 	if err := json.NewDecoder(res.Body).Decode(&decoded); err != nil {
-		return CodeforcesContestStandings{}, err
+		return CodeforcesContestStandings{}, &codeforcesAPIRequestError{
+			MethodName: "contest.standings",
+			Err:        err,
+		}
 	}
 	if decoded.Status != "OK" {
-		return CodeforcesContestStandings{}, fmt.Errorf("codeforces api error: %s", decoded.Comment)
+		return CodeforcesContestStandings{}, &codeforcesAPIRequestError{
+			MethodName: "contest.standings",
+			APIComment: decoded.Comment,
+		}
 	}
 
 	out := CodeforcesContestStandings{
@@ -229,6 +283,49 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 			Handles:        handles,
 			ProblemResults: results,
 		})
+	}
+
+	return out, nil
+}
+
+func (c *CodeforcesAPIClient) FetchContestStatusSubmissions(ctx context.Context, contestID int, handles []string, showUnofficial bool) ([]codeforcesContestStatusSubmission, error) {
+	if contestID <= 0 {
+		return nil, fmt.Errorf("invalid contest_id=%d", contestID)
+	}
+
+	normalizedHandles := normalizeCodeforcesHandles(handles)
+	if len(normalizedHandles) == 0 {
+		return nil, fmt.Errorf("empty handles list")
+	}
+
+	targetHandleSet := make(map[string]struct{}, len(normalizedHandles))
+	for _, handle := range normalizedHandles {
+		targetHandleSet[strings.ToLower(handle)] = struct{}{}
+	}
+
+	out := make([]codeforcesContestStatusSubmission, 0, codeforcesContestStatusPageSize)
+	from := 1
+
+	for {
+		page, err := c.fetchContestStatusPage(ctx, contestID, from, codeforcesContestStatusPageSize)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, submission := range page.Result {
+			if !showUnofficial && !isCodeforcesStatusOfficialParticipant(submission.Author.ParticipantType) {
+				continue
+			}
+			if !codeforcesSubmissionHasAnyTargetHandle(submission, targetHandleSet) {
+				continue
+			}
+			out = append(out, submission)
+		}
+
+		if len(page.Result) < codeforcesContestStatusPageSize {
+			break
+		}
+		from += codeforcesContestStatusPageSize
 	}
 
 	return out, nil
@@ -349,6 +446,62 @@ func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from
 	}
 	if decoded.Status != "OK" {
 		return codeforcesAPIResponse{}, fmt.Errorf("codeforces api error: %s", decoded.Comment)
+	}
+
+	return decoded, nil
+}
+
+func (c *CodeforcesAPIClient) fetchContestStatusPage(ctx context.Context, contestID int, from int, count int) (codeforcesContestStatusAPIResponse, error) {
+	q := make(url.Values)
+	q.Set("contestId", strconv.Itoa(contestID))
+	q.Set("from", strconv.Itoa(from))
+	q.Set("count", strconv.Itoa(count))
+
+	req, err := c.newAPIRequest(ctx, "contest.status", q)
+	if err != nil {
+		return codeforcesContestStatusAPIResponse{}, &codeforcesAPIRequestError{
+			MethodName: "contest.status",
+			Err:        err,
+		}
+	}
+
+	if err := c.waitRateLimit(ctx); err != nil {
+		return codeforcesContestStatusAPIResponse{}, &codeforcesAPIRequestError{
+			MethodName: "contest.status",
+			Err:        err,
+		}
+	}
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return codeforcesContestStatusAPIResponse{}, &codeforcesAPIRequestError{
+			MethodName: "contest.status",
+			Err:        err,
+		}
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 1024))
+		return codeforcesContestStatusAPIResponse{}, &codeforcesAPIRequestError{
+			MethodName: "contest.status",
+			HTTPStatus: res.StatusCode,
+			Err:        fmt.Errorf("body=%q", strings.TrimSpace(string(body))),
+		}
+	}
+
+	var decoded codeforcesContestStatusAPIResponse
+	if err := json.NewDecoder(res.Body).Decode(&decoded); err != nil {
+		return codeforcesContestStatusAPIResponse{}, &codeforcesAPIRequestError{
+			MethodName: "contest.status",
+			Err:        err,
+		}
+	}
+	if decoded.Status != "OK" {
+		return codeforcesContestStatusAPIResponse{}, &codeforcesAPIRequestError{
+			MethodName: "contest.status",
+			APIComment: decoded.Comment,
+		}
 	}
 
 	return decoded, nil
@@ -477,6 +630,107 @@ func normalizeCodeforcesHandles(handles []string) []string {
 	return out
 }
 
+func isCodeforcesStatusOfficialParticipant(participantType string) bool {
+	typ := strings.ToLower(strings.TrimSpace(participantType))
+	return typ == "" || typ == "contestant"
+}
+
+func codeforcesSubmissionHasAnyTargetHandle(submission codeforcesContestStatusSubmission, targetHandleSet map[string]struct{}) bool {
+	for _, member := range submission.Author.Members {
+		key := strings.ToLower(strings.TrimSpace(member.Handle))
+		if key == "" {
+			continue
+		}
+		if _, ok := targetHandleSet[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isCodeforcesRetriableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	var requestErr *codeforcesAPIRequestError
+	if errors.As(err, &requestErr) {
+		if requestErr.HTTPStatus == http.StatusTooManyRequests || requestErr.HTTPStatus >= 500 {
+			return true
+		}
+		if isTemporaryCodeforcesAPIComment(requestErr.APIComment) {
+			return true
+		}
+		if requestErr.Err != nil {
+			return isCodeforcesRetriableError(requestErr.Err)
+		}
+		return false
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return true
+		}
+		type temporary interface {
+			Temporary() bool
+		}
+		if t, ok := any(netErr).(temporary); ok && t.Temporary() {
+			return true
+		}
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+
+	return false
+}
+
+func isTemporaryCodeforcesAPIComment(comment string) bool {
+	text := strings.ToLower(strings.TrimSpace(comment))
+	if text == "" {
+		return false
+	}
+
+	needles := []string{
+		"temporary",
+		"temporarily",
+		"try again",
+		"retry",
+		"server error",
+		"service unavailable",
+		"bad gateway",
+		"gateway timeout",
+		"timeout",
+		"timed out",
+		"upstream",
+		"limit exceeded",
+		"rate limit",
+		"too many requests",
+		"internal error",
+	}
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *CodeforcesAPIClient) waitRateLimit(ctx context.Context) error {
 	if c == nil || c.minGap <= 0 {
 		return nil
@@ -560,4 +814,31 @@ type codeforcesContestMember struct {
 type codeforcesContestProblemResultMeta struct {
 	Points               float64 `json:"points"`
 	RejectedAttemptCount int     `json:"rejectedAttemptCount"`
+}
+
+type codeforcesContestStatusAPIResponse struct {
+	Status  string                              `json:"status"`
+	Comment string                              `json:"comment"`
+	Result  []codeforcesContestStatusSubmission `json:"result"`
+}
+
+type codeforcesContestStatusSubmission struct {
+	ID                  int                            `json:"id"`
+	Verdict             string                         `json:"verdict"`
+	Points              *float64                       `json:"points"`
+	RelativeTimeSeconds int                            `json:"relativeTimeSeconds"`
+	Problem             codeforcesContestStatusProblem `json:"problem"`
+	Author              codeforcesContestStatusAuthor  `json:"author"`
+}
+
+type codeforcesContestStatusProblem struct {
+	ContestID int      `json:"contestId"`
+	Index     string   `json:"index"`
+	Name      string   `json:"name"`
+	Points    *float64 `json:"points"`
+}
+
+type codeforcesContestStatusAuthor struct {
+	ParticipantType string                    `json:"participantType"`
+	Members         []codeforcesContestMember `json:"members"`
 }

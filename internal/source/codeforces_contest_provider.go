@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/url"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"standings-edu/internal/domain"
@@ -49,10 +52,59 @@ func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input Co
 
 	contestStandings, err := p.client.FetchContestStandings(ctx, cfg.ContestID, handles, cfg.showUnofficialOrDefault())
 	if err != nil {
-		return domain.GeneratedContestStandings{}, fmt.Errorf("fetch codeforces contest standings: %w", err)
+		primaryErr := err
+		if !isCodeforcesRetriableError(primaryErr) {
+			return domain.GeneratedContestStandings{}, fmt.Errorf("fetch codeforces contest standings: %w", primaryErr)
+		}
+
+		log.Printf(
+			"codeforces contest provider: primary contest.standings failed, fallback to contest.status (contest_id=%d): %v",
+			cfg.ContestID,
+			primaryErr,
+		)
+
+		contestStandings, err = p.buildContestStatusFallbackStandings(ctx, input.Contest, cfg, participants)
+		if err != nil {
+			fallbackErr := err
+			return domain.GeneratedContestStandings{}, fmt.Errorf(
+				"fetch codeforces contest standings: primary contest.standings failed: %v; fallback contest.status failed: %w",
+				primaryErr,
+				fallbackErr,
+			)
+		}
 	}
 
 	return buildCodeforcesGeneratedStandings(input.Contest, cfg.ContestID, participants, contestStandings), nil
+}
+
+func (p *CodeforcesContestProvider) buildContestStatusFallbackStandings(
+	ctx context.Context,
+	contest domain.Contest,
+	cfg codeforcesContestProviderConfig,
+	participants []codeforcesContestParticipant,
+) (CodeforcesContestStandings, error) {
+	handles := make([]string, 0, len(participants))
+	for _, participant := range participants {
+		handles = append(handles, participant.Handle)
+	}
+
+	submissions, err := p.client.FetchContestStatusSubmissions(
+		ctx,
+		cfg.ContestID,
+		handles,
+		cfg.showUnofficialOrDefault(),
+	)
+	if err != nil {
+		return CodeforcesContestStandings{}, fmt.Errorf("fetch contest.status: %w", err)
+	}
+
+	return buildCodeforcesContestStandingsFromStatus(
+		contest.ScoreSystem,
+		cfg.ContestID,
+		cfg.showUnofficialOrDefault(),
+		participants,
+		submissions,
+	), nil
 }
 
 type codeforcesContestProviderConfig struct {
@@ -327,4 +379,428 @@ func assignProviderPlaces(rows []providerBuiltRow) {
 		}
 		i = j
 	}
+}
+
+type codeforcesFallbackProblemKey struct {
+	contestID int
+	index     string
+}
+
+type codeforcesFallbackProblemMeta struct {
+	contestID      int
+	index          string
+	name           string
+	points         *float64
+	hasObservedMax bool
+	observedMax    float64
+}
+
+type codeforcesFallbackSubmissionEvent struct {
+	id                  int
+	relativeTimeSeconds int
+	verdict             string
+	points              *float64
+}
+
+type codeforcesFallbackParticipantAggregate struct {
+	handles         []string
+	eventsByProblem map[codeforcesFallbackProblemKey][]codeforcesFallbackSubmissionEvent
+}
+
+type codeforcesFallbackBuiltRow struct {
+	row        CodeforcesContestRow
+	solved     int
+	totalScore float64
+	penalty    int
+	sortKey    string
+}
+
+type codeforcesFallbackProblemStats struct {
+	points           float64
+	rejectedAttempts int
+	solved           bool
+	penalty          int
+}
+
+var codeforcesIndexTokenRe = regexp.MustCompile(`[0-9]+|[^0-9]+`)
+
+const codeforcesFallbackFloatEpsilon = 1e-9
+
+func buildCodeforcesContestStandingsFromStatus(
+	scoreSystem domain.ScoreSystem,
+	configContestID int,
+	showUnofficial bool,
+	participants []codeforcesContestParticipant,
+	submissions []codeforcesContestStatusSubmission,
+) CodeforcesContestStandings {
+	out := CodeforcesContestStandings{
+		ContestID: configContestID,
+		Problems:  make([]CodeforcesContestProblem, 0),
+		Rows:      make([]CodeforcesContestRow, 0),
+	}
+	isIOI := scoreSystem.IsIOI()
+
+	targetHandles := make(map[string]string, len(participants))
+	for _, participant := range participants {
+		key := strings.ToLower(strings.TrimSpace(participant.Handle))
+		if key == "" {
+			continue
+		}
+		targetHandles[key] = participant.Handle
+	}
+
+	problemMetaByKey := make(map[codeforcesFallbackProblemKey]codeforcesFallbackProblemMeta)
+	aggregatesByParty := make(map[string]*codeforcesFallbackParticipantAggregate)
+
+	for _, submission := range submissions {
+		if !showUnofficial && !isCodeforcesStatusOfficialParticipant(submission.Author.ParticipantType) {
+			continue
+		}
+
+		matchedHandles := matchCodeforcesAuthorHandles(submission.Author.Members, targetHandles)
+		if len(matchedHandles) == 0 {
+			continue
+		}
+
+		problemIndex := strings.TrimSpace(submission.Problem.Index)
+		if problemIndex == "" {
+			continue
+		}
+
+		problemContestID := submission.Problem.ContestID
+		if problemContestID <= 0 {
+			problemContestID = configContestID
+		}
+		if problemContestID <= 0 {
+			continue
+		}
+
+		problemKey := codeforcesFallbackProblemKey{
+			contestID: problemContestID,
+			index:     problemIndex,
+		}
+		meta := problemMetaByKey[problemKey]
+		meta.contestID = problemContestID
+		meta.index = problemIndex
+		if meta.name == "" {
+			meta.name = strings.TrimSpace(submission.Problem.Name)
+		}
+		if meta.points == nil && submission.Problem.Points != nil {
+			value := *submission.Problem.Points
+			meta.points = &value
+		}
+		if submission.Points != nil {
+			if !meta.hasObservedMax || *submission.Points > meta.observedMax {
+				meta.observedMax = *submission.Points
+				meta.hasObservedMax = true
+			}
+		}
+		problemMetaByKey[problemKey] = meta
+
+		partyKey := buildCodeforcesPartyKey(matchedHandles)
+		aggregate, ok := aggregatesByParty[partyKey]
+		if !ok {
+			aggregate = &codeforcesFallbackParticipantAggregate{
+				handles:         append([]string(nil), matchedHandles...),
+				eventsByProblem: make(map[codeforcesFallbackProblemKey][]codeforcesFallbackSubmissionEvent),
+			}
+			aggregatesByParty[partyKey] = aggregate
+		}
+
+		event := codeforcesFallbackSubmissionEvent{
+			id:                  submission.ID,
+			relativeTimeSeconds: submission.RelativeTimeSeconds,
+			verdict:             strings.TrimSpace(submission.Verdict),
+		}
+		if submission.Points != nil {
+			value := *submission.Points
+			event.points = &value
+		}
+		aggregate.eventsByProblem[problemKey] = append(aggregate.eventsByProblem[problemKey], event)
+	}
+
+	problemOrder := make([]codeforcesFallbackProblemKey, 0, len(problemMetaByKey))
+	for key := range problemMetaByKey {
+		problemOrder = append(problemOrder, key)
+	}
+	sort.Slice(problemOrder, func(i, j int) bool {
+		if problemOrder[i].contestID != problemOrder[j].contestID {
+			return problemOrder[i].contestID < problemOrder[j].contestID
+		}
+		return compareCodeforcesProblemIndex(problemOrder[i].index, problemOrder[j].index) < 0
+	})
+
+	out.Problems = make([]CodeforcesContestProblem, 0, len(problemOrder))
+	problemIndexByKey := make(map[codeforcesFallbackProblemKey]int, len(problemOrder))
+	for i, key := range problemOrder {
+		meta := problemMetaByKey[key]
+		points := meta.points
+		if points == nil && isIOI && meta.hasObservedMax {
+			value := meta.observedMax
+			points = &value
+		}
+
+		out.Problems = append(out.Problems, CodeforcesContestProblem{
+			Index:  meta.index,
+			Name:   meta.name,
+			Points: points,
+		})
+		problemIndexByKey[key] = i
+	}
+
+	builtRows := make([]codeforcesFallbackBuiltRow, 0, len(aggregatesByParty))
+	for _, aggregate := range aggregatesByParty {
+		row := CodeforcesContestRow{
+			Handles:        append([]string(nil), aggregate.handles...),
+			ProblemResults: make([]CodeforcesContestProblemResult, len(problemOrder)),
+		}
+		built := codeforcesFallbackBuiltRow{
+			row:     row,
+			sortKey: strings.ToLower(strings.Join(aggregate.handles, ";")),
+		}
+
+		for problemKey, events := range aggregate.eventsByProblem {
+			taskIdx, ok := problemIndexByKey[problemKey]
+			if !ok {
+				continue
+			}
+
+			stats := aggregateCodeforcesFallbackProblemStats(events, isIOI)
+			built.row.ProblemResults[taskIdx] = CodeforcesContestProblemResult{
+				Points:               stats.points,
+				RejectedAttemptCount: stats.rejectedAttempts,
+			}
+			if stats.solved {
+				built.solved++
+			}
+			if isIOI {
+				built.totalScore += stats.points
+			} else {
+				built.penalty += stats.penalty
+			}
+		}
+
+		if !isIOI {
+			penalty := built.penalty
+			built.row.Penalty = &penalty
+		}
+		builtRows = append(builtRows, built)
+	}
+
+	sort.SliceStable(builtRows, func(i, j int) bool {
+		if isIOI {
+			scoreDelta := builtRows[i].totalScore - builtRows[j].totalScore
+			if math.Abs(scoreDelta) > codeforcesFallbackFloatEpsilon {
+				return builtRows[i].totalScore > builtRows[j].totalScore
+			}
+			if builtRows[i].solved != builtRows[j].solved {
+				return builtRows[i].solved > builtRows[j].solved
+			}
+		} else {
+			if builtRows[i].solved != builtRows[j].solved {
+				return builtRows[i].solved > builtRows[j].solved
+			}
+			if builtRows[i].penalty != builtRows[j].penalty {
+				return builtRows[i].penalty < builtRows[j].penalty
+			}
+		}
+		return builtRows[i].sortKey < builtRows[j].sortKey
+	})
+
+	rank := 0
+	for i := range builtRows {
+		if i == 0 {
+			rank = 1
+		} else if !sameCodeforcesFallbackRank(builtRows[i-1], builtRows[i], isIOI) {
+			rank = i + 1
+		}
+
+		builtRows[i].row.Rank = rank
+		out.Rows = append(out.Rows, builtRows[i].row)
+	}
+
+	return out
+}
+
+func matchCodeforcesAuthorHandles(members []codeforcesContestMember, targetHandles map[string]string) []string {
+	out := make([]string, 0, len(members))
+	seen := make(map[string]struct{}, len(members))
+	for _, member := range members {
+		rawHandle := strings.TrimSpace(member.Handle)
+		if rawHandle == "" {
+			continue
+		}
+		key := strings.ToLower(rawHandle)
+		canonical, ok := targetHandles[key]
+		if !ok {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, canonical)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.ToLower(out[i]) < strings.ToLower(out[j])
+	})
+	return out
+}
+
+func buildCodeforcesPartyKey(handles []string) string {
+	normalized := make([]string, 0, len(handles))
+	for _, handle := range handles {
+		key := strings.ToLower(strings.TrimSpace(handle))
+		if key == "" {
+			continue
+		}
+		normalized = append(normalized, key)
+	}
+	sort.Strings(normalized)
+	return strings.Join(normalized, ";")
+}
+
+func aggregateCodeforcesFallbackProblemStats(events []codeforcesFallbackSubmissionEvent, isIOI bool) codeforcesFallbackProblemStats {
+	if len(events) == 0 {
+		return codeforcesFallbackProblemStats{}
+	}
+
+	sort.SliceStable(events, func(i, j int) bool {
+		if events[i].relativeTimeSeconds != events[j].relativeTimeSeconds {
+			return events[i].relativeTimeSeconds < events[j].relativeTimeSeconds
+		}
+		return events[i].id < events[j].id
+	})
+
+	if isIOI {
+		bestPoints := 0.0
+		hasPoints := false
+		solved := false
+		for _, event := range events {
+			if strings.EqualFold(event.verdict, "OK") {
+				solved = true
+			}
+			if event.points != nil {
+				if !hasPoints || *event.points > bestPoints {
+					bestPoints = *event.points
+					hasPoints = true
+				}
+			}
+		}
+		if !hasPoints && solved {
+			bestPoints = 100
+			hasPoints = true
+		}
+
+		rejectedAttempts := 0
+		if !hasPoints {
+			rejectedAttempts = len(events)
+		}
+
+		return codeforcesFallbackProblemStats{
+			points:           bestPoints,
+			rejectedAttempts: rejectedAttempts,
+			solved:           solved,
+		}
+	}
+
+	rejectedBeforeAccepted := 0
+	solved := false
+	acceptedTimeSeconds := 0
+	for _, event := range events {
+		if solved {
+			continue
+		}
+		if strings.EqualFold(event.verdict, "OK") {
+			solved = true
+			acceptedTimeSeconds = event.relativeTimeSeconds
+			if acceptedTimeSeconds < 0 {
+				acceptedTimeSeconds = 0
+			}
+			continue
+		}
+		rejectedBeforeAccepted++
+	}
+
+	points := 0.0
+	penalty := 0
+	if solved {
+		points = 1
+		penalty = acceptedTimeSeconds/60 + rejectedBeforeAccepted*20
+	}
+
+	if !solved && rejectedBeforeAccepted == 0 {
+		rejectedBeforeAccepted = len(events)
+	}
+
+	return codeforcesFallbackProblemStats{
+		points:           points,
+		rejectedAttempts: rejectedBeforeAccepted,
+		solved:           solved,
+		penalty:          penalty,
+	}
+}
+
+func sameCodeforcesFallbackRank(prev codeforcesFallbackBuiltRow, curr codeforcesFallbackBuiltRow, isIOI bool) bool {
+	if isIOI {
+		return math.Abs(prev.totalScore-curr.totalScore) <= codeforcesFallbackFloatEpsilon && prev.solved == curr.solved
+	}
+	return prev.solved == curr.solved && prev.penalty == curr.penalty
+}
+
+func compareCodeforcesProblemIndex(left string, right string) int {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+
+	leftTokens := codeforcesIndexTokenRe.FindAllString(left, -1)
+	rightTokens := codeforcesIndexTokenRe.FindAllString(right, -1)
+	limit := len(leftTokens)
+	if len(rightTokens) < limit {
+		limit = len(rightTokens)
+	}
+
+	for i := 0; i < limit; i++ {
+		lToken := leftTokens[i]
+		rToken := rightTokens[i]
+
+		lNum, lErr := strconv.Atoi(lToken)
+		rNum, rErr := strconv.Atoi(rToken)
+		if lErr == nil && rErr == nil {
+			if lNum != rNum {
+				if lNum < rNum {
+					return -1
+				}
+				return 1
+			}
+			continue
+		}
+
+		lNorm := strings.ToLower(lToken)
+		rNorm := strings.ToLower(rToken)
+		if lNorm == rNorm {
+			continue
+		}
+		if lNorm < rNorm {
+			return -1
+		}
+		return 1
+	}
+
+	if len(leftTokens) != len(rightTokens) {
+		if len(leftTokens) < len(rightTokens) {
+			return -1
+		}
+		return 1
+	}
+
+	lNorm := strings.ToLower(left)
+	rNorm := strings.ToLower(right)
+	if lNorm == rNorm {
+		return 0
+	}
+	if lNorm < rNorm {
+		return -1
+	}
+	return 1
 }

@@ -484,11 +484,11 @@ func buildCodeforcesContestStandingsFromStatus(
 		if meta.name == "" {
 			meta.name = strings.TrimSpace(submission.Problem.Name)
 		}
-		if meta.points == nil && submission.Problem.Points != nil {
-			value := *submission.Problem.Points
-			meta.points = &value
-		}
 		if submission.Points != nil {
+			if meta.points == nil && submission.Problem.Points != nil {
+				value := *submission.Problem.Points
+				meta.points = &value
+			}
 			if !meta.hasObservedMax || *submission.Points > meta.observedMax {
 				meta.observedMax = *submission.Points
 				meta.hasObservedMax = true
@@ -688,7 +688,7 @@ func aggregateCodeforcesFallbackProblemStats(events []codeforcesFallbackSubmissi
 			}
 		}
 		if !hasPoints && solved {
-			bestPoints = 100
+			bestPoints = 1
 			hasPoints = true
 		}
 

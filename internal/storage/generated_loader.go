@@ -1,15 +1,14 @@
 package storage
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
 )
 
 type GeneratedLoader struct {
@@ -24,14 +23,9 @@ func NewGeneratedLoader(outDir string) *GeneratedLoader {
 
 func (l *GeneratedLoader) LoadGroups() ([]domain.GeneratedGroupMeta, error) {
 	path := filepath.Join(l.OutDir, "groups.json")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
 	var groups []domain.GeneratedGroupMeta
-	if err := json.Unmarshal(b, &groups); err != nil {
-		return nil, fmt.Errorf("decode groups json: %w", err)
+	if err := fileutil.ReadJSON(path, &groups); err != nil {
+		return nil, err
 	}
 	return groups, nil
 }
@@ -42,14 +36,9 @@ func (l *GeneratedLoader) LoadGroupStandings(slug string) (domain.GeneratedGroup
 	}
 
 	path := filepath.Join(l.OutDir, "standings", slug+".json")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return domain.GeneratedGroupStandings{}, err
-	}
-
 	var standings domain.GeneratedGroupStandings
-	if err := json.Unmarshal(b, &standings); err != nil {
-		return domain.GeneratedGroupStandings{}, fmt.Errorf("decode standings json: %w", err)
+	if err := fileutil.ReadJSON(path, &standings); err != nil {
+		return domain.GeneratedGroupStandings{}, err
 	}
 	return standings, nil
 }

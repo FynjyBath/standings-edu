@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
 )
 
 func main() {
@@ -63,26 +63,17 @@ func createEmptyGroup(dataDir, slug, name, formLink string) error {
 	groupFile := domain.GroupFile{
 		Title:      name,
 		FormLink:   formLink,
-		Update:     boolPtr(true),
+		Update:     pointerTo(true),
 		StudentIDs: []string{},
 	}
-	if err := writeJSONFile(groupPath, groupFile); err != nil {
+	if err := fileutil.WriteJSON(groupPath, groupFile, 0o644); err != nil {
 		return fmt.Errorf("write %q: %w", groupPath, err)
 	}
-	if err := writeJSONFile(contestsPath, []any{}); err != nil {
+	if err := fileutil.WriteJSON(contestsPath, []any{}, 0o644); err != nil {
 		return fmt.Errorf("write %q: %w", contestsPath, err)
 	}
 
 	return nil
-}
-
-func writeJSONFile(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	b = append(b, '\n')
-	return os.WriteFile(path, b, 0o644)
 }
 
 func fileExists(path string) bool {
@@ -90,6 +81,6 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func boolPtr(v bool) *bool {
+func pointerTo(v bool) *bool {
 	return &v
 }

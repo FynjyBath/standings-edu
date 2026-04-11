@@ -133,7 +133,7 @@ func (p *HTMLTableImportProvider) BuildStandings(ctx context.Context, input Cont
 		return domain.GeneratedContestStandings{}, err
 	}
 
-	parsedTables, err := parseMatchingTables(pageHTML, schema)
+	parsedTable, err := parseMatchingTable(pageHTML, schema)
 	if err != nil {
 		return domain.GeneratedContestStandings{}, err
 	}
@@ -143,12 +143,8 @@ func (p *HTMLTableImportProvider) BuildStandings(ctx context.Context, input Cont
 	studentAutoFindMatcher := newPrefixTrieMatcher(collectStudentAutoFindPrefixes(matchers))
 	extraPrefixMatcher := newPrefixTrieMatcher(extraPrefixes)
 
-	matchesByTable := make([]tableMatchResult, 0, len(parsedTables))
-	for _, table := range parsedTables {
-		matchesByTable = append(matchesByTable, matchRowsToStudents(table.rows, matchers, cfg.AutoFind, studentAutoFindMatcher, extraPrefixMatcher))
-	}
-
-	return buildImportedStandings(input.Contest, cfg.PageURL, schema, parsedTables, input.Students, matchesByTable), nil
+	matches := matchRowsToStudents(parsedTable.rows, matchers, cfg.AutoFind, studentAutoFindMatcher, extraPrefixMatcher)
+	return buildImportedStandings(input.Contest, cfg.PageURL, schema, parsedTable, input.Students, matches), nil
 }
 
 func (p *HTMLTableImportProvider) fetchPage(ctx context.Context, pageURL string) (string, error) {
@@ -269,7 +265,7 @@ func normalizeColumnKind(raw string) htmlImportColumnKind {
 	}
 }
 
-func parseMatchingTables(pageHTML string, schema htmlTableImportSchema) ([]parsedImportedTable, error) {
+func parseMatchingTable(pageHTML string, schema htmlTableImportSchema) (parsedImportedTable, error) {
 	tableBlocks := extractTagBlocks(pageHTML, "table")
 	for i, tableBlock := range tableBlocks {
 		rows := extractTagBlocks(tableBlock, "tr")
@@ -286,16 +282,14 @@ func parseMatchingTables(pageHTML string, schema htmlTableImportSchema) ([]parse
 			parsedRows = append(parsedRows, row)
 		}
 		if len(parsedRows) > 0 {
-			return []parsedImportedTable{
-				{
-					index: i + 1,
-					rows:  parsedRows,
-				},
+			return parsedImportedTable{
+				index: i + 1,
+				rows:  parsedRows,
 			}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("no matching table found on page with row column count=%d", len(schema.columns))
+	return parsedImportedTable{}, fmt.Errorf("no matching table found on page with row column count=%d", len(schema.columns))
 }
 
 func parseImportedRow(cells []string, schema htmlTableImportSchema) parsedImportedRow {
@@ -605,138 +599,107 @@ func buildImportedStandings(
 	contest domain.Contest,
 	pageURL string,
 	schema htmlTableImportSchema,
-	tables []parsedImportedTable,
+	table parsedImportedTable,
 	students []domain.Student,
-	matchesByTable []tableMatchResult,
+	matches tableMatchResult,
 ) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
+	taskCount := len(schema.taskIndices)
+	tasks := make([]domain.GeneratedTask, 0, taskCount)
+	for taskIdx := 0; taskIdx < taskCount; taskIdx++ {
+		url := fmt.Sprintf("%s#table-%d-task-%d", pageURL, table.index, taskIdx+1)
+		tasks = append(tasks, domain.GeneratedTask{
+			Label:         domain.AlphabetLabel(taskIdx),
+			URL:           url,
+			NormalizedURL: domain.NormalizeTaskURL(url),
+		})
+	}
 
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
 		ScoreSystem: contest.ScoreSystem.Normalized(),
-		Subcontests: make([]domain.GeneratedSubcontest, 0, len(tables)),
-		Tasks:       make([]domain.GeneratedTask, 0),
-		Rows:        make([]domain.GeneratedRow, 0, len(students)),
-	}
-
-	tableTaskOffsets := make([]int, len(tables))
-	totalTasks := 0
-	for i, table := range tables {
-		tableTaskOffsets[i] = totalTasks
-
-		subTasks := make([]domain.GeneratedTask, 0, len(schema.taskIndices))
-		for j := range schema.taskIndices {
-			url := fmt.Sprintf("%s#table-%d-task-%d", pageURL, table.index, j+1)
-			subTasks = append(subTasks, domain.GeneratedTask{
-				Label:         domain.AlphabetLabel(j),
-				URL:           url,
-				NormalizedURL: domain.NormalizeTaskURL(url),
-			})
-		}
-
-		out.Subcontests = append(out.Subcontests, domain.GeneratedSubcontest{
+		Subcontests: []domain.GeneratedSubcontest{{
 			Title:     "Результаты",
-			TaskCount: len(subTasks),
-			Tasks:     subTasks,
-		})
-		out.Tasks = append(out.Tasks, subTasks...)
-		totalTasks += len(subTasks)
+			TaskCount: taskCount,
+			Tasks:     tasks,
+		}},
+		Tasks: tasks,
+		Rows:  make([]domain.GeneratedRow, 0, len(students)),
 	}
 
 	for _, student := range students {
 		row := domain.GeneratedRow{
 			StudentID:   student.ID,
 			PublicName:  student.PublicName,
-			Statuses:    make([]string, totalTasks),
+			Statuses:    make([]string, taskCount),
 			SolvedCount: 0,
 		}
 		for i := range row.Statuses {
 			row.Statuses[i] = domain.TaskStatusNone
 		}
 		if isIOI {
-			row.Scores = make([]*int, totalTasks)
+			row.Scores = make([]*int, taskCount)
 		}
 
-		for tableIdx := range tables {
-			match := matchesByTable[tableIdx].byStudent[student.ID]
-			if match.matchLen == 0 {
-				continue
-			}
-			if row.Place == "" && strings.TrimSpace(match.row.place) != "" {
-				row.Place = strings.TrimSpace(match.row.place)
-			}
-			if row.Penalty == nil && match.row.penalty != nil {
-				p := *match.row.penalty
-				row.Penalty = &p
-			}
-			if row.ProviderStatus == "" && strings.TrimSpace(match.row.providerStatus) != "" {
-				row.ProviderStatus = strings.TrimSpace(match.row.providerStatus)
-			}
-
-			offset := tableTaskOffsets[tableIdx]
-			for i := range match.row.statuses {
-				status := match.row.statuses[i]
-				row.Statuses[offset+i] = status
-				if status == domain.TaskStatusSolved {
-					row.SolvedCount++
-				}
-				if isIOI && match.row.scores[i] != nil {
-					val := *match.row.scores[i]
-					row.Scores[offset+i] = &val
-					row.TotalScore += val
-				}
-			}
+		match, ok := matches.byStudent[student.ID]
+		if ok && match.matchLen > 0 {
+			applyImportedRow(&row, match.row, isIOI)
 		}
 
 		out.Rows = append(out.Rows, row)
 	}
 
 	extraRowIndex := 0
-	for tableIdx := range tables {
-		offset := tableTaskOffsets[tableIdx]
-		for _, extra := range matchesByTable[tableIdx].extraRows {
-			extraRowIndex++
+	for _, extra := range matches.extraRows {
+		extraRowIndex++
 
-			row := domain.GeneratedRow{
-				StudentID:   fmt.Sprintf("extra_prefix_row_%d", extraRowIndex),
-				PublicName:  strings.TrimSpace(extra.row.name),
-				Statuses:    make([]string, totalTasks),
-				SolvedCount: 0,
-			}
-			for i := range row.Statuses {
-				row.Statuses[i] = domain.TaskStatusNone
-			}
-			if isIOI {
-				row.Scores = make([]*int, totalTasks)
-			}
-
-			row.Place = strings.TrimSpace(extra.row.place)
-			if extra.row.penalty != nil {
-				p := *extra.row.penalty
-				row.Penalty = &p
-			}
-			row.ProviderStatus = strings.TrimSpace(extra.row.providerStatus)
-
-			for i := range extra.row.statuses {
-				status := extra.row.statuses[i]
-				row.Statuses[offset+i] = status
-				if status == domain.TaskStatusSolved {
-					row.SolvedCount++
-				}
-				if isIOI && extra.row.scores[i] != nil {
-					val := *extra.row.scores[i]
-					row.Scores[offset+i] = &val
-					row.TotalScore += val
-				}
-			}
-
-			out.Rows = append(out.Rows, row)
+		row := domain.GeneratedRow{
+			StudentID:   fmt.Sprintf("extra_prefix_row_%d", extraRowIndex),
+			PublicName:  strings.TrimSpace(extra.row.name),
+			Statuses:    make([]string, taskCount),
+			SolvedCount: 0,
 		}
+		for i := range row.Statuses {
+			row.Statuses[i] = domain.TaskStatusNone
+		}
+		if isIOI {
+			row.Scores = make([]*int, taskCount)
+		}
+		applyImportedRow(&row, extra.row, isIOI)
+		out.Rows = append(out.Rows, row)
 	}
 
 	sortProviderRows(out.Rows, isIOI)
 	return out
+}
+
+func applyImportedRow(row *domain.GeneratedRow, parsed parsedImportedRow, isIOI bool) {
+	if row == nil {
+		return
+	}
+	row.Place = strings.TrimSpace(parsed.place)
+	if parsed.penalty != nil {
+		value := *parsed.penalty
+		row.Penalty = &value
+	}
+	row.ProviderStatus = strings.TrimSpace(parsed.providerStatus)
+
+	for taskIdx := range parsed.statuses {
+		if taskIdx >= len(row.Statuses) {
+			break
+		}
+		status := parsed.statuses[taskIdx]
+		row.Statuses[taskIdx] = status
+		if status == domain.TaskStatusSolved {
+			row.SolvedCount++
+		}
+		if isIOI && taskIdx < len(parsed.scores) && parsed.scores[taskIdx] != nil && taskIdx < len(row.Scores) {
+			value := *parsed.scores[taskIdx]
+			row.Scores[taskIdx] = &value
+			row.TotalScore += value
+		}
+	}
 }
 
 func sortProviderRows(rows []domain.GeneratedRow, isIOI bool) {

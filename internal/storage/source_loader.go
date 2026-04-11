@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
 )
 
 type SourceLoader struct {
@@ -43,21 +43,19 @@ func (l *SourceLoader) Load() (*domain.SourceData, error) {
 func (l *SourceLoader) loadStudents() (map[string]domain.Student, error) {
 	path := filepath.Join(l.DataDir, "students.json")
 	var students []domain.Student
-	if err := readJSON(path, &students); err != nil {
+	if err := fileutil.ReadJSON(path, &students); err != nil {
 		return nil, fmt.Errorf("load students: %w", err)
 	}
 
 	out := make(map[string]domain.Student, len(students))
 	for i, s := range students {
-		s.ID = strings.TrimSpace(s.ID)
+		s = domain.NormalizeStudent(s)
 		if s.ID == "" {
 			continue
 		}
-		s.FullName = strings.TrimSpace(s.FullName)
 		if s.FullName == "" {
 			return nil, fmt.Errorf("student item #%d has empty full_name", i)
 		}
-		s.PublicName = strings.TrimSpace(s.PublicName)
 		if s.PublicName == "" {
 			s.PublicName = s.FullName
 		}
@@ -69,7 +67,7 @@ func (l *SourceLoader) loadStudents() (map[string]domain.Student, error) {
 func (l *SourceLoader) loadContests() (map[string]domain.Contest, error) {
 	path := filepath.Join(l.DataDir, "contests.json")
 	var contests []domain.Contest
-	if err := readJSON(path, &contests); err != nil {
+	if err := fileutil.ReadJSON(path, &contests); err != nil {
 		return nil, fmt.Errorf("load contests: %w", err)
 	}
 
@@ -79,6 +77,9 @@ func (l *SourceLoader) loadContests() (map[string]domain.Contest, error) {
 		if c.ID == "" {
 			continue
 		}
+		c.Title = strings.TrimSpace(c.Title)
+		c.ScoreSystem = c.ScoreSystem.Normalized()
+		c.Provider = strings.TrimSpace(c.Provider)
 		c.Materials = domain.NormalizeContestMaterials(c.Materials)
 		out[c.ID] = c
 	}
@@ -98,10 +99,13 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 			continue
 		}
 		slug := entry.Name()
+		if !domain.IsValidSlug(slug) {
+			continue
+		}
 		dir := filepath.Join(groupsDir, slug)
 
 		var gf domain.GroupFile
-		if err := readJSON(filepath.Join(dir, "group.json"), &gf); err != nil {
+		if err := fileutil.ReadJSON(filepath.Join(dir, "group.json"), &gf); err != nil {
 			return nil, fmt.Errorf("load group %q: %w", slug, err)
 		}
 
@@ -115,12 +119,17 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 			update = *gf.Update
 		}
 
+		title := strings.TrimSpace(gf.Title)
+		if title == "" {
+			title = slug
+		}
+
 		groups = append(groups, domain.GroupDefinition{
 			Slug:       slug,
-			Title:      gf.Title,
+			Title:      title,
 			FormLink:   strings.TrimSpace(gf.FormLink),
 			Update:     update,
-			StudentIDs: gf.StudentIDs,
+			StudentIDs: domain.NormalizeGroups(gf.StudentIDs),
 			Contests:   contests,
 		})
 	}
@@ -139,7 +148,7 @@ type groupContestJSON struct {
 
 func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef, error) {
 	var items []groupContestJSON
-	if err := readJSON(path, &items); err != nil {
+	if err := fileutil.ReadJSON(path, &items); err != nil {
 		return nil, err
 	}
 
@@ -167,15 +176,4 @@ func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef,
 	}
 
 	return out, nil
-}
-
-func readJSON(path string, out any) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read file %q: %w", path, err)
-	}
-	if err := json.Unmarshal(b, out); err != nil {
-		return fmt.Errorf("decode json %q: %w", path, err)
-	}
-	return nil
 }

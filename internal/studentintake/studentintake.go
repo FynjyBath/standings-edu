@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
 )
 
 var ErrMissingFullName = errors.New("full_name is required")
@@ -114,19 +115,19 @@ func (s *Store) PrepareAdminIntakeStaging(stagingPath string) ([]byte, error) {
 		sourceBody = []byte("[]\n")
 	}
 
-	mode, err := detectFileMode(stagingPath, 0o644)
+	mode, err := fileutil.DetectFileMode(stagingPath, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	if err := writeFileAtomically(stagingPath, sourceBody, mode); err != nil {
+	if err := fileutil.WriteFileAtomic(stagingPath, sourceBody, mode); err != nil {
 		return nil, fmt.Errorf("write staging file %q: %w", stagingPath, err)
 	}
 
-	intakeMode, err := detectFileMode(s.intakePath, 0o644)
+	intakeMode, err := fileutil.DetectFileMode(s.intakePath, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	if err := writeFileAtomically(s.intakePath, []byte("[]\n"), intakeMode); err != nil {
+	if err := fileutil.WriteFileAtomic(s.intakePath, []byte("[]\n"), intakeMode); err != nil {
 		return nil, fmt.Errorf("clear source intake file %q: %w", s.intakePath, err)
 	}
 	return append([]byte(nil), sourceBody...), nil
@@ -141,11 +142,11 @@ func (s *Store) SaveAdminIntakeStaging(stagingPath string, body []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	mode, err := detectFileMode(stagingPath, 0o644)
+	mode, err := fileutil.DetectFileMode(stagingPath, 0o644)
 	if err != nil {
 		return err
 	}
-	if err := writeFileAtomically(stagingPath, body, mode); err != nil {
+	if err := fileutil.WriteFileAtomic(stagingPath, body, mode); err != nil {
 		return fmt.Errorf("write staging file %q: %w", stagingPath, err)
 	}
 	return nil
@@ -181,7 +182,7 @@ func (s *Store) syncGroup(intakeStudent domain.Student, groupSlug string) error 
 		return fmt.Errorf("load group %q: %w", groupSlug, err)
 	}
 
-	groupFile.StudentIDs = mergeGroups(groupFile.StudentIDs, []string{savedSource.ID})
+	groupFile.StudentIDs = domain.MergeGroups(groupFile.StudentIDs, []string{savedSource.ID})
 	if err := writeGroupFile(groupPath, groupFile); err != nil {
 		return fmt.Errorf("write group file %q: %w", groupPath, err)
 	}
@@ -189,7 +190,7 @@ func (s *Store) syncGroup(intakeStudent domain.Student, groupSlug string) error 
 }
 
 func MergeStudents(existing []domain.Student, intake []domain.Student) ([]domain.Student, MergeStats, error) {
-	result := normalizeStudents(existing)
+	result := domain.NormalizeStudents(existing)
 	stats := MergeStats{}
 
 	for i, incoming := range intake {
@@ -213,27 +214,17 @@ func MergeStudents(existing []domain.Student, intake []domain.Student) ([]domain
 }
 
 func LoadStudentsFile(path string) ([]domain.Student, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read file %q: %w", path, err)
-	}
-
 	var students []domain.Student
-	if err := json.Unmarshal(b, &students); err != nil {
-		return nil, fmt.Errorf("decode json %q: %w", path, err)
+	if err := fileutil.ReadJSON(path, &students); err != nil {
+		return nil, err
 	}
 	return students, nil
 }
 
 func LoadIntakeFile(path string) ([]domain.Student, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read file %q: %w", path, err)
-	}
-
 	var items []map[string]json.RawMessage
-	if err := json.Unmarshal(b, &items); err != nil {
-		return nil, fmt.Errorf("decode json %q: %w", path, err)
+	if err := fileutil.ReadJSON(path, &items); err != nil {
+		return nil, err
 	}
 
 	out := make([]domain.Student, 0, len(items))
@@ -251,7 +242,7 @@ func LoadIntakeFile(path string) ([]domain.Student, error) {
 }
 
 func WriteStudentsFile(path string, students []domain.Student) error {
-	normalized := normalizeStudents(students)
+	normalized := domain.NormalizeStudents(students)
 
 	items := make([]studentJSON, 0, len(normalized))
 	for _, s := range normalized {
@@ -268,17 +259,8 @@ func WriteStudentsFile(path string, students []domain.Student) error {
 		items = append(items, item)
 	}
 
-	b, err := json.MarshalIndent(items, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal json %q: %w", path, err)
-	}
-	b = append(b, '\n')
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir %q: %w", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return fmt.Errorf("write file %q: %w", path, err)
+	if err := fileutil.WriteJSON(path, items, 0o644); err != nil {
+		return fmt.Errorf("write students %q: %w", path, err)
 	}
 	return nil
 }
@@ -291,14 +273,14 @@ type submittedFields struct {
 }
 
 func parseSubmittedFields(fields map[string]string) (submittedFields, error) {
-	fullName := normalizeWhitespace(fields["full_name"])
+	fullName := domain.NormalizeWhitespace(fields["full_name"])
 	if fullName == "" {
 		return submittedFields{}, ErrMissingFullName
 	}
 
 	return submittedFields{
 		FullName:   fullName,
-		PublicName: normalizeWhitespace(fields["public_name"]),
+		PublicName: domain.NormalizeWhitespace(fields["public_name"]),
 		Group:      strings.TrimSpace(fields["group"]),
 		Accounts:   accountsFromFields(fields),
 	}, nil
@@ -314,8 +296,8 @@ func upsertStudent(
 	incoming domain.Student,
 	opts upsertOptions,
 ) ([]domain.Student, domain.Student, bool, error) {
-	out := normalizeStudents(students)
-	incoming = normalizeStudent(incoming)
+	out := domain.NormalizeStudents(students)
+	incoming = domain.NormalizeStudent(incoming)
 	if incoming.FullName == "" {
 		return nil, domain.Student{}, false, ErrMissingFullName
 	}
@@ -333,13 +315,13 @@ func upsertStudent(
 		} else if merged.PublicName == "" {
 			merged.PublicName = GeneratePublicNameFromFullName(merged.FullName)
 		}
-		merged.Accounts = mergeAccounts(merged.Accounts, incoming.Accounts)
-		merged.Groups = mergeGroups(merged.Groups, incoming.Groups)
+		merged.Accounts = domain.MergeAccounts(merged.Accounts, incoming.Accounts)
+		merged.Groups = domain.MergeGroups(merged.Groups, incoming.Groups)
 
 		currentID := strings.TrimSpace(merged.ID)
 		if currentID == "" || idTakenByOther(out, idx, currentID) {
 			if opts.PreferIncomingIDOnEmpty {
-				if candidate := normalizeID(incoming.ID); candidate != "" && !idTakenByOther(out, idx, candidate) {
+				if candidate := domain.NormalizeID(incoming.ID); candidate != "" && !idTakenByOther(out, idx, candidate) {
 					merged.ID = candidate
 				} else {
 					merged.ID = nextUniqueID(out, merged.FullName, idx)
@@ -349,98 +331,23 @@ func upsertStudent(
 			}
 		}
 
-		merged = normalizeStudent(merged)
+		merged = domain.NormalizeStudent(merged)
 		out[idx] = merged
 		return out, merged, true, nil
 	}
 
 	created := incoming
-	created.ID = normalizeID(created.ID)
+	created.ID = domain.NormalizeID(created.ID)
 	if created.ID == "" || idTakenByOther(out, -1, created.ID) {
 		created.ID = nextUniqueID(out, created.FullName, -1)
 	}
 	if created.PublicName == "" {
 		created.PublicName = GeneratePublicNameFromFullName(created.FullName)
 	}
-	created = normalizeStudent(created)
+	created = domain.NormalizeStudent(created)
 
 	out = append(out, created)
 	return out, created, false, nil
-}
-
-func normalizeStudents(students []domain.Student) []domain.Student {
-	out := make([]domain.Student, len(students))
-	for i, s := range students {
-		out[i] = normalizeStudent(s)
-	}
-	return out
-}
-
-func normalizeStudent(s domain.Student) domain.Student {
-	s.ID = normalizeID(s.ID)
-	s.FullName = normalizeWhitespace(s.FullName)
-	s.PublicName = normalizeWhitespace(s.PublicName)
-	s.Accounts = normalizeAccounts(s.Accounts)
-	s.Groups = normalizeGroups(s.Groups)
-	return s
-}
-
-func normalizeID(id string) string {
-	return strings.TrimSpace(id)
-}
-
-func normalizeWhitespace(s string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
-}
-
-func normalizeAccounts(accounts []domain.Account) []domain.Account {
-	if len(accounts) == 0 {
-		return nil
-	}
-
-	out := make([]domain.Account, 0, len(accounts))
-	indexBySite := make(map[string]int, len(accounts))
-	for _, a := range accounts {
-		site := domain.NormalizeSite(a.Site)
-		accountID := strings.TrimSpace(a.AccountID)
-		if site == "" || accountID == "" {
-			continue
-		}
-		if idx, ok := indexBySite[site]; ok {
-			out[idx].AccountID = accountID
-			continue
-		}
-		indexBySite[site] = len(out)
-		out = append(out, domain.Account{Site: site, AccountID: accountID})
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func mergeAccounts(existing []domain.Account, updates []domain.Account) []domain.Account {
-	if len(updates) == 0 {
-		return normalizeAccounts(existing)
-	}
-
-	merged := make([]domain.Account, 0, len(existing)+len(updates))
-	indexBySite := make(map[string]int, len(existing)+len(updates))
-
-	for _, acc := range normalizeAccounts(existing) {
-		indexBySite[acc.Site] = len(merged)
-		merged = append(merged, acc)
-	}
-	for _, update := range normalizeAccounts(updates) {
-		if idx, ok := indexBySite[update.Site]; ok {
-			merged[idx].AccountID = update.AccountID
-			continue
-		}
-		indexBySite[update.Site] = len(merged)
-		merged = append(merged, update)
-	}
-
-	return merged
 }
 
 func accountsFromFields(fields map[string]string) []domain.Account {
@@ -467,35 +374,7 @@ func accountsFromFields(fields map[string]string) []domain.Account {
 			AccountID: accountID,
 		})
 	}
-	return normalizeAccounts(accounts)
-}
-
-func normalizeGroups(groups []string) []string {
-	if len(groups) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(groups))
-	seen := make(map[string]struct{}, len(groups))
-	for _, group := range groups {
-		group = strings.TrimSpace(group)
-		if group == "" {
-			continue
-		}
-		if _, ok := seen[group]; ok {
-			continue
-		}
-		seen[group] = struct{}{}
-		out = append(out, group)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func mergeGroups(existing []string, updates []string) []string {
-	return normalizeGroups(append(normalizeGroups(existing), normalizeGroups(updates)...))
+	return domain.NormalizeAccounts(accounts)
 }
 
 func findStudentIndexByFullName(students []domain.Student, fullName string) int {
@@ -560,7 +439,7 @@ func loadOrCreateGroupFile(dataDir, groupSlug string) (string, domain.GroupFile,
 
 	groupFile = domain.GroupFile{
 		Title:      groupSlug,
-		Update:     boolPtr(true),
+		Update:     pointerTo(true),
 		StudentIDs: nil,
 	}
 	if err := writeGroupFile(path, groupFile); err != nil {
@@ -586,16 +465,9 @@ func readGroupFile(path string) (domain.GroupFile, error) {
 }
 
 func writeGroupFile(path string, groupFile domain.GroupFile) error {
-	groupFile.StudentIDs = normalizeGroups(groupFile.StudentIDs)
-
-	b, err := json.MarshalIndent(groupFile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal group file %q: %w", path, err)
-	}
-	b = append(b, '\n')
-
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return err
+	groupFile.StudentIDs = domain.NormalizeGroups(groupFile.StudentIDs)
+	if err := fileutil.WriteJSON(path, groupFile, 0o644); err != nil {
+		return fmt.Errorf("write group file %q: %w", path, err)
 	}
 	return nil
 }
@@ -676,8 +548,8 @@ func decodeIntakeItem(item map[string]json.RawMessage) (domain.Student, error) {
 		extraAccounts = append(extraAccounts, domain.Account{Site: field, AccountID: value})
 	}
 
-	student = normalizeStudent(student)
-	student.Accounts = mergeAccounts(student.Accounts, extraAccounts)
+	student = domain.NormalizeStudent(student)
+	student.Accounts = domain.MergeAccounts(student.Accounts, extraAccounts)
 	return student, nil
 }
 
@@ -692,58 +564,7 @@ func isEmptyIntakeFile(body []byte) bool {
 	return len(items) == 0
 }
 
-func detectFileMode(path string, defaultMode os.FileMode) (os.FileMode, error) {
-	info, err := os.Stat(path)
-	if err == nil {
-		return info.Mode().Perm(), nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return defaultMode, nil
-	}
-	return 0, fmt.Errorf("stat file %q: %w", path, err)
-}
-
-func writeFileAtomically(path string, body []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %q: %w", dir, err)
-	}
-
-	tmpFile, err := os.CreateTemp(dir, ".studentintake-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-
-	cleanup := func() {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-	}
-
-	if _, err := tmpFile.Write(body); err != nil {
-		cleanup()
-		return fmt.Errorf("write temp file: %w", err)
-	}
-	if err := tmpFile.Chmod(mode); err != nil {
-		cleanup()
-		return fmt.Errorf("chmod temp file: %w", err)
-	}
-	if err := tmpFile.Sync(); err != nil {
-		cleanup()
-		return fmt.Errorf("sync temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("close temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("rename temp file: %w", err)
-	}
-	return nil
-}
-
-func boolPtr(v bool) *bool {
+func pointerTo(v bool) *bool {
 	return &v
 }
 
@@ -784,7 +605,7 @@ var translitTable = map[rune]string{
 }
 
 func GenerateIDFromFullName(fullName string) string {
-	parts := strings.Fields(normalizeWhitespace(fullName))
+	parts := strings.Fields(domain.NormalizeWhitespace(fullName))
 	if len(parts) == 0 {
 		return "student"
 	}
@@ -819,7 +640,7 @@ func GenerateIDFromFullName(fullName string) string {
 }
 
 func GeneratePublicNameFromFullName(fullName string) string {
-	parts := strings.Fields(normalizeWhitespace(fullName))
+	parts := strings.Fields(domain.NormalizeWhitespace(fullName))
 	if len(parts) == 0 {
 		return ""
 	}

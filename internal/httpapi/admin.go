@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
 )
 
 const maxAdminJSONBodyBytes = 8 << 20
@@ -310,18 +311,16 @@ func (h *Handlers) AdminFileSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mode := os.FileMode(0o644)
-	if info, statErr := os.Stat(absPath); statErr == nil {
-		mode = info.Mode().Perm()
-	} else if !errors.Is(statErr, os.ErrNotExist) {
+	mode, err := fileutil.DetectFileMode(absPath, 0o644)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"ok":    false,
-			"error": statErr.Error(),
+			"error": err.Error(),
 		})
 		return
 	}
 
-	if err := writeFileAtomically(absPath, []byte(req.Content), mode); err != nil {
+	if err := fileutil.WriteFileAtomic(absPath, []byte(req.Content), mode); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"ok":    false,
 			"error": err.Error(),
@@ -761,47 +760,6 @@ func validateJSONSyntax(body string) error {
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return fmt.Errorf("invalid json: trailing data after root value")
-	}
-
-	return nil
-}
-
-func writeFileAtomically(path string, body []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %q: %w", dir, err)
-	}
-
-	tmpFile, err := os.CreateTemp(dir, ".admin-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-
-	cleanup := func() {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-	}
-
-	if _, err := tmpFile.Write(body); err != nil {
-		cleanup()
-		return fmt.Errorf("write temp file: %w", err)
-	}
-	if err := tmpFile.Chmod(mode); err != nil {
-		cleanup()
-		return fmt.Errorf("chmod temp file: %w", err)
-	}
-	if err := tmpFile.Sync(); err != nil {
-		cleanup()
-		return fmt.Errorf("sync temp file: %w", err)
-	}
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("close temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil

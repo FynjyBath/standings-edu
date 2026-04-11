@@ -1,12 +1,12 @@
 package storage
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
 )
 
 type GeneratedWriter struct {
@@ -23,7 +23,10 @@ func (w *GeneratedWriter) WriteGroups(groups []domain.GeneratedGroupMeta) error 
 	}
 
 	path := filepath.Join(w.OutDir, "groups.json")
-	return writeJSON(path, groups)
+	if err := fileutil.WriteJSON(path, groups, 0o644); err != nil {
+		return fmt.Errorf("write groups %q: %w", path, err)
+	}
+	return nil
 }
 
 func (w *GeneratedWriter) WriteGroupStandings(standings domain.GeneratedGroupStandings) error {
@@ -33,17 +36,8 @@ func (w *GeneratedWriter) WriteGroupStandings(standings domain.GeneratedGroupSta
 	}
 
 	path := filepath.Join(standingsDir, standings.GroupSlug+".json")
-	return writeJSON(path, standings)
-}
-
-func writeJSON(path string, value any) error {
-	b, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal json %q: %w", path, err)
-	}
-	b = append(b, '\n')
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return fmt.Errorf("write file %q: %w", path, err)
+	if err := fileutil.WriteJSON(path, standings, 0o644); err != nil {
+		return fmt.Errorf("write standings %q: %w", path, err)
 	}
 	return nil
 }

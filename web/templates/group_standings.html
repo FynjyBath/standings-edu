@@ -12,6 +12,30 @@
   </p>
 </section>
 
+{{if .Standings.SolvedSummary}}
+<section class="contest-block">
+  <h2>Решено на сайтах этой страницы</h2>
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead>
+        <tr>
+          <th class="student-col">Ученик</th>
+          <th class="count-col">Решено на сайтах этой страницы</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Standings.SolvedSummary}}
+        <tr>
+          <td class="student-name">{{.PublicName}}</td>
+          <td class="solved-count">{{.SolvedCountOnPageSites}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+
 {{if .Standings.Contests}}
   {{range .Standings.Contests}}
   {{$contest := .}}

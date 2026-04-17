@@ -321,8 +321,81 @@ func (b *Builder) buildGroupStandings(
 			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())
 		}
 	}
+	out.SolvedSummary = b.buildGroupSolvedSummary(pg.contests, pg.students, statusByStudent)
 
 	return out, nil
+}
+
+func (b *Builder) buildGroupSolvedSummary(
+	contests []domain.Contest,
+	students []domain.Student,
+	statusByStudent map[string]*accountStatuses,
+) []domain.GeneratedGroupSolvedSummaryRow {
+	groupSites := make(map[string]struct{})
+	for _, contest := range contests {
+		if contest.TypeOrDefault() != domain.ContestTypeTasks {
+			continue
+		}
+		for _, subcontest := range contest.Subcontests {
+			for _, rawTaskURL := range subcontest.Tasks {
+				normalized := domain.NormalizeTaskURL(rawTaskURL)
+				site, _, ok := b.sources.ResolveSiteByTaskURL(normalized)
+				if !ok {
+					continue
+				}
+				site = domain.NormalizeSite(site)
+				if site == "" {
+					continue
+				}
+				groupSites[site] = struct{}{}
+			}
+		}
+	}
+
+	if len(groupSites) == 0 {
+		return nil
+	}
+
+	rows := make([]domain.GeneratedGroupSolvedSummaryRow, 0, len(students))
+	siteByTaskURL := make(map[string]string)
+	for _, student := range students {
+		combined := statusByStudent[student.ID]
+		if combined == nil {
+			combined = newAccountStatuses()
+		}
+
+		row := domain.GeneratedGroupSolvedSummaryRow{
+			StudentID:  student.ID,
+			PublicName: student.PublicName,
+		}
+		for taskURL := range combined.solved {
+			site, resolved := siteByTaskURL[taskURL]
+			if !resolved {
+				resolvedSite, _, ok := b.sources.ResolveSiteByTaskURL(taskURL)
+				if ok {
+					site = domain.NormalizeSite(resolvedSite)
+				}
+				siteByTaskURL[taskURL] = site
+			}
+			if site == "" {
+				continue
+			}
+			row.TotalSolvedCount++
+			if _, ok := groupSites[site]; ok {
+				row.SolvedCountOnPageSites++
+			}
+		}
+		rows = append(rows, row)
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].TotalSolvedCount != rows[j].TotalSolvedCount {
+			return rows[i].TotalSolvedCount > rows[j].TotalSolvedCount
+		}
+		return strings.ToLower(rows[i].PublicName) < strings.ToLower(rows[j].PublicName)
+	})
+
+	return rows
 }
 
 func (b *Builder) buildProviderContestStandings(

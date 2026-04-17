@@ -15,7 +15,7 @@
 {{if .Standings.SolvedSummary}}
 <section class="contest-block contest-block--pinned">
   <div class="contest-block-head">
-    <h2>Решено на сайтах этой страницы</h2>
+    <h2>Доска почёта</h2>
     <span class="pinned-badge">Закреплено</span>
   </div>
   <div class="table-wrap">
@@ -23,7 +23,7 @@
       <thead>
         <tr>
           <th class="student-col">Ученик</th>
-          <th class="count-col">Доска почёта</th>
+          <th class="count-col">Сумма</th>
           {{range .Standings.SolvedSummarySites}}
           <th class="count-col">{{.}}</th>
           {{end}}

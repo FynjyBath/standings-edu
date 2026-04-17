@@ -321,7 +321,7 @@ func (b *Builder) buildGroupStandings(
 			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())
 		}
 	}
-	out.SolvedSummary = b.buildGroupSolvedSummary(pg.contests, pg.students, statusByStudent)
+	out.SolvedSummarySites, out.SolvedSummary = b.buildGroupSolvedSummary(pg.contests, pg.students, statusByStudent)
 
 	return out, nil
 }
@@ -330,7 +330,7 @@ func (b *Builder) buildGroupSolvedSummary(
 	contests []domain.Contest,
 	students []domain.Student,
 	statusByStudent map[string]*accountStatuses,
-) []domain.GeneratedGroupSolvedSummaryRow {
+) ([]string, []domain.GeneratedGroupSolvedSummaryRow) {
 	groupSites := make(map[string]struct{})
 	for _, contest := range contests {
 		if contest.TypeOrDefault() != domain.ContestTypeTasks {
@@ -353,7 +353,18 @@ func (b *Builder) buildGroupSolvedSummary(
 	}
 
 	if len(groupSites) == 0 {
-		return nil
+		return nil, nil
+	}
+
+	sites := make([]string, 0, len(groupSites))
+	for site := range groupSites {
+		sites = append(sites, site)
+	}
+	sort.Strings(sites)
+
+	siteIndex := make(map[string]int, len(sites))
+	for i, site := range sites {
+		siteIndex[site] = i
 	}
 
 	rows := make([]domain.GeneratedGroupSolvedSummaryRow, 0, len(students))
@@ -365,8 +376,9 @@ func (b *Builder) buildGroupSolvedSummary(
 		}
 
 		row := domain.GeneratedGroupSolvedSummaryRow{
-			StudentID:  student.ID,
-			PublicName: student.PublicName,
+			StudentID:         student.ID,
+			PublicName:        student.PublicName,
+			SolvedCountBySite: make([]int, len(sites)),
 		}
 		for taskURL := range combined.solved {
 			site, resolved := siteByTaskURL[taskURL]
@@ -381,8 +393,9 @@ func (b *Builder) buildGroupSolvedSummary(
 				continue
 			}
 			row.TotalSolvedCount++
-			if _, ok := groupSites[site]; ok {
+			if idx, ok := siteIndex[site]; ok {
 				row.SolvedCountOnPageSites++
+				row.SolvedCountBySite[idx]++
 			}
 		}
 		rows = append(rows, row)
@@ -395,7 +408,7 @@ func (b *Builder) buildGroupSolvedSummary(
 		return strings.ToLower(rows[i].PublicName) < strings.ToLower(rows[j].PublicName)
 	})
 
-	return rows
+	return sites, rows
 }
 
 func (b *Builder) buildProviderContestStandings(

@@ -151,16 +151,19 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 	}
 
 	solvedSummary := updated.SolvedSummary
+	solvedSummarySites := updated.SolvedSummarySites
 	if hasNonUpdatedContests && hasExisting {
 		solvedSummary = existing.SolvedSummary
+		solvedSummarySites = existing.SolvedSummarySites
 	}
 
 	merged := domain.GeneratedGroupStandings{
-		GroupSlug:     group.Slug,
-		GroupTitle:    group.Title,
-		FormLink:      group.FormLink,
-		SolvedSummary: solvedSummary,
-		Contests:      make([]domain.GeneratedContestStandings, 0, len(group.Contests)),
+		GroupSlug:          group.Slug,
+		GroupTitle:         group.Title,
+		FormLink:           group.FormLink,
+		SolvedSummarySites: solvedSummarySites,
+		SolvedSummary:      solvedSummary,
+		Contests:           make([]domain.GeneratedContestStandings, 0, len(group.Contests)),
 	}
 
 	for _, contestRef := range group.Contests {

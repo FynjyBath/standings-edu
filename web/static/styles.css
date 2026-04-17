@@ -358,6 +358,41 @@ main.container {
   color: var(--accent-strong);
 }
 
+.contest-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.contest-block-head h2 {
+  margin: 0;
+}
+
+.contest-block--pinned {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line) 48%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 82%, var(--accent) 18%) 0%,
+    var(--surface) 100%
+  );
+}
+
+.pinned-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0.16rem 0.56rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--line) 38%);
+  background: color-mix(in srgb, var(--accent) 17%, var(--surface) 83%);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .contest-materials-block {
   margin: 0 0 0.8rem;
 }
@@ -694,6 +729,12 @@ main.container {
 
   .contest-block {
     padding: 0.68rem;
+  }
+
+  .contest-block-head {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 0.6rem;
   }
 
   .index-hero {

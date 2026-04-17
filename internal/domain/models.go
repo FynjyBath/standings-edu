@@ -264,11 +264,12 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 }
 
 type GeneratedGroupStandings struct {
-	GroupSlug     string                           `json:"group_slug"`
-	GroupTitle    string                           `json:"group_title"`
-	FormLink      string                           `json:"form_link,omitempty"`
-	SolvedSummary []GeneratedGroupSolvedSummaryRow `json:"solved_summary,omitempty"`
-	Contests      []GeneratedContestStandings      `json:"contests"`
+	GroupSlug          string                           `json:"group_slug"`
+	GroupTitle         string                           `json:"group_title"`
+	FormLink           string                           `json:"form_link,omitempty"`
+	SolvedSummarySites []string                         `json:"solved_summary_sites,omitempty"`
+	SolvedSummary      []GeneratedGroupSolvedSummaryRow `json:"solved_summary,omitempty"`
+	Contests           []GeneratedContestStandings      `json:"contests"`
 }
 
 type GeneratedGroupSolvedSummaryRow struct {
@@ -276,4 +277,5 @@ type GeneratedGroupSolvedSummaryRow struct {
 	PublicName             string `json:"public_name"`
 	SolvedCountOnPageSites int    `json:"solved_count_on_page_sites"`
 	TotalSolvedCount       int    `json:"total_solved_count"`
+	SolvedCountBySite      []int  `json:"solved_count_by_site,omitempty"`
 }

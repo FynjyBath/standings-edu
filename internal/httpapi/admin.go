@@ -182,6 +182,14 @@ func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
+func (h *Handlers) AdminActionClearCache(w http.ResponseWriter, r *http.Request) {
+	result := h.runAdminAction("clear_cache", func() AdminActionResult {
+		return h.executeClearCacheAction()
+	})
+	h.setAdminResult(result)
+	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
+}
+
 func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		result := newAdminResult(
@@ -442,6 +450,67 @@ func (h *Handlers) executeGenerateAction() AdminActionResult {
 		},
 	}
 	return h.runCommandSequence("generate", commands)
+}
+
+func (h *Handlers) executeClearCacheAction() AdminActionResult {
+	started := time.Now()
+	cacheDir := filepath.Join(h.admin.cfg.GeneratedDir, "cache")
+
+	var output bytes.Buffer
+	output.WriteString("$ clear_cache ")
+	output.WriteString(strconv.Quote(cacheDir))
+	output.WriteString("\n")
+
+	info, err := os.Stat(cacheDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			output.WriteString("cache directory does not exist, nothing to remove\n")
+		} else {
+			return newAdminResult(
+				"clear_cache",
+				false,
+				-1,
+				started,
+				output.String(),
+				[]string{fmt.Sprintf("stat cache dir %q: %v", cacheDir, err)},
+			)
+		}
+	} else if !info.IsDir() {
+		return newAdminResult(
+			"clear_cache",
+			false,
+			-1,
+			started,
+			output.String(),
+			[]string{fmt.Sprintf("cache path %q is not a directory", cacheDir)},
+		)
+	} else {
+		if err := os.RemoveAll(cacheDir); err != nil {
+			return newAdminResult(
+				"clear_cache",
+				false,
+				-1,
+				started,
+				output.String(),
+				[]string{fmt.Sprintf("remove cache dir %q: %v", cacheDir, err)},
+			)
+		}
+		output.WriteString("cache directory removed\n")
+	}
+
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return newAdminResult(
+			"clear_cache",
+			false,
+			-1,
+			started,
+			output.String(),
+			[]string{fmt.Sprintf("mkdir cache dir %q: %v", cacheDir, err)},
+		)
+	}
+	output.WriteString("cache directory is ready\n")
+
+	return newAdminResult("clear_cache", true, 0, started, output.String(), nil)
 }
 
 func (h *Handlers) executeCreateGroupAction(slug, name, formLink string) AdminActionResult {

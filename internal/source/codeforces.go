@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +37,11 @@ type CodeforcesAPIClient struct {
 	minGap     time.Duration
 	rateMu     sync.Mutex
 	lastReqAt  time.Time
+
+	statePath    string
+	stateMu      sync.Mutex
+	stateLoaded  bool
+	accountState map[string]codeforcesAccountState
 }
 
 type CodeforcesCredentials struct {
@@ -103,12 +109,18 @@ func (e *codeforcesAPIRequestError) Unwrap() error {
 }
 
 func NewCodeforcesAPIClient() *CodeforcesAPIClient {
+	return NewCodeforcesAPIClientWithState("")
+}
+
+func NewCodeforcesAPIClientWithState(statePath string) *CodeforcesAPIClient {
 	return &CodeforcesAPIClient{
 		baseURL: defaultCodeforcesBaseURL,
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		minGap: 350 * time.Millisecond,
+		minGap:       350 * time.Millisecond,
+		statePath:    strings.TrimSpace(statePath),
+		accountState: make(map[string]codeforcesAccountState),
 	}
 }
 
@@ -142,22 +154,30 @@ func LoadCodeforcesCredentials(path string) (CodeforcesCredentials, error) {
 }
 
 func NewCodeforcesAPIClientFromFile(path string) (*CodeforcesAPIClient, error) {
+	return NewCodeforcesAPIClientFromFileWithState(path, "")
+}
+
+func NewCodeforcesAPIClientFromFileWithState(path string, statePath string) (*CodeforcesAPIClient, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return NewCodeforcesAPIClient(), nil
+		return NewCodeforcesAPIClientWithState(statePath), nil
 	}
 
 	creds, err := LoadCodeforcesCredentials(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return NewCodeforcesAPIClient(), nil
+			return NewCodeforcesAPIClientWithState(statePath), nil
 		}
 		return nil, err
 	}
-	return NewCodeforcesAPIClientWithCredentials(creds)
+	return NewCodeforcesAPIClientWithCredentialsAndState(creds, statePath)
 }
 
 func NewCodeforcesAPIClientWithCredentials(creds CodeforcesCredentials) (*CodeforcesAPIClient, error) {
+	return NewCodeforcesAPIClientWithCredentialsAndState(creds, "")
+}
+
+func NewCodeforcesAPIClientWithCredentialsAndState(creds CodeforcesCredentials, statePath string) (*CodeforcesAPIClient, error) {
 	key := strings.TrimSpace(creds.Key)
 	secret := strings.TrimSpace(creds.Secret)
 	if (key == "") != (secret == "") {
@@ -169,7 +189,7 @@ func NewCodeforcesAPIClientWithCredentials(creds CodeforcesCredentials) (*Codefo
 		baseURL = defaultCodeforcesBaseURL
 	}
 
-	client := NewCodeforcesAPIClient()
+	client := NewCodeforcesAPIClientWithState(statePath)
 	client.baseURL = baseURL
 	client.apiKey = key
 	client.apiSecret = secret
@@ -344,13 +364,22 @@ func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID st
 		return nil, nil
 	}
 
-	type aggregate struct {
-		attempted bool
-		solved    bool
-		score     int
-		hasScore  bool
+	state, hasState, err := c.getAccountState(handle)
+	if err != nil {
+		return nil, err
 	}
-	aggByTask := make(map[string]aggregate)
+
+	aggByTask := make(map[string]codeforcesTaskAggregate)
+	if hasState {
+		mergeCodeforcesStateIntoAggregates(aggByTask, state.Results)
+	}
+
+	lastKnownSubmissionID := 0
+	if hasState {
+		lastKnownSubmissionID = state.MaxSubmissionID
+	}
+	maxSubmissionID := lastKnownSubmissionID
+	hasNewSubmissions := false
 
 	const maxPages = 30
 	from := 1
@@ -361,24 +390,8 @@ func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID st
 			return nil, err
 		}
 
-		for _, submission := range resp.Result {
-			taskURL := buildCodeforcesProblemURL(submission.Problem)
-			if taskURL == "" {
-				continue
-			}
-
-			a := aggByTask[taskURL]
-			a.attempted = true
-			if submission.Verdict == "OK" {
-				a.solved = true
-			}
-
-			score := codeforcesSubmissionScore(submission)
-			if !a.hasScore || score > a.score {
-				a.score = score
-				a.hasScore = true
-			}
-			aggByTask[taskURL] = a
+		if mergeCodeforcesSubmissionsIntoAggregatesSinceID(resp.Result, lastKnownSubmissionID, lastKnownSubmissionID > 0, aggByTask, &maxSubmissionID, &hasNewSubmissions) {
+			break
 		}
 
 		if len(resp.Result) < codeforcesPageSize {
@@ -387,21 +400,24 @@ func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID st
 		from += codeforcesPageSize
 	}
 
-	out := make([]TaskResult, 0, len(aggByTask))
-	for taskURL, a := range aggByTask {
-		score := a.score
-		out = append(out, TaskResult{
-			TaskURL:   taskURL,
-			Attempted: a.attempted,
-			Solved:    a.solved,
-			Score:     &score,
-		})
+	if hasState && !hasNewSubmissions {
+		return cloneTaskResults(state.Results), nil
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].TaskURL < out[j].TaskURL
-	})
-	return out, nil
+	results := codeforcesAggregatesToTaskResults(aggByTask)
+
+	if maxSubmissionID > lastKnownSubmissionID || !hasState {
+		newState := codeforcesAccountState{
+			MaxSubmissionID: maxSubmissionID,
+			Results:         results,
+			UpdatedAt:       time.Now().UTC(),
+		}
+		if saveErr := c.saveAccountState(handle, newState); saveErr != nil {
+			return nil, saveErr
+		}
+	}
+
+	return results, nil
 }
 
 func (c *CodeforcesAPIClient) SupportsTaskScores() bool {
@@ -658,6 +674,221 @@ func codeforcesSubmissionHasAnyTargetHandle(submission codeforcesContestStatusSu
 	return false
 }
 
+func mergeCodeforcesSubmissionsIntoAggregatesSinceID(submissions []codeforcesSubmission, lastKnownSubmissionID int, stopOnKnownSubmissionID bool, aggByTask map[string]codeforcesTaskAggregate, maxSubmissionID *int, hasNewSubmissions *bool) (staleReached bool) {
+	for _, submission := range submissions {
+		if submission.ID > *maxSubmissionID {
+			*maxSubmissionID = submission.ID
+		}
+
+		if lastKnownSubmissionID > 0 && submission.ID > 0 && submission.ID <= lastKnownSubmissionID {
+			if stopOnKnownSubmissionID {
+				return true
+			}
+			continue
+		}
+
+		if submission.ID > lastKnownSubmissionID {
+			*hasNewSubmissions = true
+		}
+
+		taskURL := buildCodeforcesProblemURL(submission.Problem)
+		if taskURL == "" {
+			continue
+		}
+
+		agg := aggByTask[taskURL]
+		agg.attempted = true
+		if submission.Verdict == "OK" {
+			agg.solved = true
+		}
+		score := codeforcesSubmissionScore(submission)
+		if !agg.hasScore || score > agg.score {
+			agg.score = score
+			agg.hasScore = true
+		}
+		aggByTask[taskURL] = agg
+	}
+	return false
+}
+
+func mergeCodeforcesStateIntoAggregates(aggByTask map[string]codeforcesTaskAggregate, results []TaskResult) {
+	for _, result := range results {
+		taskURL := strings.TrimSpace(result.TaskURL)
+		if taskURL == "" {
+			continue
+		}
+
+		agg := aggByTask[taskURL]
+		attempted := result.Attempted || result.Solved || result.Score != nil
+		if attempted {
+			agg.attempted = true
+		}
+		if result.Solved {
+			agg.solved = true
+		}
+		if result.Score != nil {
+			score := domain.ClampScore(*result.Score)
+			if !agg.hasScore || score > agg.score {
+				agg.score = score
+				agg.hasScore = true
+			}
+		}
+		aggByTask[taskURL] = agg
+	}
+
+	for taskURL, agg := range aggByTask {
+		if agg.attempted && !agg.hasScore {
+			if agg.solved {
+				agg.score = 100
+			} else {
+				agg.score = 0
+			}
+			agg.hasScore = true
+			aggByTask[taskURL] = agg
+		}
+	}
+}
+
+func codeforcesAggregatesToTaskResults(aggByTask map[string]codeforcesTaskAggregate) []TaskResult {
+	out := make([]TaskResult, 0, len(aggByTask))
+	for taskURL, agg := range aggByTask {
+		if !agg.attempted && !agg.solved {
+			continue
+		}
+
+		if !agg.hasScore {
+			if agg.solved {
+				agg.score = 100
+			} else {
+				agg.score = 0
+			}
+		}
+		score := domain.ClampScore(agg.score)
+		out = append(out, TaskResult{
+			TaskURL:   taskURL,
+			Attempted: agg.attempted,
+			Solved:    agg.solved,
+			Score:     &score,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TaskURL < out[j].TaskURL
+	})
+	return out
+}
+
+func cloneTaskResults(results []TaskResult) []TaskResult {
+	if len(results) == 0 {
+		return nil
+	}
+
+	cloned := make([]TaskResult, 0, len(results))
+	for _, result := range results {
+		copyResult := result
+		if result.Score != nil {
+			score := *result.Score
+			copyResult.Score = &score
+		}
+		cloned = append(cloned, copyResult)
+	}
+	return cloned
+}
+
+func (c *CodeforcesAPIClient) getAccountState(accountID string) (codeforcesAccountState, bool, error) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if err := c.loadStateLocked(); err != nil {
+		return codeforcesAccountState{}, false, err
+	}
+
+	state, ok := c.accountState[accountID]
+	return state, ok, nil
+}
+
+func (c *CodeforcesAPIClient) saveAccountState(accountID string, state codeforcesAccountState) error {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if err := c.loadStateLocked(); err != nil {
+		return err
+	}
+
+	c.accountState[accountID] = state
+	return c.persistStateLocked()
+}
+
+func (c *CodeforcesAPIClient) loadStateLocked() error {
+	if c.stateLoaded {
+		return nil
+	}
+
+	if c.statePath == "" {
+		c.stateLoaded = true
+		return nil
+	}
+
+	b, err := os.ReadFile(c.statePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.stateLoaded = true
+			return nil
+		}
+		return fmt.Errorf("read codeforces state %q: %w", c.statePath, err)
+	}
+
+	var decoded codeforcesStateFile
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return fmt.Errorf("decode codeforces state %q: %w", c.statePath, err)
+	}
+	if decoded.Accounts == nil {
+		decoded.Accounts = make(map[string]codeforcesAccountState)
+	}
+
+	c.accountState = decoded.Accounts
+	c.stateLoaded = true
+	return nil
+}
+
+func (c *CodeforcesAPIClient) persistStateLocked() error {
+	if c.statePath == "" {
+		return nil
+	}
+
+	state := codeforcesStateFile{Accounts: c.accountState}
+	b, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal codeforces state: %w", err)
+	}
+	b = append(b, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(c.statePath), 0o755); err != nil {
+		return fmt.Errorf("mkdir codeforces state dir: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(c.statePath), "codeforces-state-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp state file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(b); err != nil {
+		tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("write temp state file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp state file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, c.statePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename state file: %w", err)
+	}
+	return nil
+}
+
 func isCodeforcesRetriableError(err error) bool {
 	if err == nil {
 		return false
@@ -773,9 +1004,27 @@ type codeforcesAPIResponse struct {
 }
 
 type codeforcesSubmission struct {
+	ID      int               `json:"id"`
 	Verdict string            `json:"verdict"`
 	Points  *float64          `json:"points"`
 	Problem codeforcesProblem `json:"problem"`
+}
+
+type codeforcesTaskAggregate struct {
+	attempted bool
+	solved    bool
+	score     int
+	hasScore  bool
+}
+
+type codeforcesStateFile struct {
+	Accounts map[string]codeforcesAccountState `json:"accounts"`
+}
+
+type codeforcesAccountState struct {
+	MaxSubmissionID int          `json:"max_submission_id"`
+	Results         []TaskResult `json:"results,omitempty"`
+	UpdatedAt       time.Time    `json:"updated_at"`
 }
 
 type codeforcesProblem struct {

@@ -23,11 +23,15 @@ func main() {
 		informaticsCreds = flag.String("informatics-creds-file", "./data/credentials/informatics_credentials.json", "path to informatics credentials JSON")
 		codeforcesCreds  = flag.String("codeforces-creds-file", "./data/credentials/codeforces_credentials.json", "path to optional codeforces credentials JSON")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
+		codeforcesState  = flag.String("codeforces-state", "", "path to persisted codeforces submission_id state file (default: <out>/cache/codeforces_user_status_state.json)")
 	)
 	flag.Parse()
 
 	if *informaticsState == "" {
 		*informaticsState = filepath.Join(*outDir, "cache", "informatics_runs_state.json")
+	}
+	if *codeforcesState == "" {
+		*codeforcesState = filepath.Join(*outDir, "cache", "codeforces_user_status_state.json")
 	}
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
@@ -38,7 +42,7 @@ func main() {
 	if err != nil {
 		logger.Fatalf("failed to init informatics client: %v", err)
 	}
-	cfClient, err := source.NewCodeforcesAPIClientFromFile(*codeforcesCreds)
+	cfClient, err := source.NewCodeforcesAPIClientFromFileWithState(*codeforcesCreds, *codeforcesState)
 	if err != nil {
 		logger.Fatalf("failed to init codeforces client: %v", err)
 	}

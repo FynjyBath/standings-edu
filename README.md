@@ -229,7 +229,10 @@ API:
 Что важно:
 - `full_name` обязателен;
 - остальные строковые поля считаются аккаунтами (`site=имя поля`, `account_id=значение`);
-- анкеты сохраняются в `data/student_intake.json` (по умолчанию).
+- поле `group` (если передано) только запоминается в анкете и применяется позже, при merge;
+- анкета сохраняется **только** в `data/student_intake.json` (по умолчанию);
+  заполнение анкеты не трогает `data/students.json` и файлы групп — ученик попадает
+  в основную базу и в нужную группу лишь на этапе подтверждения (merge).
 
 ### Как влить анкеты в `students.json`
 
@@ -251,6 +254,9 @@ go run ./cmd/merge_students -write
 
 После `-write`:
 - `students.json` обновляется;
+- каждый ученик из анкеты с указанной группой добавляется в
+  `data/groups/<slug>/group.json` (`student_ids`); если группы ещё нет, она
+  создаётся автоматически (директория + `group.json` + пустой `contests.json`);
 - `student_intake.json` очищается (`[]`).
 
 ### Типичный сценарий использования
@@ -327,11 +333,26 @@ go run ./cmd/merge_students -write
    - при необходимости `materials: [{ "title": "...", "url": "..." }]`
 5. Подключите контест к группе через `data/groups/<group>/contests.json`.
 
+### Провайдер `codeforces_contest`
+
+- `provider_config`: `{ "contest_id": <int>, "show_unofficial": <bool, по умолчанию true> }`.
+- Для обычных (не-gym) контестов Codeforces API больше не отдаёт
+  отфильтрованный `contest.standings` обычным пользователям
+  (только полный анонимный `contest.standings?contestId=<id>`), поэтому таблица
+  строится из `contest.status` по handle участников группы; места считаются
+  среди участников группы. `show_unofficial: true` учитывает виртуальное участие
+  и дорешивание.
+- Для gym-контестов (`contest_id >= 100000`) используется `contest.standings`
+  с fallback на `contest.status`.
+
 ### На что смотреть при расширении
 
 - Нормализация URL задач:
   - используйте единый `domain.NormalizeTaskURL`;
-  - в `data/contests.json` URL должны совпадать по смыслу с тем, что возвращают клиенты.
+  - в `data/contests.json` URL должны совпадать по смыслу с тем, что возвращают клиенты;
+  - ссылки Codeforces на задачу (`/contest/<id>/problem/<idx>`,
+    `/problemset/problem/<id>/<idx>`, `/gym/<id>/problem/<idx>`) приводятся к
+    единому виду, поэтому любую из этих форм можно указывать в `data/contests.json`.
 - Нормализация сайтов и аккаунтов:
   - site хранится в нижнем регистре;
   - пустые `account_id` не должны попадать в данные.

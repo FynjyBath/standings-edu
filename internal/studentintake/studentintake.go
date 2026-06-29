@@ -67,18 +67,14 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 		intakeStudent.Groups = []string{submitted.Group}
 	}
 
+	// Анкета попадает ТОЛЬКО в intake-файл. Перенос ученика в data/students.json
+	// и привязка к группе происходят позже, на этапе подтверждения (merge intake).
 	updatedIntake, savedIntake, _, err := upsertStudent(intake, intakeStudent, upsertOptions{
 		MatchByID:               false,
 		PreferIncomingIDOnEmpty: false,
 	})
 	if err != nil {
 		return domain.Student{}, err
-	}
-
-	if submitted.Group != "" {
-		if err := s.syncGroup(savedIntake, submitted.Group); err != nil {
-			return domain.Student{}, err
-		}
 	}
 
 	if err := WriteStudentsFile(s.intakePath, updatedIntake); err != nil {
@@ -152,39 +148,55 @@ func (s *Store) SaveAdminIntakeStaging(stagingPath string, body []byte) error {
 	return nil
 }
 
-func (s *Store) syncGroup(intakeStudent domain.Student, groupSlug string) error {
-	sourcePath := filepath.Join(s.dataDir, "students.json")
-	sourceStudents, err := LoadStudentsFile(sourcePath)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("load source students: %w", err)
+// AddStudentsToGroups привязывает учеников из intake к их группам:
+// для каждой пары (ученик, группа) из intake добавляет финальный ID ученика
+// (из объединённого students.json) в data/groups/<slug>/group.json, создавая
+// скелет группы при отсутствии.
+func AddStudentsToGroups(dataDir string, mergedStudents []domain.Student, intakeStudents []domain.Student) error {
+	if len(intakeStudents) == 0 {
+		return nil
+	}
+
+	idByFullName := make(map[string]string, len(mergedStudents))
+	for _, student := range domain.NormalizeStudents(mergedStudents) {
+		if student.FullName == "" || strings.TrimSpace(student.ID) == "" {
+			continue
 		}
-		sourceStudents = nil
+		idByFullName[student.FullName] = student.ID
 	}
 
-	sourceIncoming := intakeStudent
-	sourceIncoming.Groups = []string{groupSlug}
-
-	sourceStudents, savedSource, _, err := upsertStudent(sourceStudents, sourceIncoming, upsertOptions{
-		MatchByID:               true,
-		PreferIncomingIDOnEmpty: true,
-	})
-	if err != nil {
-		return err
+	additions := make(map[string][]string)
+	slugOrder := make([]string, 0)
+	for i, raw := range intakeStudents {
+		student := domain.NormalizeStudent(raw)
+		if len(student.Groups) == 0 {
+			continue
+		}
+		studentID, ok := idByFullName[student.FullName]
+		if !ok {
+			return fmt.Errorf("intake item #%d (%q): merged student not found", i, student.FullName)
+		}
+		for _, slug := range student.Groups {
+			if !domain.IsValidSlug(slug) {
+				return fmt.Errorf("intake item #%d (%q): invalid group slug %q", i, student.FullName, slug)
+			}
+			if _, seen := additions[slug]; !seen {
+				slugOrder = append(slugOrder, slug)
+			}
+			additions[slug] = append(additions[slug], studentID)
+		}
 	}
 
-	if err := WriteStudentsFile(sourcePath, sourceStudents); err != nil {
-		return fmt.Errorf("write source students: %w", err)
-	}
-
-	groupPath, groupFile, err := loadOrCreateGroupFile(s.dataDir, groupSlug)
-	if err != nil {
-		return fmt.Errorf("load group %q: %w", groupSlug, err)
-	}
-
-	groupFile.StudentIDs = domain.MergeGroups(groupFile.StudentIDs, []string{savedSource.ID})
-	if err := writeGroupFile(groupPath, groupFile); err != nil {
-		return fmt.Errorf("write group file %q: %w", groupPath, err)
+	sort.Strings(slugOrder)
+	for _, slug := range slugOrder {
+		groupPath, groupFile, err := loadOrCreateGroupFile(dataDir, slug)
+		if err != nil {
+			return fmt.Errorf("load group %q: %w", slug, err)
+		}
+		groupFile.StudentIDs = domain.MergeGroups(groupFile.StudentIDs, additions[slug])
+		if err := writeGroupFile(groupPath, groupFile); err != nil {
+			return fmt.Errorf("write group file %q: %w", groupPath, err)
+		}
 	}
 	return nil
 }

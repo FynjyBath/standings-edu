@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"standings-edu/internal/httpapi"
 	"standings-edu/internal/storage"
@@ -76,9 +81,41 @@ func main() {
 	}
 	router := httpapi.NewRouter(handlers, *staticDir)
 
-	logger.Printf("server listening on %s", *addr)
-	if err := http.ListenAndServe(*addr, router); err != nil {
-		logger.Fatalf("server stopped: %v", err)
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Printf("server listening on %s", *addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			logger.Fatalf("server stopped: %v", err)
+		}
+	case <-ctx.Done():
+		logger.Printf("shutdown signal received, stopping server")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Fatalf("graceful shutdown failed: %v", err)
+		}
+		logger.Printf("server stopped cleanly")
 	}
 }
 

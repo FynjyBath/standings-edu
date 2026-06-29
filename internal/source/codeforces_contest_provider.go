@@ -49,12 +49,24 @@ func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input Co
 	for _, participant := range participants {
 		handles = append(handles, participant.Handle)
 	}
+
+	// Codeforces запрещает фильтрованный contest.standings (handles/from/count/
+	// showUnofficial) для обычных контестов не-админам: доступен только полный
+	// анонимный contest.standings?contestId=<id>. Поэтому для обычных контестов
+	// строим таблицу из contest.status (он работает по handle и анонимно, и
+	// учитывает виртуальные/дорешивание при show_unofficial). Для gym-контестов
+	// сохраняем contest.standings как основной путь с fallback на contest.status.
+	if !isCodeforcesGymContestID(cfg.ContestID) {
+		contestStandings, err := p.buildContestStatusFallbackStandings(ctx, input.Contest, cfg, participants)
+		if err != nil {
+			return domain.GeneratedContestStandings{}, fmt.Errorf("fetch codeforces contest standings via contest.status: %w", err)
+		}
+		return buildCodeforcesGeneratedStandings(input.Contest, cfg.ContestID, participants, contestStandings), nil
+	}
+
 	contestStandings, err := p.client.FetchContestStandings(ctx, cfg.ContestID, handles, cfg.showUnofficialOrDefault())
 	if err != nil {
 		primaryErr := err
-		if !isCodeforcesRetriableError(primaryErr) {
-			return domain.GeneratedContestStandings{}, fmt.Errorf("fetch codeforces contest standings: %w", primaryErr)
-		}
 
 		log.Printf(
 			"codeforces contest provider: primary contest.standings failed, fallback to contest.status (contest_id=%d): %v",
@@ -74,6 +86,10 @@ func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input Co
 	}
 
 	return buildCodeforcesGeneratedStandings(input.Contest, cfg.ContestID, participants, contestStandings), nil
+}
+
+func isCodeforcesGymContestID(contestID int) bool {
+	return contestID >= 100000
 }
 
 func (p *CodeforcesContestProvider) buildContestStatusFallbackStandings(

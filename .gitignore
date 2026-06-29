@@ -1,0 +1,15 @@
+# Runtime data and secrets (credentials live here)
+/data/
+
+# Generated standings and caches
+/generated/
+
+# Built binaries
+/bin/
+
+# Temp files from atomic writes
+*.tmp
+.tmp-*
+
+# OS / editor noise
+.DS_Store

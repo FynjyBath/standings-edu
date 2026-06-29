@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -116,7 +115,9 @@ func NewCodeforcesAPIClientWithState(statePath string) *CodeforcesAPIClient {
 	return &CodeforcesAPIClient{
 		baseURL: defaultCodeforcesBaseURL,
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			// user.status/contest.status могут возвращать крупные страницы
+			// (до codeforcesPageSize сабмитов), поэтому таймаут с запасом.
+			Timeout: 60 * time.Second,
 		},
 		minGap:       350 * time.Millisecond,
 		statePath:    strings.TrimSpace(statePath),
@@ -209,7 +210,14 @@ func (c *CodeforcesAPIClient) FetchContestStandings(ctx context.Context, contest
 	q := make(url.Values)
 	q.Set("contestId", strconv.Itoa(contestID))
 	q.Set("from", "1")
-	q.Set("count", strconv.Itoa(len(normalizedHandles)))
+	// При showUnofficial один участник может занимать несколько строк
+	// (CONTESTANT/VIRTUAL/PRACTICE/OUT_OF_COMPETITION), поэтому берём запас,
+	// чтобы не обрезать выдачу отфильтрованного по handles ранклиста.
+	count := len(normalizedHandles) * 8
+	if count < 64 {
+		count = 64
+	}
+	q.Set("count", strconv.Itoa(count))
 	q.Set("handles", strings.Join(normalizedHandles, ";"))
 	if showUnofficial {
 		q.Set("showUnofficial", "true")
@@ -887,89 +895,6 @@ func (c *CodeforcesAPIClient) persistStateLocked() error {
 		return fmt.Errorf("rename state file: %w", err)
 	}
 	return nil
-}
-
-func isCodeforcesRetriableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, context.Canceled) {
-		return false
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-
-	var requestErr *codeforcesAPIRequestError
-	if errors.As(err, &requestErr) {
-		if requestErr.HTTPStatus == http.StatusTooManyRequests || requestErr.HTTPStatus >= 500 {
-			return true
-		}
-		if isTemporaryCodeforcesAPIComment(requestErr.APIComment) {
-			return true
-		}
-		if requestErr.Err != nil {
-			return isCodeforcesRetriableError(requestErr.Err)
-		}
-		return false
-	}
-
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return true
-		}
-		type temporary interface {
-			Temporary() bool
-		}
-		if t, ok := any(netErr).(temporary); ok && t.Temporary() {
-			return true
-		}
-	}
-
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return true
-	}
-
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		return true
-	}
-
-	return false
-}
-
-func isTemporaryCodeforcesAPIComment(comment string) bool {
-	text := strings.ToLower(strings.TrimSpace(comment))
-	if text == "" {
-		return false
-	}
-
-	needles := []string{
-		"temporary",
-		"temporarily",
-		"try again",
-		"retry",
-		"server error",
-		"service unavailable",
-		"bad gateway",
-		"gateway timeout",
-		"timeout",
-		"timed out",
-		"upstream",
-		"limit exceeded",
-		"rate limit",
-		"too many requests",
-		"internal error",
-	}
-	for _, needle := range needles {
-		if strings.Contains(text, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *CodeforcesAPIClient) waitRateLimit(ctx context.Context) error {

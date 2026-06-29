@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -127,7 +128,9 @@ func (h *Handlers) AdminAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		user, pass, ok := r.BasicAuth()
-		if !ok || user != h.admin.cfg.Login || pass != h.admin.cfg.Password {
+		userMatch := subtle.ConstantTimeCompare([]byte(user), []byte(h.admin.cfg.Login)) == 1
+		passMatch := subtle.ConstantTimeCompare([]byte(pass), []byte(h.admin.cfg.Password)) == 1
+		if !ok || !userMatch || !passMatch {
 			w.Header().Set("WWW-Authenticate", `Basic realm="admin"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

@@ -59,6 +59,9 @@ func main() {
 	if err := studentintake.WriteStudentsFile(*studentsPath, merged); err != nil {
 		logger.Fatalf("write merged students failed: %v", err)
 	}
+	if err := studentintake.AddStudentsToGroups(*dataDir, merged, intake); err != nil {
+		logger.Fatalf("attach students to groups failed: %v", err)
+	}
 	if err := studentintake.WriteStudentsFile(*intakePath, nil); err != nil {
 		logger.Fatalf("clear intake file failed: %v", err)
 	}

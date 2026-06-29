@@ -226,7 +226,7 @@ API:
 Админка доступна по `GET /standings/admin` и закрыта Basic Auth (логин/пароль из `data/credentials/admin_credentials.json`).
 
 Что есть в админке:
-- действия `update/build` (git pull + сборка бинарников), `generate`, `create_group`;
+- действия `generate` (сборка всех таблиц) и `create_group`;
 - JSON-редактор для `data/students.json`, `data/contests.json` и group-файлов;
 - отдельная кнопка для открытия `data/student_intake_admin.json` в merge-сценарии intake;
 - блок результата последнего admin-действия с кодом выхода и полным stdout/stderr.

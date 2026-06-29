@@ -176,6 +176,10 @@ type GroupDefinition struct {
 type GroupContestRef struct {
 	ID     string
 	Update bool
+	// Inline — необязательное полное определение контеста прямо в файле группы.
+	// Если задано, контест берётся отсюда и не обязан присутствовать в
+	// глобальном data/contests.json (удобно для разовых контестов).
+	Inline *Contest
 }
 
 type SourceData struct {

@@ -106,6 +106,14 @@ func (b *Builder) resolveGroupStudents(data *domain.SourceData, group domain.Gro
 func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
 	contests := make([]domain.Contest, 0, len(group.Contests))
 	for _, contestRef := range group.Contests {
+		if contestRef.Inline != nil {
+			contest := *contestRef.Inline
+			if strings.TrimSpace(contest.ID) == "" {
+				contest.ID = contestRef.ID
+			}
+			contests = append(contests, contest)
+			continue
+		}
 		contest, ok := data.Contests[contestRef.ID]
 		if !ok {
 			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)

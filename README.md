@@ -35,6 +35,41 @@
 - `data/groups/<group_slug>/group.json` — информация о группе (включая `form_link`);
 - `data/groups/<group_slug>/contests.json` — контесты группы.
 
+### Контесты группы: ссылка по id или inline-определение
+
+В `data/groups/<group_slug>/contests.json` каждый элемент может быть либо:
+
+- **ссылкой** на контест из глобального `data/contests.json` (как раньше):
+
+  ```json
+  { "id": "contest_basics_tasks", "update": true }
+  ```
+
+- либо **полным определением контеста прямо в файле группы** — тогда его не
+  нужно держать в глобальном `data/contests.json` (удобно для разовых контестов):
+
+  ```json
+  {
+    "id": "oneoff_2024_10_01",
+    "update": true,
+    "title": "Разовый контест",
+    "score_system": "ioi",
+    "contest_type": "provider",
+    "provider": "codeforces_contest",
+    "provider_config": { "contest_id": 1711, "show_unofficial": true },
+    "subcontests": []
+  }
+  ```
+
+Как это работает:
+- элемент считается inline-определением, если содержит хотя бы один из ключей
+  `title`, `score_system`, `contest_type`, `provider`, `provider_config`,
+  `subcontests`, `materials`; иначе это ссылка по `id`;
+- формат полей такой же, как в глобальном `data/contests.json` (включая `materials`);
+- `id` обязателен и должен быть уникальным в пределах файла группы;
+- если `id` есть и в глобальном `data/contests.json`, и inline в группе —
+  для этой группы приоритет у inline-определения.
+
 Поле `materials` в `data/contests.json` (опционально):
 - формат: массив объектов `{ "title": "...", "url": "..." }`;
 - если `materials` отсутствует или пустой, всё работает как раньше;

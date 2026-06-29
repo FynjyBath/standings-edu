@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -141,39 +142,84 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 	return groups, nil
 }
 
-type groupContestJSON struct {
-	ID     string `json:"id"`
-	Update *bool  `json:"update,omitempty"`
+// inlineContestKeys — ключи, наличие любого из которых означает, что элемент в
+// файле группы является не ссылкой по id, а полным определением контеста.
+var inlineContestKeys = []string{
+	"title", "score_system", "contest_type", "provider", "provider_config", "subcontests", "materials",
 }
 
 func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef, error) {
-	var items []groupContestJSON
+	var items []json.RawMessage
 	if err := fileutil.ReadJSON(path, &items); err != nil {
 		return nil, err
 	}
 
 	out := make([]domain.GroupContestRef, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
-	for i, item := range items {
-		id := strings.TrimSpace(item.ID)
-		if id == "" {
+	for i, raw := range items {
+		ref, err := parseGroupContestItem(raw)
+		if err != nil {
+			return nil, fmt.Errorf("contest item #%d in %q: %w", i, path, err)
+		}
+		if ref.ID == "" {
 			return nil, fmt.Errorf("contest item #%d in %q has empty id", i, path)
 		}
-		if _, exists := seen[id]; exists {
-			return nil, fmt.Errorf("contest item #%d in %q duplicates id %q", i, path, id)
+		if _, exists := seen[ref.ID]; exists {
+			return nil, fmt.Errorf("contest item #%d in %q duplicates id %q", i, path, ref.ID)
 		}
-		seen[id] = struct{}{}
+		seen[ref.ID] = struct{}{}
 
-		update := true
-		if item.Update != nil {
-			update = *item.Update
-		}
-
-		out = append(out, domain.GroupContestRef{
-			ID:     id,
-			Update: update,
-		})
+		out = append(out, ref)
 	}
 
 	return out, nil
+}
+
+func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		return domain.GroupContestRef{}, err
+	}
+
+	var meta struct {
+		ID     string `json:"id"`
+		Update *bool  `json:"update"`
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return domain.GroupContestRef{}, err
+	}
+
+	ref := domain.GroupContestRef{
+		ID:     strings.TrimSpace(meta.ID),
+		Update: true,
+	}
+	if meta.Update != nil {
+		ref.Update = *meta.Update
+	}
+
+	if !hasInlineContestKeys(keys) {
+		return ref, nil
+	}
+
+	var contest domain.Contest
+	if err := json.Unmarshal(raw, &contest); err != nil {
+		return domain.GroupContestRef{}, fmt.Errorf("decode inline contest: %w", err)
+	}
+	contest.ID = strings.TrimSpace(contest.ID)
+	contest.Title = strings.TrimSpace(contest.Title)
+	contest.ScoreSystem = contest.ScoreSystem.Normalized()
+	contest.Provider = strings.TrimSpace(contest.Provider)
+	contest.Materials = domain.NormalizeContestMaterials(contest.Materials)
+	ref.Inline = &contest
+
+	return ref, nil
+}
+
+func hasInlineContestKeys(keys map[string]json.RawMessage) bool {
+	for _, key := range inlineContestKeys {
+		if _, ok := keys[key]; ok {
+			return true
+		}
+	}
+	return false
 }

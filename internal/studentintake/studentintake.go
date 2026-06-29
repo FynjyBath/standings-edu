@@ -25,16 +25,11 @@ type MergeStats struct {
 
 type Store struct {
 	intakePath string
-	dataDir    string
 	mu         sync.Mutex
 }
 
-func NewStore(path string, dataDir ...string) *Store {
-	dir := filepath.Dir(path)
-	if len(dataDir) > 0 && strings.TrimSpace(dataDir[0]) != "" {
-		dir = strings.TrimSpace(dataDir[0])
-	}
-	return &Store{intakePath: path, dataDir: dir}
+func NewStore(path string) *Store {
+	return &Store{intakePath: path}
 }
 
 func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
@@ -69,10 +64,8 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 
 	// Анкета попадает ТОЛЬКО в intake-файл. Перенос ученика в data/students.json
 	// и привязка к группе происходят позже, на этапе подтверждения (merge intake).
-	updatedIntake, savedIntake, _, err := upsertStudent(intake, intakeStudent, upsertOptions{
-		MatchByID:               false,
-		PreferIncomingIDOnEmpty: false,
-	})
+	// Используется та же общая логика merge, что и при слиянии intake с основной базой.
+	updatedIntake, savedIntake, _, err := mergeStudent(intake, intakeStudent)
 	if err != nil {
 		return domain.Student{}, err
 	}
@@ -208,10 +201,7 @@ func MergeStudents(existing []domain.Student, intake []domain.Student) ([]domain
 	for i, incoming := range intake {
 		var updated bool
 		var err error
-		result, _, updated, err = upsertStudent(result, incoming, upsertOptions{
-			MatchByID:               true,
-			PreferIncomingIDOnEmpty: false,
-		})
+		result, _, updated, err = mergeStudent(result, incoming)
 		if err != nil {
 			return nil, MergeStats{}, fmt.Errorf("intake item #%d: %w", i, err)
 		}
@@ -298,30 +288,26 @@ func parseSubmittedFields(fields map[string]string) (submittedFields, error) {
 	}, nil
 }
 
-type upsertOptions struct {
-	MatchByID               bool
-	PreferIncomingIDOnEmpty bool
-}
-
-func upsertStudent(
-	students []domain.Student,
-	incoming domain.Student,
-	opts upsertOptions,
-) ([]domain.Student, domain.Student, bool, error) {
+// mergeStudent — единая логика merge, используемая и при добавлении одной анкеты
+// в intake, и при сливании intake с основной базой.
+//
+// Философия:
+//   - ФИО считаем переданными верно и сопоставляем записи ТОЛЬКО по ФИО;
+//   - совпадение по ФИО → обновляем только переданные поля: public_name (если
+//     непустой), аккаунты и группы доливаем (новые значения для того же site
+//     перезаписывают старые); существующий id сохраняем;
+//   - нет совпадения → добавляем новую запись (первое заполнение формы).
+//
+// Возвращает обновлённый список, итоговую запись и флаг «была ли это правка».
+func mergeStudent(students []domain.Student, incoming domain.Student) ([]domain.Student, domain.Student, bool, error) {
 	out := domain.NormalizeStudents(students)
 	incoming = domain.NormalizeStudent(incoming)
 	if incoming.FullName == "" {
 		return nil, domain.Student{}, false, ErrMissingFullName
 	}
 
-	idx := findStudentIndexByFullName(out, incoming.FullName)
-	if idx < 0 && opts.MatchByID && incoming.ID != "" {
-		idx = findStudentIndexByID(out, incoming.ID)
-	}
-
-	if idx >= 0 {
+	if idx := findStudentIndexByFullName(out, incoming.FullName); idx >= 0 {
 		merged := out[idx]
-		merged.FullName = incoming.FullName
 		if incoming.PublicName != "" {
 			merged.PublicName = incoming.PublicName
 		} else if merged.PublicName == "" {
@@ -329,30 +315,14 @@ func upsertStudent(
 		}
 		merged.Accounts = domain.MergeAccounts(merged.Accounts, incoming.Accounts)
 		merged.Groups = domain.MergeGroups(merged.Groups, incoming.Groups)
-
-		currentID := strings.TrimSpace(merged.ID)
-		if currentID == "" || idTakenByOther(out, idx, currentID) {
-			if opts.PreferIncomingIDOnEmpty {
-				if candidate := domain.NormalizeID(incoming.ID); candidate != "" && !idTakenByOther(out, idx, candidate) {
-					merged.ID = candidate
-				} else {
-					merged.ID = nextUniqueID(out, merged.FullName, idx)
-				}
-			} else {
-				merged.ID = nextUniqueID(out, merged.FullName, idx)
-			}
-		}
-
+		merged.ID = ensureStudentID(out, idx, merged.ID, merged.FullName)
 		merged = domain.NormalizeStudent(merged)
 		out[idx] = merged
 		return out, merged, true, nil
 	}
 
 	created := incoming
-	created.ID = domain.NormalizeID(created.ID)
-	if created.ID == "" || idTakenByOther(out, -1, created.ID) {
-		created.ID = nextUniqueID(out, created.FullName, -1)
-	}
+	created.ID = ensureStudentID(out, -1, created.ID, created.FullName)
 	if created.PublicName == "" {
 		created.PublicName = GeneratePublicNameFromFullName(created.FullName)
 	}
@@ -360,6 +330,16 @@ func upsertStudent(
 
 	out = append(out, created)
 	return out, created, false, nil
+}
+
+// ensureStudentID сохраняет текущий id, если он непустой и свободен; иначе
+// генерирует уникальный id из ФИО.
+func ensureStudentID(students []domain.Student, idx int, currentID, fullName string) string {
+	id := domain.NormalizeID(currentID)
+	if id != "" && !idTakenByOther(students, idx, id) {
+		return id
+	}
+	return nextUniqueID(students, fullName, idx)
 }
 
 func accountsFromFields(fields map[string]string) []domain.Account {
@@ -392,16 +372,6 @@ func accountsFromFields(fields map[string]string) []domain.Account {
 func findStudentIndexByFullName(students []domain.Student, fullName string) int {
 	for i := range students {
 		if students[i].FullName == fullName {
-			return i
-		}
-	}
-	return -1
-}
-
-func findStudentIndexByID(students []domain.Student, id string) int {
-	id = strings.TrimSpace(id)
-	for i := range students {
-		if strings.TrimSpace(students[i].ID) == id {
 			return i
 		}
 	}

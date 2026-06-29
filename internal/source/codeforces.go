@@ -72,6 +72,10 @@ type CodeforcesContestRow struct {
 type CodeforcesContestProblemResult struct {
 	Points               float64
 	RejectedAttemptCount int
+	// Upsolved — задача решена/попытана только в дорешке (после контеста).
+	// Заполняется только путём contest.status; в официальном contest.standings
+	// всегда false.
+	Upsolved bool
 }
 
 type codeforcesAPIRequestError struct {

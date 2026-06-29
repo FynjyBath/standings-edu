@@ -290,6 +290,8 @@ func buildCodeforcesGeneratedStandings(
 		if isIOI {
 			row.Scores = make([]*int, len(out.Tasks))
 		}
+		upsolved := make([]bool, len(out.Tasks))
+		hasUpsolved := false
 
 		if ok {
 			for taskIdx := range out.Tasks {
@@ -315,6 +317,11 @@ func buildCodeforcesGeneratedStandings(
 					} else if score > 0 {
 						solved = true
 					}
+
+					if (solved || attempted) && problemResult.Upsolved {
+						upsolved[taskIdx] = true
+						hasUpsolved = true
+					}
 				}
 
 				switch {
@@ -334,6 +341,10 @@ func buildCodeforcesGeneratedStandings(
 					row.TotalScore += value
 				}
 			}
+		}
+
+		if hasUpsolved {
+			row.Upsolved = upsolved
 		}
 
 		builtRows = append(builtRows, providerBuiltRow{rank: rank, row: row})
@@ -367,8 +378,14 @@ func buildCodeforcesContestProblemURL(contestID int, index string) string {
 	return fmt.Sprintf("https://codeforces.com/contest/%d/problem/%s", contestID, url.PathEscape(idx))
 }
 
+// assignProviderPlaces проставляет места группе участников по уже отсортированным
+// строкам. Места — относительные внутри группы (1..k): таблицу мы строим сами,
+// поэтому и нумерацию ведём свою, а не глобальный ранг контеста. Одинаковый ранг
+// получает общий диапазон ("3-5"); участники без места (не найдены в контесте)
+// получают пустую строку.
 func assignProviderPlaces(rows []providerBuiltRow) {
 	const missingRank = 1_000_000_000
+	pos := 0
 	i := 0
 	for i < len(rows) {
 		if rows[i].rank >= missingRank {
@@ -379,19 +396,21 @@ func assignProviderPlaces(rows []providerBuiltRow) {
 
 		rank := rows[i].rank
 		j := i + 1
-		for j < len(rows) && rows[j].rank == rank {
+		for j < len(rows) && rows[j].rank < missingRank && rows[j].rank == rank {
 			j++
 		}
 
+		start := pos + 1
+		end := pos + (j - i)
 		if j-i == 1 {
-			rows[i].row.Place = fmt.Sprintf("%d", rank)
+			rows[i].row.Place = fmt.Sprintf("%d", start)
 		} else {
-			endRank := rank + (j - i) - 1
-			place := fmt.Sprintf("%d-%d", rank, endRank)
+			place := fmt.Sprintf("%d-%d", start, end)
 			for k := i; k < j; k++ {
 				rows[k].row.Place = place
 			}
 		}
+		pos = end
 		i = j
 	}
 }
@@ -415,6 +434,10 @@ type codeforcesFallbackSubmissionEvent struct {
 	relativeTimeSeconds int
 	verdict             string
 	points              *float64
+	// upsolve — посылка из дорешки (после контеста): participantType=PRACTICE
+	// или нереалистично большое relativeTimeSeconds. Такие посылки не идут в
+	// зачёт места/штрафа, но отображаются (в скобках).
+	upsolve bool
 }
 
 type codeforcesFallbackParticipantAggregate struct {
@@ -431,10 +454,25 @@ type codeforcesFallbackBuiltRow struct {
 }
 
 type codeforcesFallbackProblemStats struct {
+	// Отображение (контест + дорешка).
 	points           float64
 	rejectedAttempts int
 	solved           bool
-	penalty          int
+	upsolved         bool // решено/попытано только в дорешке
+
+	// Зачёт места/штрафа (только во время контеста).
+	contestSolved bool
+	contestPoints float64
+	penalty       int
+}
+
+type codeforcesEventSummary struct {
+	solved                 bool
+	bestPoints             float64
+	hasPoints              bool
+	rejectedBeforeAccepted int
+	acceptedTimeSeconds    int
+	count                  int
 }
 
 var codeforcesIndexTokenRe = regexp.MustCompile(`[0-9]+|[^0-9]+`)
@@ -526,6 +564,7 @@ func buildCodeforcesContestStandingsFromStatus(
 			id:                  submission.ID,
 			relativeTimeSeconds: submission.RelativeTimeSeconds,
 			verdict:             strings.TrimSpace(submission.Verdict),
+			upsolve:             isCodeforcesUpsolveSubmission(submission),
 		}
 		if submission.Points != nil {
 			value := *submission.Points
@@ -584,12 +623,15 @@ func buildCodeforcesContestStandingsFromStatus(
 			built.row.ProblemResults[taskIdx] = CodeforcesContestProblemResult{
 				Points:               stats.points,
 				RejectedAttemptCount: stats.rejectedAttempts,
+				Upsolved:             stats.upsolved,
 			}
-			if stats.solved {
+			// Место/штраф считаем только по результатам во время контеста;
+			// дорешка отображается, но в зачёт не идёт.
+			if stats.contestSolved {
 				built.solved++
 			}
 			if isIOI {
-				built.totalScore += stats.points
+				built.totalScore += stats.contestPoints
 			} else {
 				built.penalty += stats.penalty
 			}
@@ -676,9 +718,21 @@ func buildCodeforcesPartyKey(handles []string) string {
 	return strings.Join(normalized, ";")
 }
 
-func aggregateCodeforcesFallbackProblemStats(events []codeforcesFallbackSubmissionEvent, isIOI bool) codeforcesFallbackProblemStats {
+// codeforcesUpsolveTimeThreshold — посылки с relativeTimeSeconds не меньше этого
+// значения считаются дорешкой (Codeforces отдаёт 2147483647 для practice).
+const codeforcesUpsolveTimeThreshold = 1 << 30
+
+func isCodeforcesUpsolveSubmission(submission codeforcesContestStatusSubmission) bool {
+	if strings.EqualFold(strings.TrimSpace(submission.Author.ParticipantType), "PRACTICE") {
+		return true
+	}
+	return submission.RelativeTimeSeconds >= codeforcesUpsolveTimeThreshold
+}
+
+func summarizeCodeforcesEvents(events []codeforcesFallbackSubmissionEvent) codeforcesEventSummary {
+	summary := codeforcesEventSummary{count: len(events)}
 	if len(events) == 0 {
-		return codeforcesFallbackProblemStats{}
+		return summary
 	}
 
 	sort.SliceStable(events, func(i, j int) bool {
@@ -688,73 +742,104 @@ func aggregateCodeforcesFallbackProblemStats(events []codeforcesFallbackSubmissi
 		return events[i].id < events[j].id
 	})
 
-	if isIOI {
-		bestPoints := 0.0
-		hasPoints := false
-		solved := false
-		for _, event := range events {
-			if strings.EqualFold(event.verdict, "OK") {
-				solved = true
+	for _, event := range events {
+		if event.points != nil {
+			if !summary.hasPoints || *event.points > summary.bestPoints {
+				summary.bestPoints = *event.points
+				summary.hasPoints = true
 			}
-			if event.points != nil {
-				if !hasPoints || *event.points > bestPoints {
-					bestPoints = *event.points
-					hasPoints = true
-				}
-			}
-		}
-		if !hasPoints && solved {
-			bestPoints = 1
-			hasPoints = true
-		}
-
-		rejectedAttempts := 0
-		if !hasPoints {
-			rejectedAttempts = len(events)
-		}
-
-		return codeforcesFallbackProblemStats{
-			points:           bestPoints,
-			rejectedAttempts: rejectedAttempts,
-			solved:           solved,
 		}
 	}
 
 	rejectedBeforeAccepted := 0
-	solved := false
-	acceptedTimeSeconds := 0
 	for _, event := range events {
-		if solved {
-			continue
-		}
 		if strings.EqualFold(event.verdict, "OK") {
-			solved = true
-			acceptedTimeSeconds = event.relativeTimeSeconds
-			if acceptedTimeSeconds < 0 {
-				acceptedTimeSeconds = 0
+			summary.solved = true
+			acceptedTime := event.relativeTimeSeconds
+			if acceptedTime < 0 {
+				acceptedTime = 0
 			}
-			continue
+			summary.acceptedTimeSeconds = acceptedTime
+			summary.rejectedBeforeAccepted = rejectedBeforeAccepted
+			return summary
 		}
 		rejectedBeforeAccepted++
 	}
+	summary.rejectedBeforeAccepted = rejectedBeforeAccepted
+	return summary
+}
 
-	points := 0.0
-	penalty := 0
-	if solved {
-		points = 1
-		penalty = acceptedTimeSeconds/60 + rejectedBeforeAccepted*20
+func aggregateCodeforcesFallbackProblemStats(events []codeforcesFallbackSubmissionEvent, isIOI bool) codeforcesFallbackProblemStats {
+	if len(events) == 0 {
+		return codeforcesFallbackProblemStats{}
 	}
 
-	if !solved && rejectedBeforeAccepted == 0 {
-		rejectedBeforeAccepted = len(events)
+	contestEvents := make([]codeforcesFallbackSubmissionEvent, 0, len(events))
+	upsolveEvents := make([]codeforcesFallbackSubmissionEvent, 0, len(events))
+	for _, event := range events {
+		if event.upsolve {
+			upsolveEvents = append(upsolveEvents, event)
+		} else {
+			contestEvents = append(contestEvents, event)
+		}
 	}
 
-	return codeforcesFallbackProblemStats{
-		points:           points,
-		rejectedAttempts: rejectedBeforeAccepted,
-		solved:           solved,
-		penalty:          penalty,
+	contest := summarizeCodeforcesEvents(contestEvents)
+	upsolve := summarizeCodeforcesEvents(upsolveEvents)
+
+	stats := codeforcesFallbackProblemStats{}
+
+	// Зачёт места/штрафа — только во время контеста.
+	stats.contestSolved = contest.solved
+	if isIOI {
+		if contest.hasPoints {
+			stats.contestPoints = contest.bestPoints
+		} else if contest.solved {
+			stats.contestPoints = 1
+		}
+	} else if contest.solved {
+		stats.penalty = contest.acceptedTimeSeconds/60 + contest.rejectedBeforeAccepted*20
 	}
+
+	// Отображение — контест плюс дорешка.
+	displaySolved := contest.solved || upsolve.solved
+	stats.solved = displaySolved
+
+	if isIOI {
+		best := 0.0
+		has := false
+		if contest.hasPoints {
+			best, has = contest.bestPoints, true
+		}
+		if upsolve.hasPoints && (!has || upsolve.bestPoints > best) {
+			best, has = upsolve.bestPoints, true
+		}
+		if !has && displaySolved {
+			best, has = 1, true
+		}
+		stats.points = best
+	} else if displaySolved {
+		stats.points = 1
+	}
+
+	switch {
+	case contest.solved:
+		stats.upsolved = false
+	case upsolve.solved:
+		stats.upsolved = true
+	case contest.count > 0:
+		stats.upsolved = false
+	case upsolve.count > 0:
+		stats.upsolved = true
+	}
+
+	if displaySolved {
+		stats.rejectedAttempts = contest.rejectedBeforeAccepted
+	} else {
+		stats.rejectedAttempts = contest.count + upsolve.count
+	}
+
+	return stats
 }
 
 func sameCodeforcesFallbackRank(prev codeforcesFallbackBuiltRow, curr codeforcesFallbackBuiltRow, isIOI bool) bool {

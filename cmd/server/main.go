@@ -67,7 +67,7 @@ func main() {
 	}
 
 	loader := storage.NewGeneratedLoader(*generatedDir)
-	intakeStore := studentintake.NewStore(*intakePath, *dataDir)
+	intakeStore := studentintake.NewStore(*intakePath)
 	renderer := web.NewTemplateRenderer(*templatesDir)
 	handlers := httpapi.NewHandlers(loader, intakeStore, renderer, logger)
 	if err := handlers.ConfigureAdmin(httpapi.AdminConfig{

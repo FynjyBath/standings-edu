@@ -221,6 +221,10 @@ type GeneratedRow struct {
 	TotalScore     int      `json:"total_score,omitempty"`
 	Statuses       []string `json:"statuses"`
 	Scores         []*int   `json:"scores,omitempty"`
+	// Upsolved[i] == true означает, что задача i решена/попытана только в
+	// дорешке (после контеста). Такие ячейки показываются в скобках и не влияют
+	// на место/штраф. Пустой/nil — дорешки нет.
+	Upsolved []bool `json:"upsolved,omitempty"`
 }
 
 type GeneratedContestStandings struct {

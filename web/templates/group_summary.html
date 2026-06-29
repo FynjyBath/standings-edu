@@ -232,22 +232,27 @@
             totalPlus++;
           }
 
+          var practice = !!(row && Array.isArray(row.upsolved) && row.upsolved[i]);
+          function wrapPractice(text) {
+            return (practice && text) ? "(" + text + ")" : text;
+          }
+
           var td = document.createElement("td");
           if (isIoi) {
-            td.className = "score-cell";
+            td.className = practice ? "score-cell practice" : "score-cell";
             if (score !== null) {
-              td.textContent = String(score);
+              td.textContent = wrapPractice(String(score));
               td.style.setProperty("--score-alpha", String(clampScore(score) / 100));
             } else {
               td.textContent = "";
               td.style.setProperty("--score-alpha", "0");
             }
           } else {
-            td.className = "status-cell " + status;
+            td.className = "status-cell " + status + (practice ? " practice" : "");
             if (status === "solved") {
-              td.textContent = "+";
+              td.textContent = wrapPractice("+");
             } else if (status === "attempted") {
-              td.textContent = "×";
+              td.textContent = wrapPractice("×");
             } else {
               td.textContent = "";
             }

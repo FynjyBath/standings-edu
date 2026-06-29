@@ -562,6 +562,14 @@ main.container {
   background: transparent;
 }
 
+/* Дорешка: те же цвета, но визуально приглушённо (значение в скобках). */
+.status-cell.practice,
+.score-cell.practice {
+  opacity: 0.6;
+  font-style: italic;
+  font-weight: 600;
+}
+
 .empty-hint {
   color: var(--muted);
   margin: 0.8rem 0 0;

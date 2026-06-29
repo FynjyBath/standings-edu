@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -38,21 +39,30 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	infClient, err := source.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
-	if err != nil {
-		logger.Fatalf("failed to init informatics client: %v", err)
-	}
 	cfClient, err := source.NewCodeforcesAPIClientFromFileWithState(*codeforcesCreds, *codeforcesState)
 	if err != nil {
 		logger.Fatalf("failed to init codeforces client: %v", err)
 	}
 
 	registry := source.NewRegistry()
-	registry.RegisterSite("informatics", infClient)
 	registry.RegisterSite("codeforces", cfClient)
 	registry.RegisterSite("acmp", source.NewACMPClient())
 	registry.RegisterProvider(source.NewCodeforcesContestProvider(cfClient))
 	registry.RegisterProvider(source.NewHTMLTableImportProvider())
+
+	// informatics требует логина, поэтому без файла credentials источник просто
+	// отключаем (как codeforces в anonymous-режиме), а не падаем. Если файл есть,
+	// но битый — это ошибка конфигурации, останавливаемся.
+	infClient, err := source.NewInformaticsAPIClientFromFileWithState(*informaticsCreds, *informaticsState)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			logger.Printf("WARN informatics credentials file %q not found; informatics source disabled", *informaticsCreds)
+		} else {
+			logger.Fatalf("failed to init informatics client: %v", err)
+		}
+	} else {
+		registry.RegisterSite("informatics", infClient)
+	}
 
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)

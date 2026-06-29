@@ -550,7 +550,40 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		return strings.ToLower(out.Rows[i].PublicName) < strings.ToLower(out.Rows[j].PublicName)
 	})
 
+	// Таблицу по набору задач строим сами, значит и места проставляем сами.
+	assignTaskContestPlaces(out.Rows, isIOI)
+
 	return out
+}
+
+// assignTaskContestPlaces проставляет места по уже отсортированным строкам.
+// Равный ранг (одинаковый счёт/число решённых) получает один и тот же диапазон
+// мест ("3-5"). Дорешка уже учтена в SolvedCount/TotalScore и здесь отдельно
+// не выделяется (контесты по набору задач не различают время решения).
+func assignTaskContestPlaces(rows []domain.GeneratedRow, isIOI bool) {
+	sameRank := func(a, b domain.GeneratedRow) bool {
+		if isIOI {
+			return a.TotalScore == b.TotalScore
+		}
+		return a.SolvedCount == b.SolvedCount
+	}
+
+	i := 0
+	for i < len(rows) {
+		j := i + 1
+		for j < len(rows) && sameRank(rows[i], rows[j]) {
+			j++
+		}
+		if j-i == 1 {
+			rows[i].Place = fmt.Sprintf("%d", i+1)
+		} else {
+			place := fmt.Sprintf("%d-%d", i+1, j)
+			for k := i; k < j; k++ {
+				rows[k].Place = place
+			}
+		}
+		i = j
+	}
 }
 
 func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskURL string, useRealScores bool) (int, bool) {

@@ -28,6 +28,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"penaltyText":             penaltyText,
 			"hasPenaltyColumn":        hasPenaltyColumn,
 			"hasProviderStatusColumn": hasProviderStatusColumn,
+			"taskCells":               taskCells,
 		},
 	}
 }
@@ -47,6 +48,47 @@ func (r *TemplateRenderer) Render(w http.ResponseWriter, statusCode int, pageTem
 		return fmt.Errorf("render template: %w", err)
 	}
 	return nil
+}
+
+// TaskCell — подготовленная к рендеру ячейка задачи в строке standings.
+type TaskCell struct {
+	IsIOI    bool
+	Status   string // класс статуса (solved/attempted/none) для не-IOI
+	Text     string // символ или баллы; для дорешки уже обёрнуто в скобки
+	Alpha    string // прозрачность фона для IOI
+	Practice bool   // дорешка: добавляет CSS-класс practice
+}
+
+// taskCells объединяет статусы, баллы и пометку дорешки в единый набор ячеек,
+// чтобы шаблон одинаково рендерил IOI и обычный режим, оборачивая дорешку в скобки.
+func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCell {
+	isIOI := scoreSystem.IsIOI()
+	cells := make([]TaskCell, 0, len(row.Statuses))
+	for i := range row.Statuses {
+		practice := i < len(row.Upsolved) && row.Upsolved[i]
+		cell := TaskCell{IsIOI: isIOI, Practice: practice}
+
+		if isIOI {
+			var score *int
+			if i < len(row.Scores) {
+				score = row.Scores[i]
+			}
+			cell.Text = wrapPractice(scoreText(score), practice)
+			cell.Alpha = scoreAlpha(score)
+		} else {
+			cell.Status = statusClass(row.Statuses[i])
+			cell.Text = wrapPractice(statusSymbol(row.Statuses[i]), practice)
+		}
+		cells = append(cells, cell)
+	}
+	return cells
+}
+
+func wrapPractice(text string, practice bool) string {
+	if practice && text != "" {
+		return "(" + text + ")"
+	}
+	return text
 }
 
 func statusSymbol(status string) string {

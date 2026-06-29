@@ -310,7 +310,7 @@ func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int
 
 		agg := aggByTask[taskURL]
 		agg.attempted = true
-		if run.EjudgeStatus == 0 {
+		if isInformaticsSolvedStatus(run.EjudgeStatus) {
 			agg.solved = true
 		}
 
@@ -332,10 +332,21 @@ func inferInformaticsScore(run informaticsRun) int {
 	if run.Score.Valid {
 		return domain.ClampScore(run.Score.Value)
 	}
-	if run.EjudgeStatus == 0 {
+	if isInformaticsSolvedStatus(run.EjudgeStatus) {
 		return 100
 	}
 	return 0
+}
+
+// ejudge run status: 0 = OK, 8 = RUN_ACCEPTED («Зачтено»/«Принято»).
+// Оба означают, что задача решена, и должны трактоваться одинаково.
+const (
+	informaticsStatusOK       = 0
+	informaticsStatusAccepted = 8
+)
+
+func isInformaticsSolvedStatus(ejudgeStatus int) bool {
+	return ejudgeStatus == informaticsStatusOK || ejudgeStatus == informaticsStatusAccepted
 }
 
 func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, state informaticsAccountState) {
@@ -482,7 +493,8 @@ func (c *InformaticsAPIClient) loadStateLocked() error {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		return fmt.Errorf("decode informatics state %q: %w", c.statePath, err)
 	}
-	if decoded.Accounts == nil {
+	if decoded.Version != informaticsStateVersion || decoded.Accounts == nil {
+		// Старая/несовместимая версия кэша — игнорируем и пересчитываем заново.
 		decoded.Accounts = make(map[string]informaticsAccountState)
 	}
 
@@ -496,7 +508,7 @@ func (c *InformaticsAPIClient) persistStateLocked() error {
 		return nil
 	}
 
-	state := informaticsStateFile{Accounts: c.accountState}
+	state := informaticsStateFile{Version: informaticsStateVersion, Accounts: c.accountState}
 	b, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal informatics state: %w", err)
@@ -737,7 +749,13 @@ type informaticsTaskAggregate struct {
 	hasScore  bool
 }
 
+// informaticsStateVersion — версия схемы/логики кэша. При изменении правил
+// трактовки вердиктов (например, добавление статуса «Зачтено») версию повышаем,
+// чтобы старый кэш игнорировался и результаты пересчитались с нуля.
+const informaticsStateVersion = 2
+
 type informaticsStateFile struct {
+	Version  int                                `json:"version"`
 	Accounts map[string]informaticsAccountState `json:"accounts"`
 }
 

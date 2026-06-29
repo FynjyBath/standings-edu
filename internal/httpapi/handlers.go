@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"standings-edu/internal/domain"
@@ -32,12 +34,75 @@ type Handlers struct {
 	logger      *log.Logger
 	admin       *adminState
 	intakeToken string
+	dataDir     string
 }
 
 // ConfigureIntakeToken задаёт секретный токен для POST /api/rpc. Пустой токен —
 // защита выключена (эндпоинт открыт).
 func (h *Handlers) ConfigureIntakeToken(token string) {
 	h.intakeToken = token
+}
+
+// ConfigureSourceDir задаёт каталог исходных данных (data/). Нужен, чтобы
+// показывать пустую страницу только что созданной группы (со ссылкой на форму)
+// ещё до первой генерации.
+func (h *Handlers) ConfigureSourceDir(dataDir string) {
+	h.dataDir = strings.TrimSpace(dataDir)
+}
+
+// loadGroupStandings возвращает сгенерированные standings группы, а если файла
+// ещё нет — пустую таблицу, собранную из data/groups/<slug>/group.json (чтобы
+// страница новой группы открывалась со ссылкой на форму). Если группы нет нигде —
+// возвращает os.ErrNotExist.
+func (h *Handlers) loadGroupStandings(slug string) (domain.GeneratedGroupStandings, error) {
+	standings, err := h.loader.LoadGroupStandings(slug)
+	if err == nil {
+		return standings, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return domain.GeneratedGroupStandings{}, err
+	}
+
+	empty, ok, srcErr := h.loadEmptyGroupFromSource(slug)
+	if srcErr != nil {
+		h.logger.Printf("WARN load source group slug=%s err=%v", slug, srcErr)
+		return domain.GeneratedGroupStandings{}, err
+	}
+	if !ok {
+		return domain.GeneratedGroupStandings{}, err
+	}
+	return empty, nil
+}
+
+func (h *Handlers) loadEmptyGroupFromSource(slug string) (domain.GeneratedGroupStandings, bool, error) {
+	if h.dataDir == "" || !domain.IsValidSlug(slug) {
+		return domain.GeneratedGroupStandings{}, false, nil
+	}
+
+	path := filepath.Join(h.dataDir, "groups", slug, "group.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return domain.GeneratedGroupStandings{}, false, nil
+		}
+		return domain.GeneratedGroupStandings{}, false, err
+	}
+
+	var gf domain.GroupFile
+	if err := json.Unmarshal(body, &gf); err != nil {
+		return domain.GeneratedGroupStandings{}, false, err
+	}
+
+	title := strings.TrimSpace(gf.Title)
+	if title == "" {
+		title = slug
+	}
+	return domain.GeneratedGroupStandings{
+		GroupSlug:  slug,
+		GroupTitle: title,
+		FormLink:   strings.TrimSpace(gf.FormLink),
+		Contests:   nil,
+	}, true, nil
 }
 
 func NewHandlers(loader *storage.GeneratedLoader, intake *studentintake.Store, renderer *web.TemplateRenderer, logger *log.Logger) *Handlers {
@@ -72,7 +137,7 @@ func (h *Handlers) APIGroups(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	standings, err := h.loader.LoadGroupStandings(slug)
+	standings, err := h.loadGroupStandings(slug)
 	if err != nil {
 		if errors.Is(err, storage.ErrInvalidGroupSlug) {
 			http.Error(w, "group standings not found", http.StatusNotFound)
@@ -91,7 +156,7 @@ func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	standings, err := h.loader.LoadGroupStandings(slug)
+	standings, err := h.loadGroupStandings(slug)
 	if err != nil {
 		if errors.Is(err, storage.ErrInvalidGroupSlug) {
 			http.NotFound(w, r)
@@ -130,7 +195,7 @@ func (h *Handlers) GroupSummaryOlympPage(w http.ResponseWriter, r *http.Request)
 
 func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request, mode string) {
 	slug := r.PathValue("group_name")
-	standings, err := h.loader.LoadGroupStandings(slug)
+	standings, err := h.loadGroupStandings(slug)
 	if err != nil {
 		if errors.Is(err, storage.ErrInvalidGroupSlug) {
 			http.NotFound(w, r)

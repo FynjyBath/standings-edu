@@ -84,6 +84,7 @@ func main() {
 	}); err != nil {
 		logger.Fatalf("configure admin: %v", err)
 	}
+	handlers.ConfigureSourceDir(*dataDir)
 	handlers.ConfigureIntakeToken(intakeToken)
 	if intakeToken == "" {
 		logger.Printf("WARN intake token is not configured (%s); POST /api/rpc принимает анкеты без токена", *intakeCreds)

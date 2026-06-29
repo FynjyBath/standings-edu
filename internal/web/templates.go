@@ -7,9 +7,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"standings-edu/internal/domain"
 )
+
+var moscowLocation = loadMoscowLocation()
+
+func loadMoscowLocation() *time.Location {
+	loc, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		return time.FixedZone("MSK", 3*60*60)
+	}
+	return loc
+}
 
 type TemplateRenderer struct {
 	templatesDir string
@@ -29,6 +40,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"hasPenaltyColumn":        hasPenaltyColumn,
 			"hasProviderStatusColumn": hasProviderStatusColumn,
 			"taskCells":               taskCells,
+			"contestGeneratedAt":      contestGeneratedAt,
 		},
 	}
 }
@@ -82,6 +94,13 @@ func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCe
 		cells = append(cells, cell)
 	}
 	return cells
+}
+
+func contestGeneratedAt(generatedAt *time.Time) string {
+	if generatedAt == nil || generatedAt.IsZero() {
+		return ""
+	}
+	return generatedAt.In(moscowLocation).Format("02.01.2006 15:04:05 MST")
 }
 
 func wrapPractice(text string, practice bool) string {

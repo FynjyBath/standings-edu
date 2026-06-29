@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type Account struct {
@@ -228,11 +229,15 @@ type GeneratedRow struct {
 }
 
 type GeneratedContestStandings struct {
-	ID          string                `json:"id"`
-	Title       string                `json:"title"`
-	ScoreSystem ScoreSystem           `json:"score_system"`
-	ContestType string                `json:"contest_type,omitempty"`
-	Materials   []ContestMaterial     `json:"materials,omitempty"`
+	ID          string            `json:"id"`
+	Title       string            `json:"title"`
+	ScoreSystem ScoreSystem       `json:"score_system"`
+	ContestType string            `json:"contest_type,omitempty"`
+	Materials   []ContestMaterial `json:"materials,omitempty"`
+	// GeneratedAt — момент последней генерации именно этой таблицы. У контестов
+	// с update=false он остаётся старым, поэтому видно, что таблица давно не
+	// обновлялась. nil — для таблиц, сгенерированных до появления этого поля.
+	GeneratedAt *time.Time            `json:"generated_at,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`
@@ -245,6 +250,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		ScoreSystem *ScoreSystem          `json:"score_system"`
 		ContestType string                `json:"contest_type,omitempty"`
 		Materials   []ContestMaterial     `json:"materials,omitempty"`
+		GeneratedAt *time.Time            `json:"generated_at,omitempty"`
 		Subcontests []GeneratedSubcontest `json:"subcontests"`
 		Tasks       []GeneratedTask       `json:"tasks"`
 		Rows        []GeneratedRow        `json:"rows"`
@@ -260,6 +266,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Title:       raw.Title,
 		ContestType: raw.ContestType,
 		Materials:   raw.Materials,
+		GeneratedAt: raw.GeneratedAt,
 		Subcontests: raw.Subcontests,
 		Tasks:       raw.Tasks,
 		Rows:        raw.Rows,

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/source"
@@ -314,16 +315,20 @@ func (b *Builder) buildGroupStandings(
 		Contests:   make([]domain.GeneratedContestStandings, 0, len(pg.contests)),
 	}
 
+	now := time.Now().UTC()
 	for _, contest := range pg.contests {
 		switch contest.TypeOrDefault() {
 		case domain.ContestTypeTasks:
-			out.Contests = append(out.Contests, b.buildTaskContestStandings(contest, pg.students, statusByStudent))
+			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent)
+			generated.GeneratedAt = &now
+			out.Contests = append(out.Contests, generated)
 		case domain.ContestTypeProvider:
 			generated, err := b.buildProviderContestStandings(ctx, data, pg.group, contest, pg.students)
 			if err != nil {
 				b.logger.Printf("WARN group=%s contest_id=%s provider build failed; keep previous generated version if available: %v", pg.group.Slug, contest.ID, err)
 				continue
 			}
+			generated.GeneratedAt = &now
 			out.Contests = append(out.Contests, generated)
 		default:
 			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())

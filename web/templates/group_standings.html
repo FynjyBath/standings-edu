@@ -121,6 +121,9 @@
     {{if not .Tasks}}
     <p class="empty-hint">В контесте нет задач.</p>
     {{end}}
+    {{if contestGeneratedAt .GeneratedAt}}
+    <p class="contest-generated-at">Таблица сгенерирована: {{contestGeneratedAt .GeneratedAt}}</p>
+    {{end}}
   </section>
   {{end}}
 {{else}}

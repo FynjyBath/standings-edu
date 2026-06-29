@@ -44,7 +44,9 @@ func (s *Store) Submit(fields map[string]string) (domain.Student, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	intake, err := LoadStudentsFile(s.intakePath)
+	// Тот же загрузчик, что и в merge: единый формат чтения intake (включая
+	// сокращённые поля-аккаунты), чтобы новый submit не терял ранее записанные данные.
+	intake, err := LoadIntakeFile(s.intakePath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return domain.Student{}, fmt.Errorf("load intake file: %w", err)
@@ -284,7 +286,7 @@ func parseSubmittedFields(fields map[string]string) (submittedFields, error) {
 		FullName:   fullName,
 		PublicName: domain.NormalizeWhitespace(fields["public_name"]),
 		Group:      strings.TrimSpace(fields["group"]),
-		Accounts:   accountsFromFields(fields),
+		Accounts:   accountsFromStringFields(fields),
 	}, nil
 }
 
@@ -342,7 +344,26 @@ func ensureStudentID(students []domain.Student, idx int, currentID, fullName str
 	return nextUniqueID(students, fullName, idx)
 }
 
-func accountsFromFields(fields map[string]string) []domain.Account {
+// reservedStudentFieldKeys — ключи, которые не являются аккаунтами: любое другое
+// строковое поле считается аккаунтом (site=имя поля, account_id=значение).
+var reservedStudentFieldKeys = map[string]struct{}{
+	"":            {},
+	"id":          {},
+	"full_name":   {},
+	"public_name": {},
+	"accounts":    {},
+	"group":       {},
+	"groups":      {},
+}
+
+func isReservedStudentField(key string) bool {
+	_, ok := reservedStudentFieldKeys[strings.ToLower(strings.TrimSpace(key))]
+	return ok
+}
+
+// accountsFromStringFields превращает «плоские» строковые поля в аккаунты.
+// Единая логика для анкеты из RPC и для произвольных полей в intake-файле.
+func accountsFromStringFields(fields map[string]string) []domain.Account {
 	keys := make([]string, 0, len(fields))
 	for key := range fields {
 		keys = append(keys, key)
@@ -351,18 +372,15 @@ func accountsFromFields(fields map[string]string) []domain.Account {
 
 	accounts := make([]domain.Account, 0, len(keys))
 	for _, key := range keys {
-		field := strings.TrimSpace(key)
-		switch field {
-		case "", "full_name", "public_name", "id", "group", "groups":
+		if isReservedStudentField(key) {
 			continue
 		}
-
 		accountID := strings.TrimSpace(fields[key])
 		if accountID == "" {
 			continue
 		}
 		accounts = append(accounts, domain.Account{
-			Site:      domain.NormalizeSite(field),
+			Site:      domain.NormalizeSite(key),
 			AccountID: accountID,
 		})
 	}
@@ -505,33 +523,20 @@ func decodeIntakeItem(item map[string]json.RawMessage) (domain.Student, error) {
 		}
 	}
 
-	extraAccounts := make([]domain.Account, 0)
-	extraKeys := make([]string, 0, len(item))
-	for key := range item {
-		extraKeys = append(extraKeys, key)
-	}
-	sort.Strings(extraKeys)
-
-	for _, key := range extraKeys {
-		field := strings.TrimSpace(strings.ToLower(key))
-		switch field {
-		case "", "id", "full_name", "public_name", "accounts", "groups", "group":
+	extraFields := make(map[string]string, len(item))
+	for key, raw := range item {
+		if isReservedStudentField(key) {
 			continue
 		}
-
 		var value string
-		if err := json.Unmarshal(item[key], &value); err != nil {
+		if err := json.Unmarshal(raw, &value); err != nil {
 			return domain.Student{}, fmt.Errorf("field %q: expected string value", key)
 		}
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		extraAccounts = append(extraAccounts, domain.Account{Site: field, AccountID: value})
+		extraFields[key] = value
 	}
 
 	student = domain.NormalizeStudent(student)
-	student.Accounts = domain.MergeAccounts(student.Accounts, extraAccounts)
+	student.Accounts = domain.MergeAccounts(student.Accounts, accountsFromStringFields(extraFields))
 	return student, nil
 }
 

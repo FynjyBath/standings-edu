@@ -570,6 +570,12 @@ main.container {
   font-weight: 600;
 }
 
+.contest-generated-at {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0.5rem 0 0;
+}
+
 .empty-hint {
   color: var(--muted);
   margin: 0.8rem 0 0;

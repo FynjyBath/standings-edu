@@ -354,6 +354,7 @@ var reservedStudentFieldKeys = map[string]struct{}{
 	"accounts":    {},
 	"group":       {},
 	"groups":      {},
+	"token":       {}, // секрет приёма анкет, не аккаунт
 }
 
 func isReservedStudentField(key string) bool {

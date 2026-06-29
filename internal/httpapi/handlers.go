@@ -26,11 +26,18 @@ func loadMoscowLocation() *time.Location {
 }
 
 type Handlers struct {
-	loader   *storage.GeneratedLoader
-	intake   *studentintake.Store
-	renderer *web.TemplateRenderer
-	logger   *log.Logger
-	admin    *adminState
+	loader      *storage.GeneratedLoader
+	intake      *studentintake.Store
+	renderer    *web.TemplateRenderer
+	logger      *log.Logger
+	admin       *adminState
+	intakeToken string
+}
+
+// ConfigureIntakeToken задаёт секретный токен для POST /api/rpc. Пустой токен —
+// защита выключена (эндпоинт открыт).
+func (h *Handlers) ConfigureIntakeToken(token string) {
+	h.intakeToken = token
 }
 
 func NewHandlers(loader *storage.GeneratedLoader, intake *studentintake.Store, renderer *web.TemplateRenderer, logger *log.Logger) *Handlers {

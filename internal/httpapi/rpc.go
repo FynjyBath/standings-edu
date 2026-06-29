@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 
 const (
 	rpcMethodStudentSubmit = "student_intake.submit"
+	intakeTokenHeader      = "X-Intake-Token"
+	intakeTokenParam       = "token"
 )
 
 type jsonRPCRequest struct {
@@ -54,6 +57,12 @@ func (h *Handlers) StandingsRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.intakeTokenValid(r, req.Params) {
+		writeRPCError(w, http.StatusUnauthorized, req.ID, -32001, "unauthorized: invalid or missing intake token")
+		return
+	}
+	delete(req.Params, intakeTokenParam)
+
 	fields, err := parseStringParams(req.Params)
 	if err != nil {
 		writeRPCError(w, http.StatusBadRequest, req.ID, -32602, err.Error())
@@ -88,6 +97,25 @@ func (h *Handlers) StandingsRPC(w http.ResponseWriter, r *http.Request) {
 			"full_name": student.FullName,
 		},
 	})
+}
+
+// intakeTokenValid проверяет секретный токен для приёма анкет. Токен берётся из
+// заголовка X-Intake-Token либо из поля params.token. Если токен не настроен на
+// сервере (пустой) — проверка пропускается.
+func (h *Handlers) intakeTokenValid(r *http.Request, params map[string]any) bool {
+	expected := strings.TrimSpace(h.intakeToken)
+	if expected == "" {
+		return true
+	}
+
+	provided := strings.TrimSpace(r.Header.Get(intakeTokenHeader))
+	if provided == "" {
+		if raw, ok := params[intakeTokenParam].(string); ok {
+			provided = strings.TrimSpace(raw)
+		}
+	}
+
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }
 
 func parseStringParams(params map[string]any) (map[string]string, error) {

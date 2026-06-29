@@ -28,6 +28,7 @@ func main() {
 		dataDir      = flag.String("data-dir", "./data", "path to source data directory")
 		intakePath   = flag.String("intake-file", "", "path to intake json file (default: <data>/student_intake.json)")
 		adminCreds   = flag.String("admin-creds-file", "./data/credentials/admin_credentials.json", "path to admin credentials JSON with login/password")
+		intakeCreds  = flag.String("intake-creds-file", "./data/credentials/intake_credentials.json", "path to optional intake token JSON ({\"token\":\"...\"}) protecting POST /api/rpc")
 		templatesDir = flag.String("templates", "./web/templates", "path to templates")
 		staticDir    = flag.String("static", "./web/static", "path to static files")
 	)
@@ -65,6 +66,10 @@ func main() {
 	if err != nil {
 		logger.Fatalf("load admin credentials: %v", err)
 	}
+	intakeToken, err := loadIntakeToken(*intakeCreds)
+	if err != nil {
+		logger.Fatalf("load intake token: %v", err)
+	}
 
 	loader := storage.NewGeneratedLoader(*generatedDir)
 	intakeStore := studentintake.NewStore(*intakePath)
@@ -78,6 +83,12 @@ func main() {
 		GeneratedDir: *generatedDir,
 	}); err != nil {
 		logger.Fatalf("configure admin: %v", err)
+	}
+	handlers.ConfigureIntakeToken(intakeToken)
+	if intakeToken == "" {
+		logger.Printf("WARN intake token is not configured (%s); POST /api/rpc принимает анкеты без токена", *intakeCreds)
+	} else {
+		logger.Printf("intake token configured; POST /api/rpc требует токен")
 	}
 	router := httpapi.NewRouter(handlers, *staticDir)
 
@@ -142,4 +153,39 @@ func loadAdminCredentials(path string) (string, string, error) {
 	}
 
 	return cfg.Login, cfg.Password, nil
+}
+
+type intakeCredentials struct {
+	Token string `json:"token"`
+}
+
+// loadIntakeToken читает секретный токен для POST /api/rpc.
+// Файла нет/пустой → токен не задан (защита выключена); файл есть, но битый или
+// без token → ошибка конфигурации.
+func loadIntakeToken(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil
+	}
+
+	body, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read %q: %w", path, err)
+	}
+	if strings.TrimSpace(string(body)) == "" {
+		return "", nil
+	}
+
+	var cfg intakeCredentials
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		return "", fmt.Errorf("decode %q: %w", path, err)
+	}
+	token := strings.TrimSpace(cfg.Token)
+	if token == "" {
+		return "", fmt.Errorf("%q must contain non-empty field: token", path)
+	}
+	return token, nil
 }

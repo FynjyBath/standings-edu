@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -73,11 +74,62 @@ func (m *ScoreSystem) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("score_system must be string (%q/%q)", ScoreSystemEdu, ScoreSystemIOI)
 }
 
+// TableNameList — список вкладок сводной таблицы, в которые входит контест.
+// Принимает и одну строку ("table_name": "Пробники"), и массив строк.
+type TableNameList []string
+
+func (t *TableNameList) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		*t = nil
+		return nil
+	}
+
+	var arr []string
+	if err := json.Unmarshal(trimmed, &arr); err == nil {
+		*t = NormalizeTableNames(arr)
+		return nil
+	}
+
+	var single string
+	if err := json.Unmarshal(trimmed, &single); err == nil {
+		*t = NormalizeTableNames([]string{single})
+		return nil
+	}
+
+	return fmt.Errorf("table_name must be a string or an array of strings")
+}
+
+// NormalizeTableNames убирает пустые/пробельные имена и дубликаты, сохраняя порядок.
+func NormalizeTableNames(names []string) TableNameList {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make(TableNameList, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		name = NormalizeWhitespace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 type Contest struct {
 	ID             string            `json:"id"`
 	Title          string            `json:"title"`
 	ScoreSystem    ScoreSystem       `json:"score_system"`
-	ContestType    string            `json:"contest_type,omitempty"`
+	ContestType    string            `json:"source_type,omitempty"`
+	TableNames     TableNameList     `json:"table_name,omitempty"`
 	Provider       string            `json:"provider,omitempty"`
 	ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
 	Materials      []ContestMaterial `json:"materials,omitempty"`
@@ -89,7 +141,9 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		ID             string            `json:"id"`
 		Title          string            `json:"title"`
 		ScoreSystem    *ScoreSystem      `json:"score_system"`
-		ContestType    string            `json:"contest_type,omitempty"`
+		SourceType     *string           `json:"source_type,omitempty"`
+		ContestType    *string           `json:"contest_type,omitempty"` // legacy alias
+		TableNames     TableNameList     `json:"table_name,omitempty"`
 		Provider       string            `json:"provider,omitempty"`
 		ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
 		Materials      []ContestMaterial `json:"materials,omitempty"`
@@ -104,7 +158,8 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 	*c = Contest{
 		ID:             raw.ID,
 		Title:          raw.Title,
-		ContestType:    raw.ContestType,
+		ContestType:    resolveSourceType(raw.SourceType, raw.ContestType),
+		TableNames:     raw.TableNames,
 		Provider:       raw.Provider,
 		ProviderConfig: raw.ProviderConfig,
 		Materials:      raw.Materials,
@@ -115,6 +170,18 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		c.ScoreSystem = raw.ScoreSystem.Normalized()
 	}
 	return nil
+}
+
+// resolveSourceType предпочитает новое поле source_type, но принимает старое
+// contest_type для обратной совместимости.
+func resolveSourceType(sourceType, contestType *string) string {
+	if sourceType != nil {
+		return *sourceType
+	}
+	if contestType != nil {
+		return *contestType
+	}
+	return ""
 }
 
 const (
@@ -181,6 +248,10 @@ type GroupContestRef struct {
 	// Если задано, контест берётся отсюда и не обязан присутствовать в
 	// глобальном data/contests.json (удобно для разовых контестов).
 	Inline *Contest
+	// TableNames — переопределение вкладок сводной таблицы для этой группы.
+	// Позволяет указать table_name даже для ссылки на глобальный контест.
+	// nil — использовать table_name из определения контеста.
+	TableNames TableNameList
 }
 
 type SourceData struct {
@@ -232,7 +303,8 @@ type GeneratedContestStandings struct {
 	ID          string            `json:"id"`
 	Title       string            `json:"title"`
 	ScoreSystem ScoreSystem       `json:"score_system"`
-	ContestType string            `json:"contest_type,omitempty"`
+	ContestType string            `json:"source_type,omitempty"`
+	TableNames  TableNameList     `json:"table_name,omitempty"`
 	Materials   []ContestMaterial `json:"materials,omitempty"`
 	// GeneratedAt — момент последней генерации именно этой таблицы. У контестов
 	// с update=false он остаётся старым, поэтому видно, что таблица давно не
@@ -248,7 +320,9 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		ID          string                `json:"id"`
 		Title       string                `json:"title"`
 		ScoreSystem *ScoreSystem          `json:"score_system"`
-		ContestType string                `json:"contest_type,omitempty"`
+		SourceType  *string               `json:"source_type,omitempty"`
+		ContestType *string               `json:"contest_type,omitempty"` // legacy alias
+		TableNames  TableNameList         `json:"table_name,omitempty"`
 		Materials   []ContestMaterial     `json:"materials,omitempty"`
 		GeneratedAt *time.Time            `json:"generated_at,omitempty"`
 		Subcontests []GeneratedSubcontest `json:"subcontests"`
@@ -264,7 +338,8 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 	*c = GeneratedContestStandings{
 		ID:          raw.ID,
 		Title:       raw.Title,
-		ContestType: raw.ContestType,
+		ContestType: resolveSourceType(raw.SourceType, raw.ContestType),
+		TableNames:  raw.TableNames,
 		Materials:   raw.Materials,
 		GeneratedAt: raw.GeneratedAt,
 		Subcontests: raw.Subcontests,

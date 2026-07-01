@@ -54,21 +54,48 @@
     "update": true,
     "title": "Разовый контест",
     "score_system": "ioi",
-    "contest_type": "provider",
+    "source_type": "provider",
     "provider": "codeforces_contest",
     "provider_config": { "contest_id": 1711, "show_unofficial": true },
+    "table_name": "Соревновательные",
     "subcontests": []
   }
   ```
 
 Как это работает:
 - элемент считается inline-определением, если содержит хотя бы один из ключей
-  `title`, `score_system`, `contest_type`, `provider`, `provider_config`,
-  `subcontests`, `materials`; иначе это ссылка по `id`;
+  `title`, `score_system`, `source_type` (или устаревшее `contest_type`),
+  `provider`, `provider_config`, `subcontests`, `materials`; иначе это ссылка по `id`;
 - формат полей такой же, как в глобальном `data/contests.json` (включая `materials`);
 - `id` обязателен и должен быть уникальным в пределах файла группы;
 - если `id` есть и в глобальном `data/contests.json`, и inline в группе —
-  для этой группы приоритет у inline-определения.
+  для этой группы приоритет у inline-определения;
+- поле `table_name` не считается inline-признаком: его можно добавить и к ссылке
+  на глобальный контест — тогда для этой группы вкладки берутся из ссылки
+  (см. раздел про `table_name` ниже), а содержимое контеста остаётся глобальным.
+
+### Тип контеста (`source_type`) и вкладки сводной таблицы (`table_name`)
+
+- `source_type` — тип контеста: `tasks` (собираем сами по списку задач; значение
+  по умолчанию) или `provider` (готовые standings у внешнего провайдера).
+  Раньше поле называлось `contest_type` — оно продолжает читаться как алиас, но
+  в новых данных используйте `source_type`.
+- `table_name` — в какие вкладки сводной таблицы (`/standings/<group>/summary`)
+  попадает контест. Можно указать одну строку или список строк; имя строки — это
+  и есть название вкладки:
+
+  ```json
+  { "id": "probnik_1", "title": "Пробник №1", "table_name": ["Тематические", "Пробники"] }
+  ```
+
+  - вкладки на странице summary строятся автоматически из всех встретившихся у
+    группы `table_name` (в порядке первого появления), плюс вкладка «Все»;
+  - контест с несколькими именами показывается во всех этих вкладках;
+  - если `table_name` не задан, контест виден только во вкладке «Все»;
+  - `table_name` можно задать и на уровне ссылки в файле группы — тогда для этой
+    группы вкладки берутся из ссылки (переопределяют `table_name` из глобального
+    определения);
+  - задаётся прямо в JSON-редакторе админки — отдельного UI не нужно.
 
 Поле `materials` в `data/contests.json` (опционально):
 - формат: массив объектов `{ "title": "...", "url": "..." }`;
@@ -211,9 +238,12 @@ go run ./cmd/server
 После запуска откройте:
 - `http://localhost:8080/standings` — список/входная страница;
 - `http://localhost:8080/standings/<group_slug>` — таблицы группы;
-- `http://localhost:8080/standings/<group_slug>/summary` — сводка по всем контестам;
-- `http://localhost:8080/standings/<group_slug>/summary-edu` — сводка по task-контестам;
-- `http://localhost:8080/standings/<group_slug>/summary-olymp` — сводка по provider-контестам.
+- `http://localhost:8080/standings/<group_slug>/summary` — сводная таблица;
+  вкладки внутри страницы строятся из поля `table_name` контестов (см. ниже),
+  плюс вкладка «Все».
+
+(Старые адреса `/summary-edu` и `/summary-olymp` продолжают работать и открывают
+ту же сводную страницу — на случай сохранённых ссылок.)
 
 API:
 - `GET /healthz`
@@ -397,7 +427,7 @@ go run ./cmd/merge_students -write
 3. Зарегистрируйте в `cmd/generate/main.go`:
    - `registry.RegisterProvider(provider)`
 4. Добавьте контест в `data/contests.json`:
-   - `contest_type: "provider"`
+   - `source_type: "provider"`
    - `provider: "<provider_id>"`
    - `provider_config: {...}`
    - при необходимости `materials: [{ "title": "...", "url": "..." }]`

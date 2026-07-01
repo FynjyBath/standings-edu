@@ -265,6 +265,12 @@ main.container {
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
+button.summary-link-btn {
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .summary-link-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 62%, var(--line) 38%);
   background: color-mix(in srgb, var(--surface-strong) 72%, var(--accent) 28%);

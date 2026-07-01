@@ -144,8 +144,12 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 
 // inlineContestKeys — ключи, наличие любого из которых означает, что элемент в
 // файле группы является не ссылкой по id, а полным определением контеста.
+// table_name намеренно НЕ входит в этот список: это метаданные о размещении
+// (в какие вкладки попадает контест), а не описание контеста. Ссылка на
+// глобальный контест с одним лишь table_name остаётся ссылкой (с переопределением
+// вкладок), а не превращается в пустой inline-контест.
 var inlineContestKeys = []string{
-	"title", "score_system", "contest_type", "provider", "provider_config", "subcontests", "materials",
+	"title", "score_system", "source_type", "contest_type", "provider", "provider_config", "subcontests", "materials",
 }
 
 func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef, error) {
@@ -182,16 +186,18 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 	}
 
 	var meta struct {
-		ID     string `json:"id"`
-		Update *bool  `json:"update"`
+		ID         string               `json:"id"`
+		Update     *bool                `json:"update"`
+		TableNames domain.TableNameList `json:"table_name"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return domain.GroupContestRef{}, err
 	}
 
 	ref := domain.GroupContestRef{
-		ID:     strings.TrimSpace(meta.ID),
-		Update: true,
+		ID:         strings.TrimSpace(meta.ID),
+		Update:     true,
+		TableNames: meta.TableNames,
 	}
 	if meta.Update != nil {
 		ref.Update = *meta.Update

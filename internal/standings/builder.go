@@ -107,18 +107,23 @@ func (b *Builder) resolveGroupStudents(data *domain.SourceData, group domain.Gro
 func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
 	contests := make([]domain.Contest, 0, len(group.Contests))
 	for _, contestRef := range group.Contests {
+		var contest domain.Contest
 		if contestRef.Inline != nil {
-			contest := *contestRef.Inline
+			contest = *contestRef.Inline
 			if strings.TrimSpace(contest.ID) == "" {
 				contest.ID = contestRef.ID
 			}
-			contests = append(contests, contest)
-			continue
+		} else {
+			resolved, ok := data.Contests[contestRef.ID]
+			if !ok {
+				b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
+				continue
+			}
+			contest = resolved
 		}
-		contest, ok := data.Contests[contestRef.ID]
-		if !ok {
-			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
-			continue
+		// Переопределение вкладок на уровне группы (в т.ч. для ссылок).
+		if contestRef.TableNames != nil {
+			contest.TableNames = contestRef.TableNames
 		}
 		contests = append(contests, contest)
 	}
@@ -451,6 +456,7 @@ func (b *Builder) buildProviderContestStandings(
 		return domain.GeneratedContestStandings{}, err
 	}
 	standings.ContestType = domain.ContestTypeProvider
+	standings.TableNames = contest.TableNames
 	standings.Materials = domain.NormalizeContestMaterials(contest.Materials)
 	return standings, nil
 }
@@ -463,6 +469,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		Title:       contest.Title,
 		ScoreSystem: contest.ScoreSystem.Normalized(),
 		ContestType: domain.ContestTypeTasks,
+		TableNames:  contest.TableNames,
 		Materials:   domain.NormalizeContestMaterials(contest.Materials),
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),

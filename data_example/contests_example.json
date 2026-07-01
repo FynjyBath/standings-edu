@@ -3,6 +3,7 @@
     "id": "contest_basics_tasks",
     "title": "Базовые задачи (tasks)",
     "score_system": "edu",
+    "table_name": "Тематические",
     "materials": [
       {
         "title": "Разбор занятия",
@@ -27,6 +28,7 @@
     "id": "contest_olymp_tasks",
     "title": "Олимпиадный блок (tasks + score)",
     "score_system": "ioi",
+    "table_name": ["Тематические", "Отбор"],
     "subcontests": [
       {
         "title": "Отбор",
@@ -41,8 +43,9 @@
     "id": "contest_cf_provider",
     "title": "Codeforces standings (provider)",
     "score_system": "ioi",
-    "contest_type": "provider",
+    "source_type": "provider",
     "provider": "codeforces_contest",
+    "table_name": "Соревновательные",
     "materials": [
       {
         "title": "Официальный разбор Codeforces",
@@ -59,8 +62,9 @@
     "id": "contest_html_table_provider",
     "title": "ROI 2024 standings (html table provider)",
     "score_system": "ioi",
-    "contest_type": "provider",
+    "source_type": "provider",
     "provider": "html_table_import",
+    "table_name": ["Соревновательные", "Отбор"],
     "provider_config": {
       "page_url": "https://neerc.ifmo.ru/school/archive/2023-2024/ru-olymp-roi-2024-standings.html",
       "columns": [

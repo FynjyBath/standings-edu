@@ -13,6 +13,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /api/groups/{group_name}/standings", handlers.APIGroupStandings)
 	mux.HandleFunc("POST /api/rpc", handlers.StandingsRPC)
 	mux.HandleFunc("GET /standings/admin", handlers.AdminAuth(handlers.AdminPage))
+	mux.HandleFunc("GET /standings/admin/group-accounts", handlers.AdminAuth(handlers.AdminGroupAccounts))
 	mux.HandleFunc("POST /api/admin/actions/generate", handlers.AdminAuth(handlers.AdminActionGenerate))
 	mux.HandleFunc("POST /api/admin/actions/intake/prepare", handlers.AdminAuth(handlers.AdminIntakeStagingPrepare))
 	mux.HandleFunc("POST /api/admin/actions/intake/merge", handlers.AdminAuth(handlers.AdminIntakeStagingMerge))

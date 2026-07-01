@@ -576,6 +576,21 @@ button.summary-link-btn {
   font-weight: 600;
 }
 
+.account-list {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
 .contest-generated-at {
   color: var(--muted);
   font-size: 0.82rem;
@@ -618,6 +633,7 @@ button.summary-link-btn {
   background: color-mix(in srgb, var(--accent) 18%, var(--surface-strong) 82%);
   color: var(--accent-strong);
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -628,6 +644,19 @@ button.summary-link-btn {
 
 .admin-btn--secondary {
   background: color-mix(in srgb, var(--surface) 88%, var(--surface-strong) 12%);
+}
+
+.admin-groups-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.35rem 0;
+}
+
+.admin-groups-list li .admin-btn {
+  margin-left: auto;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.7rem;
 }
 
 .admin-form-grid {

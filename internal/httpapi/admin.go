@@ -69,6 +69,20 @@ type AdminGroupLink struct {
 	URL   string
 }
 
+type AdminGroupAccountsPageData struct {
+	PageTitle  string
+	Footer     FooterInfo
+	GroupSlug  string
+	GroupTitle string
+	Sites      []AdminSiteAccounts
+}
+
+type AdminSiteAccounts struct {
+	Site         string
+	Count        int
+	AccountsText string // account_id по одному в строке, готово к копированию
+}
+
 type adminFileRequest struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
@@ -612,6 +626,113 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 		return out[i].Slug < out[j].Slug
 	})
 	return out, nil
+}
+
+func (h *Handlers) AdminGroupAccounts(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		http.Error(w, "admin is not configured", http.StatusInternalServerError)
+		return
+	}
+
+	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
+	if !domain.IsValidSlug(slug) {
+		http.NotFound(w, r)
+		return
+	}
+
+	groupPath := filepath.Join(h.admin.cfg.DataDir, "groups", slug, "group.json")
+	groupBody, err := os.ReadFile(groupPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		h.logger.Printf("ERROR admin group accounts read group slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	var groupFile domain.GroupFile
+	if err := json.Unmarshal(groupBody, &groupFile); err != nil {
+		h.logger.Printf("ERROR admin group accounts decode group slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	title := strings.TrimSpace(groupFile.Title)
+	if title == "" {
+		title = slug
+	}
+
+	var students []domain.Student
+	if err := fileutil.ReadJSON(filepath.Join(h.admin.cfg.DataDir, "students.json"), &students); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			h.logger.Printf("ERROR admin group accounts read students err=%v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		students = nil
+	}
+	byID := make(map[string]domain.Student, len(students))
+	for _, student := range domain.NormalizeStudents(students) {
+		if student.ID != "" {
+			byID[student.ID] = student
+		}
+	}
+
+	sites := collectGroupSiteAccounts(groupFile.StudentIDs, byID)
+
+	page := AdminGroupAccountsPageData{
+		PageTitle:  "Аккаунты — " + title,
+		Footer:     h.buildFooterInfo(),
+		GroupSlug:  slug,
+		GroupTitle: title,
+		Sites:      sites,
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "admin_group_accounts.html", page); err != nil {
+		h.logger.Printf("ERROR render admin group accounts slug=%s err=%v", slug, err)
+	}
+}
+
+// collectGroupSiteAccounts собирает account_id учеников группы по сайтам,
+// сохраняя порядок студентов и убирая дубли внутри сайта.
+func collectGroupSiteAccounts(studentIDs []string, byID map[string]domain.Student) []AdminSiteAccounts {
+	perSite := make(map[string][]string)
+	seenPerSite := make(map[string]map[string]struct{})
+	siteOrder := make([]string, 0)
+
+	for _, studentID := range studentIDs {
+		student, ok := byID[strings.TrimSpace(studentID)]
+		if !ok {
+			continue
+		}
+		for _, account := range student.Accounts {
+			site := account.Site
+			accountID := account.AccountID
+			if site == "" || accountID == "" {
+				continue
+			}
+			if _, ok := perSite[site]; !ok {
+				siteOrder = append(siteOrder, site)
+				seenPerSite[site] = make(map[string]struct{})
+			}
+			if _, dup := seenPerSite[site][accountID]; dup {
+				continue
+			}
+			seenPerSite[site][accountID] = struct{}{}
+			perSite[site] = append(perSite[site], accountID)
+		}
+	}
+
+	sort.Strings(siteOrder)
+	out := make([]AdminSiteAccounts, 0, len(siteOrder))
+	for _, site := range siteOrder {
+		ids := perSite[site]
+		out = append(out, AdminSiteAccounts{
+			Site:         site,
+			Count:        len(ids),
+			AccountsText: strings.Join(ids, "\n"),
+		})
+	}
+	return out
 }
 
 func (h *Handlers) resolveEditablePath(path string) (string, string, error) {

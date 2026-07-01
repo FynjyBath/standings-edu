@@ -1,0 +1,49 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Аккаунты группы: {{.GroupTitle}}</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}" target="_blank" rel="noopener noreferrer">Страница группы</a>
+  </p>
+</section>
+
+{{if .Sites}}
+  {{range .Sites}}
+  <section class="admin-block">
+    <div class="admin-editor-tools">
+      <h2 style="margin:0;">{{.Site}} <span class="empty-hint" style="font-weight:400;">({{.Count}})</span></h2>
+      <button type="button" class="admin-btn admin-btn--secondary account-copy-btn">Скопировать</button>
+    </div>
+    <textarea class="account-list" readonly rows="{{if gt .Count 20}}20{{else}}{{.Count}}{{end}}" spellcheck="false">{{.AccountsText}}</textarea>
+  </section>
+  {{end}}
+{{else}}
+<p class="empty-hint">У учеников этой группы нет аккаунтов (или в группе нет учеников).</p>
+{{end}}
+
+<script>
+  (function () {
+    document.querySelectorAll(".account-copy-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var block = btn.closest(".admin-block");
+        var ta = block ? block.querySelector(".account-list") : null;
+        if (!ta) return;
+        ta.focus();
+        ta.select();
+        var done = function () {
+          var old = btn.textContent;
+          btn.textContent = "Скопировано";
+          setTimeout(function () { btn.textContent = old; }, 1200);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(ta.value).then(done, function () {
+            try { document.execCommand("copy"); done(); } catch (e) {}
+          });
+        } else {
+          try { document.execCommand("copy"); done(); } catch (e) {}
+        }
+      });
+    });
+  })();
+</script>
+{{end}}

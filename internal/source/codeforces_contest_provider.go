@@ -30,6 +30,44 @@ func (p *CodeforcesContestProvider) ProviderID() string {
 	return CodeforcesContestProviderID
 }
 
+// ParseCodeforcesContestID распознаёт ссылку на КОНТЕСТ Codeforces (а не на задачу):
+//
+//	https://codeforces.com/contest/<id>
+//	https://codeforces.com/gym/<id>
+//	https://codeforces.com/group/<gid>/contest/<id>
+//
+// Возвращает (id, true). Ссылка на конкретную задачу (есть сегмент "problem") — (0, false).
+func ParseCodeforcesContestID(rawURL string) (int, bool) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return 0, false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host != "codeforces.com" && host != "www.codeforces.com" {
+		return 0, false
+	}
+
+	segments := make([]string, 0)
+	for _, s := range strings.Split(u.Path, "/") {
+		if s = strings.TrimSpace(s); s != "" {
+			segments = append(segments, s)
+		}
+	}
+	for _, s := range segments {
+		if strings.EqualFold(s, "problem") {
+			return 0, false
+		}
+	}
+	for i := 0; i+1 < len(segments); i++ {
+		if strings.EqualFold(segments[i], "contest") || strings.EqualFold(segments[i], "gym") {
+			if id, err := strconv.Atoi(segments[i+1]); err == nil && id > 0 {
+				return id, true
+			}
+		}
+	}
+	return 0, false
+}
+
 func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input ContestProviderInput) (domain.GeneratedContestStandings, error) {
 	if p == nil || p.client == nil {
 		return domain.GeneratedContestStandings{}, fmt.Errorf("codeforces contest provider client is not configured")

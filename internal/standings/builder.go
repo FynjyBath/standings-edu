@@ -2,6 +2,7 @@ package standings
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -333,7 +334,8 @@ func (b *Builder) buildGroupStandings(
 	for _, contest := range pg.contests {
 		switch contest.TypeOrDefault() {
 		case domain.ContestTypeTasks:
-			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent)
+			expanded := b.expandCodeforcesContestRefs(ctx, data, pg.group, contest, pg.students)
+			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded)
 			generated.GeneratedAt = &now
 			out.Contests = append(out.Contests, generated)
 		case domain.ContestTypeProvider:
@@ -470,7 +472,68 @@ func (b *Builder) buildProviderContestStandings(
 	return standings, nil
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses) domain.GeneratedContestStandings {
+// expandCodeforcesContestRefs для каждой ссылки на контест Codeforces в списке
+// задач tasks-контеста делает по одному запросу contest.standings (через
+// codeforces_contest провайдер, с его логикой gym/non-gym и fallback) и
+// возвращает результат по contest_id. nil в значении — развернуть не удалось.
+func (b *Builder) expandCodeforcesContestRefs(ctx context.Context, data *domain.SourceData, group domain.GroupDefinition, contest domain.Contest, students []domain.Student) map[int]*domain.GeneratedContestStandings {
+	ids := make([]int, 0)
+	seen := make(map[int]struct{})
+	for _, subcontest := range contest.Subcontests {
+		for _, rawTaskURL := range subcontest.Tasks {
+			if cid, ok := source.ParseCodeforcesContestID(rawTaskURL); ok {
+				if _, dup := seen[cid]; !dup {
+					seen[cid] = struct{}{}
+					ids = append(ids, cid)
+				}
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	provider, ok := b.sources.Provider(source.CodeforcesContestProviderID)
+	if !ok {
+		b.logger.Printf("WARN group=%s contest=%s codeforces contest provider not registered; contest refs skipped", group.Slug, contest.ID)
+		return nil
+	}
+
+	out := make(map[int]*domain.GeneratedContestStandings, len(ids))
+	for _, cid := range ids {
+		synthetic := domain.Contest{
+			ID:             fmt.Sprintf("%s#cf%d", contest.ID, cid),
+			Title:          contest.Title,
+			ScoreSystem:    contest.ScoreSystem,
+			ContestType:    domain.ContestTypeProvider,
+			Provider:       source.CodeforcesContestProviderID,
+			ProviderConfig: json.RawMessage(fmt.Sprintf(`{"contest_id":%d,"show_unofficial":true}`, cid)),
+		}
+		res, err := provider.BuildStandings(ctx, source.ContestProviderInput{
+			Source:   data,
+			Group:    group,
+			Contest:  synthetic,
+			Students: students,
+		})
+		if err != nil {
+			b.logger.Printf("WARN group=%s contest=%s expand codeforces contest %d failed: %v", group.Slug, contest.ID, cid, err)
+			out[cid] = nil
+			continue
+		}
+		expanded := res
+		out[cid] = &expanded
+	}
+	return out
+}
+
+type taskColumn struct {
+	fromContest   *domain.GeneratedContestStandings // != nil => столбец из развёрнутого CF-контеста
+	problemIndex  int
+	normalizedURL string // для обычной задачи
+	useRealScores bool   // для обычной IOI-задачи
+}
+
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	out := domain.GeneratedContestStandings{
@@ -485,16 +548,34 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
 	}
 
-	taskUsesSiteScores := make([]bool, 0)
+	columns := make([]taskColumn, 0)
 	for _, subcontest := range contest.Subcontests {
 		generatedSubcontest := domain.GeneratedSubcontest{
 			Title: subcontest.Title,
 			Tasks: make([]domain.GeneratedTask, 0, len(subcontest.Tasks)),
 		}
-		for i, rawTaskURL := range subcontest.Tasks {
+		for _, rawTaskURL := range subcontest.Tasks {
+			if cid, ok := source.ParseCodeforcesContestID(rawTaskURL); ok {
+				contestStandings := expanded[cid]
+				if contestStandings == nil {
+					continue // развернуть не удалось — запись пропускаем
+				}
+				for problemIndex, problemTask := range contestStandings.Tasks {
+					task := domain.GeneratedTask{
+						Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
+						URL:           problemTask.URL,
+						NormalizedURL: problemTask.NormalizedURL,
+					}
+					generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
+					out.Tasks = append(out.Tasks, task)
+					columns = append(columns, taskColumn{fromContest: contestStandings, problemIndex: problemIndex})
+				}
+				continue
+			}
+
 			normalized := domain.NormalizeTaskURL(rawTaskURL)
 			task := domain.GeneratedTask{
-				Label:         domain.AlphabetLabel(i),
+				Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
 				URL:           strings.TrimSpace(rawTaskURL),
 				NormalizedURL: normalized,
 			}
@@ -508,10 +589,23 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 					useRealScores = true
 				}
 			}
-			taskUsesSiteScores = append(taskUsesSiteScores, useRealScores)
+			columns = append(columns, taskColumn{normalizedURL: normalized, useRealScores: useRealScores})
 		}
 		generatedSubcontest.TaskCount = len(generatedSubcontest.Tasks)
 		out.Subcontests = append(out.Subcontests, generatedSubcontest)
+	}
+
+	// Строки развёрнутых контестов — по student_id.
+	expandedRowByStudent := make(map[*domain.GeneratedContestStandings]map[string]*domain.GeneratedRow)
+	for _, contestStandings := range expanded {
+		if contestStandings == nil {
+			continue
+		}
+		byStudent := make(map[string]*domain.GeneratedRow, len(contestStandings.Rows))
+		for i := range contestStandings.Rows {
+			byStudent[contestStandings.Rows[i].StudentID] = &contestStandings.Rows[i]
+		}
+		expandedRowByStudent[contestStandings] = byStudent
 	}
 
 	for _, student := range students {
@@ -529,28 +623,55 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		if isIOI {
 			row.Scores = make([]*int, len(out.Tasks))
 		}
+		upsolved := make([]bool, len(out.Tasks))
+		hasUpsolved := false
 
-		for i, task := range out.Tasks {
+		for i, col := range columns {
 			status := domain.TaskStatusNone
-			if _, ok := combined.solved[task.NormalizedURL]; ok {
+
+			if col.fromContest != nil {
+				if byStudent, ok := expandedRowByStudent[col.fromContest]; ok {
+					if providerRow := byStudent[student.ID]; providerRow != nil && col.problemIndex < len(providerRow.Statuses) {
+						status = providerRow.Statuses[col.problemIndex]
+						if isIOI && col.problemIndex < len(providerRow.Scores) && providerRow.Scores[col.problemIndex] != nil {
+							value := *providerRow.Scores[col.problemIndex]
+							row.Scores[i] = &value
+							row.TotalScore += value
+						}
+						if col.problemIndex < len(providerRow.Upsolved) && providerRow.Upsolved[col.problemIndex] {
+							upsolved[i] = true
+							hasUpsolved = true
+						}
+					}
+				}
+				row.Statuses[i] = status
+				if status == domain.TaskStatusSolved {
+					row.SolvedCount++
+				}
+				continue
+			}
+
+			if _, ok := combined.solved[col.normalizedURL]; ok {
 				status = domain.TaskStatusSolved
 				row.SolvedCount++
-			} else if _, ok := combined.attempted[task.NormalizedURL]; ok {
+			} else if _, ok := combined.attempted[col.normalizedURL]; ok {
 				status = domain.TaskStatusAttempted
 			}
 			row.Statuses[i] = status
 
 			if isIOI {
-				score, ok := resolveTaskScore(status, combined, task.NormalizedURL, taskUsesSiteScores[i])
-				if !ok {
-					continue
+				score, ok := resolveTaskScore(status, combined, col.normalizedURL, col.useRealScores)
+				if ok {
+					value := score
+					row.Scores[i] = &value
+					row.TotalScore += score
 				}
-				value := score
-				row.Scores[i] = &value
-				row.TotalScore += score
 			}
 		}
 
+		if hasUpsolved {
+			row.Upsolved = upsolved
+		}
 		out.Rows = append(out.Rows, row)
 	}
 

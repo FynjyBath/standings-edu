@@ -94,6 +94,11 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 			continue
 		}
 
+		// Обновляем отображаемые метаданные (title/table_name/materials) из текущего
+		// конфига даже у update=false контестов — их можно менять без пересчёта
+		// результатов. Делается до расчёта оценок, чтобы новый table_name учитывался.
+		refreshContestMetadata(&mergedStandings, data, fullGroup)
+
 		mergedStandings.Grades = p.buildGroupGrades(fullGroup, mergedStandings, data)
 
 		if err := p.writer.WriteGroupStandings(mergedStandings); err != nil {
@@ -111,6 +116,28 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 
 	p.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(buildGroups))
 	return nil
+}
+
+// refreshContestMetadata накладывает актуальные отображаемые метаданные из конфига
+// (title, table_name, materials) на контесты сгенерированных standings. Нужно,
+// чтобы смена этих полей подхватывалась даже у update=false контестов, чьи
+// результаты переносятся из прошлой генерации без пересчёта.
+func refreshContestMetadata(standings *domain.GeneratedGroupStandings, data *domain.SourceData, group domain.GroupDefinition) {
+	metaByID := make(map[string]domain.Contest, len(group.Contests))
+	for _, contestRef := range group.Contests {
+		if contest, ok := resolveGroupContestDef(data, contestRef); ok {
+			metaByID[contest.ID] = contest
+		}
+	}
+	for i := range standings.Contests {
+		meta, ok := metaByID[standings.Contests[i].ID]
+		if !ok {
+			continue
+		}
+		standings.Contests[i].Title = meta.Title
+		standings.Contests[i].TableNames = meta.TableNames
+		standings.Contests[i].Materials = domain.NormalizeContestMaterials(meta.Materials)
+	}
 }
 
 // buildGroupGrades считает таблицу оценок группы, если она настроена в group.json.

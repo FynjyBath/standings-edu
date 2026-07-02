@@ -107,27 +107,36 @@ func (b *Builder) resolveGroupStudents(data *domain.SourceData, group domain.Gro
 func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
 	contests := make([]domain.Contest, 0, len(group.Contests))
 	for _, contestRef := range group.Contests {
-		var contest domain.Contest
-		if contestRef.Inline != nil {
-			contest = *contestRef.Inline
-			if strings.TrimSpace(contest.ID) == "" {
-				contest.ID = contestRef.ID
-			}
-		} else {
-			resolved, ok := data.Contests[contestRef.ID]
-			if !ok {
-				b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
-				continue
-			}
-			contest = resolved
-		}
-		// Переопределение вкладок на уровне группы (в т.ч. для ссылок).
-		if contestRef.TableNames != nil {
-			contest.TableNames = contestRef.TableNames
+		contest, ok := resolveGroupContestDef(data, contestRef)
+		if !ok {
+			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
+			continue
 		}
 		contests = append(contests, contest)
 	}
 	return contests
+}
+
+// resolveGroupContestDef резолвит ссылку/inline в определение контеста с учётом
+// переопределения table_name на уровне группы. Возвращает (contest, найдено).
+func resolveGroupContestDef(data *domain.SourceData, contestRef domain.GroupContestRef) (domain.Contest, bool) {
+	var contest domain.Contest
+	if contestRef.Inline != nil {
+		contest = *contestRef.Inline
+		if strings.TrimSpace(contest.ID) == "" {
+			contest.ID = contestRef.ID
+		}
+	} else {
+		resolved, ok := data.Contests[contestRef.ID]
+		if !ok {
+			return domain.Contest{}, false
+		}
+		contest = resolved
+	}
+	if contestRef.TableNames != nil {
+		contest.TableNames = contestRef.TableNames
+	}
+	return contest, true
 }
 
 func uniqueStudents(prepared []preparedGroup) []domain.Student {

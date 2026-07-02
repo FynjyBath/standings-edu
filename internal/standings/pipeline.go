@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/grades"
 	"standings-edu/internal/storage"
 )
 
@@ -93,6 +94,8 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 			continue
 		}
 
+		mergedStandings.Grades = p.buildGroupGrades(fullGroup, mergedStandings, data)
+
 		if err := p.writer.WriteGroupStandings(mergedStandings); err != nil {
 			p.logger.Printf("ERROR group=%s write standings failed: %v", group.Slug, err)
 			continue
@@ -108,6 +111,33 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 
 	p.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(buildGroups))
 	return nil
+}
+
+// buildGroupGrades считает таблицу оценок группы, если она настроена в group.json.
+// При отсутствии конфига или учеников возвращает nil (кнопки оценок не будет).
+func (p *Pipeline) buildGroupGrades(group domain.GroupDefinition, standings domain.GeneratedGroupStandings, data *domain.SourceData) *domain.GeneratedGrades {
+	if group.Grades == nil || len(group.Grades.Columns) == 0 {
+		return nil
+	}
+
+	manual, err := p.loader.LoadManualGrades(group.Slug)
+	if err != nil {
+		p.logger.Printf("WARN group=%s load manual grades failed: %v", group.Slug, err)
+		manual = nil
+	}
+
+	roster := make([]grades.RosterStudent, 0, len(group.StudentIDs))
+	for _, studentID := range group.StudentIDs {
+		publicName := studentID
+		if student, ok := data.Students[studentID]; ok {
+			if name := student.PublicName; name != "" {
+				publicName = name
+			}
+		}
+		roster = append(roster, grades.RosterStudent{ID: studentID, PublicName: publicName})
+	}
+
+	return grades.Build(group.Grades, standings, roster, manual)
 }
 
 func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings) (domain.GeneratedGroupStandings, bool) {

@@ -181,6 +181,39 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	standings, err := h.loadGroupStandings(slug)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidGroupSlug) || errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		h.logger.Printf("ERROR load grades page slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if standings.Grades == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	title := standings.GroupTitle
+	if standings.Grades.Title != "" {
+		title = title + " — " + standings.Grades.Title
+	}
+	page := GroupGradesPageData{
+		PageTitle:  title,
+		Footer:     h.buildFooterInfo(),
+		GroupSlug:  standings.GroupSlug,
+		GroupTitle: standings.GroupTitle,
+		Grades:     *standings.Grades,
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "group_grades.html", page); err != nil {
+		h.logger.Printf("ERROR render grades slug=%s err=%v", slug, err)
+	}
+}
+
 func (h *Handlers) GroupSummaryEduPage(w http.ResponseWriter, r *http.Request) {
 	h.renderGroupSummaryPage(w, r, "edu")
 }
@@ -291,6 +324,14 @@ type GroupPageData struct {
 	PageTitle string
 	Standings domain.GeneratedGroupStandings
 	Footer    FooterInfo
+}
+
+type GroupGradesPageData struct {
+	PageTitle  string
+	Footer     FooterInfo
+	GroupSlug  string
+	GroupTitle string
+	Grades     domain.GeneratedGrades
 }
 
 type GroupSummaryPageData struct {

@@ -5,5 +5,35 @@
   "student_ids": [
     "ivanov-ii",
     "petrova-aa"
-  ]
+  ],
+  "grades": {
+    "title": "Оценки за модуль",
+    "round": 1,
+    "columns": [
+      {
+        "id": "activity",
+        "title": "Активность",
+        "weight": 1,
+        "type": "table",
+        "table_name": "Тематические",
+        "metric": "plus",
+        "normalize": "max"
+      },
+      {
+        "id": "olymp",
+        "title": "Олимпиада",
+        "weight": 1,
+        "type": "table",
+        "table_name": "Соревновательные",
+        "metric": "score",
+        "normalize": "total"
+      },
+      {
+        "id": "kontrolnaya",
+        "title": "Контрольная",
+        "weight": 2,
+        "type": "manual"
+      }
+    ]
+  }
 }

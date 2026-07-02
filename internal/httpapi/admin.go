@@ -83,6 +83,31 @@ type AdminSiteAccounts struct {
 	AccountsText string // account_id по одному в строке, готово к копированию
 }
 
+type AdminGroupGradesPageData struct {
+	PageTitle  string
+	Footer     FooterInfo
+	GroupSlug  string
+	GroupTitle string
+	Columns    []AdminManualGradeColumn
+	Rows       []AdminManualGradeRow
+}
+
+type AdminManualGradeColumn struct {
+	ID    string
+	Title string
+}
+
+type AdminManualGradeRow struct {
+	StudentID  string
+	PublicName string
+	Values     []string // по одному значению на ручной столбец; "" — нет оценки
+}
+
+type adminGroupGradesSaveRequest struct {
+	Slug   string                        `json:"slug"`
+	Grades map[string]map[string]float64 `json:"grades"`
+}
+
 type adminFileRequest struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
@@ -733,6 +758,211 @@ func collectGroupSiteAccounts(studentIDs []string, byID map[string]domain.Studen
 		})
 	}
 	return out
+}
+
+func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		http.Error(w, "admin is not configured", http.StatusInternalServerError)
+		return
+	}
+	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
+	if !domain.IsValidSlug(slug) {
+		http.NotFound(w, r)
+		return
+	}
+
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil {
+		h.logger.Printf("ERROR admin group grades read group slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	title := strings.TrimSpace(groupFile.Title)
+	if title == "" {
+		title = slug
+	}
+	manualColumns := manualGradeColumns(groupFile)
+	columns := make([]AdminManualGradeColumn, 0, len(manualColumns))
+	for _, col := range manualColumns {
+		colTitle := strings.TrimSpace(col.Title)
+		if colTitle == "" {
+			colTitle = col.ID
+		}
+		columns = append(columns, AdminManualGradeColumn{ID: col.ID, Title: colTitle})
+	}
+
+	publicNames := h.loadPublicNames()
+	manual, err := h.loadManualGrades(slug)
+	if err != nil {
+		h.logger.Printf("ERROR admin group grades read manual slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	rows := make([]AdminManualGradeRow, 0, len(groupFile.StudentIDs))
+	for _, studentID := range domain.NormalizeGroups(groupFile.StudentIDs) {
+		publicName := publicNames[studentID]
+		if publicName == "" {
+			publicName = studentID
+		}
+		values := make([]string, len(manualColumns))
+		for i, col := range manualColumns {
+			if byStudent, ok := manual[col.ID]; ok {
+				if v, ok := byStudent[studentID]; ok {
+					values[i] = strconv.FormatFloat(v, 'f', -1, 64)
+				}
+			}
+		}
+		rows = append(rows, AdminManualGradeRow{StudentID: studentID, PublicName: publicName, Values: values})
+	}
+
+	page := AdminGroupGradesPageData{
+		PageTitle:  "Оценки — " + title,
+		Footer:     h.buildFooterInfo(),
+		GroupSlug:  slug,
+		GroupTitle: title,
+		Columns:    columns,
+		Rows:       rows,
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "admin_group_grades.html", page); err != nil {
+		h.logger.Printf("ERROR render admin group grades slug=%s err=%v", slug, err)
+	}
+}
+
+func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+
+	decoder := json.NewDecoder(io.LimitReader(r.Body, maxAdminJSONBodyBytes))
+	var req adminGroupGradesSaveRequest
+	if err := decoder.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	allowedColumns := make(map[string]struct{})
+	for _, col := range manualGradeColumns(groupFile) {
+		allowedColumns[col.ID] = struct{}{}
+	}
+	allowedStudents := make(map[string]struct{})
+	for _, studentID := range domain.NormalizeGroups(groupFile.StudentIDs) {
+		allowedStudents[studentID] = struct{}{}
+	}
+
+	out := make(map[string]map[string]float64)
+	for colID, byStudent := range req.Grades {
+		if _, ok := allowedColumns[colID]; !ok {
+			continue
+		}
+		clean := make(map[string]float64)
+		for studentID, value := range byStudent {
+			if _, ok := allowedStudents[studentID]; !ok {
+				continue
+			}
+			clean[studentID] = clampGrade(value)
+		}
+		if len(clean) > 0 {
+			out[colID] = clean
+		}
+	}
+
+	path := filepath.Join(h.admin.cfg.DataDir, "groups", slug, "grades_manual.json")
+	if err := fileutil.WriteJSON(path, out, 0o644); err != nil {
+		h.logger.Printf("ERROR admin group grades save slug=%s err=%v", slug, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *Handlers) readGroupFile(slug string) (domain.GroupFile, bool, error) {
+	path := filepath.Join(h.admin.cfg.DataDir, "groups", slug, "group.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return domain.GroupFile{}, false, nil
+		}
+		return domain.GroupFile{}, false, err
+	}
+	var groupFile domain.GroupFile
+	if err := json.Unmarshal(body, &groupFile); err != nil {
+		return domain.GroupFile{}, false, err
+	}
+	return groupFile, true, nil
+}
+
+func (h *Handlers) loadPublicNames() map[string]string {
+	var students []domain.Student
+	if err := fileutil.ReadJSON(filepath.Join(h.admin.cfg.DataDir, "students.json"), &students); err != nil {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(students))
+	for _, student := range domain.NormalizeStudents(students) {
+		if student.ID != "" {
+			out[student.ID] = student.PublicName
+		}
+	}
+	return out
+}
+
+func (h *Handlers) loadManualGrades(slug string) (map[string]map[string]float64, error) {
+	body, err := os.ReadFile(filepath.Join(h.admin.cfg.DataDir, "groups", slug, "grades_manual.json"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]map[string]float64{}, nil
+		}
+		return nil, err
+	}
+	var out map[string]map[string]float64
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = map[string]map[string]float64{}
+	}
+	return out, nil
+}
+
+func manualGradeColumns(groupFile domain.GroupFile) []domain.GradeColumn {
+	if groupFile.Grades == nil {
+		return nil
+	}
+	out := make([]domain.GradeColumn, 0, len(groupFile.Grades.Columns))
+	for _, col := range groupFile.Grades.Columns {
+		if strings.EqualFold(col.Type, domain.GradeColumnManual) && strings.TrimSpace(col.ID) != "" {
+			out = append(out, col)
+		}
+	}
+	return out
+}
+
+func clampGrade(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 10 {
+		return 10
+	}
+	return v
 }
 
 func (h *Handlers) resolveEditablePath(path string) (string, string, error) {

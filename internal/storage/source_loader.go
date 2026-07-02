@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -132,6 +133,7 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 			Update:     update,
 			StudentIDs: domain.NormalizeGroups(gf.StudentIDs),
 			Contests:   contests,
+			Grades:     gf.Grades,
 		})
 	}
 
@@ -140,6 +142,29 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 	})
 
 	return groups, nil
+}
+
+// LoadManualGrades читает ручные оценки группы из
+// data/groups/<slug>/grades_manual.json (columnID -> studentID -> оценка).
+// Файла нет — пустая карта, без ошибки.
+func (l *SourceLoader) LoadManualGrades(slug string) (map[string]map[string]float64, error) {
+	path := filepath.Join(l.DataDir, "groups", slug, "grades_manual.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]map[string]float64{}, nil
+		}
+		return nil, fmt.Errorf("read manual grades %q: %w", path, err)
+	}
+
+	var raw map[string]map[string]float64
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("decode manual grades %q: %w", path, err)
+	}
+	if raw == nil {
+		raw = map[string]map[string]float64{}
+	}
+	return raw, nil
 }
 
 // inlineContestKeys — ключи, наличие любого из которых означает, что элемент в

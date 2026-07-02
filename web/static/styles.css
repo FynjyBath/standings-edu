@@ -576,6 +576,23 @@ button.summary-link-btn {
   font-weight: 600;
 }
 
+.grade-input {
+  width: 4.2rem;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.grade-weight {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
 .account-list {
   width: 100%;
   box-sizing: border-box;

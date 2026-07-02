@@ -41,6 +41,8 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"hasProviderStatusColumn": hasProviderStatusColumn,
 			"taskCells":               taskCells,
 			"contestGeneratedAt":      contestGeneratedAt,
+			"gradeText":               gradeText,
+			"numText":                 numText,
 		},
 	}
 }
@@ -94,6 +96,17 @@ func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCe
 		cells = append(cells, cell)
 	}
 	return cells
+}
+
+func numText(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func gradeText(v *float64) string {
+	if v == nil {
+		return ""
+	}
+	return numText(*v)
 }
 
 func contestGeneratedAt(generatedAt *time.Time) string {

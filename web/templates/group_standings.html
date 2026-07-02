@@ -6,6 +6,9 @@
   {{end}}
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary">Сводная таблица</a>
+    {{if .Standings.Grades}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/grades">{{if .Standings.Grades.Title}}{{.Standings.Grades.Title}}{{else}}Оценки{{end}}</a>
+    {{end}}
   </p>
 </section>
 

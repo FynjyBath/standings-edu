@@ -1,0 +1,39 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>{{.GroupTitle}}{{if .Grades.Title}} — {{.Grades.Title}}{{end}}</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}">Списком</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/summary">Сводная таблица</a>
+  </p>
+</section>
+
+<section class="contest-block">
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead>
+        <tr>
+          <th class="student-col">Ученик</th>
+          {{range .Grades.Columns}}
+          <th class="count-col">{{.Title}} <span class="grade-weight">×{{numText .Weight}}</span></th>
+          {{end}}
+          <th class="count-col">Итог</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Grades.Rows}}
+        <tr>
+          <td class="student-name">{{.PublicName}}</td>
+          {{range .Values}}
+          <td class="solved-count">{{gradeText .}}</td>
+          {{end}}
+          <td class="solved-count"><strong>{{gradeText .Final}}</strong></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{if not .Grades.Rows}}
+  <p class="empty-hint">В группе нет учеников.</p>
+  {{end}}
+</section>
+{{end}}

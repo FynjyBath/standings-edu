@@ -226,10 +226,11 @@ func NormalizeContestMaterials(materials []ContestMaterial) []ContestMaterial {
 }
 
 type GroupFile struct {
-	Title      string   `json:"title"`
-	FormLink   string   `json:"form_link,omitempty"`
-	Update     *bool    `json:"update,omitempty"`
-	StudentIDs []string `json:"student_ids"`
+	Title      string        `json:"title"`
+	FormLink   string        `json:"form_link,omitempty"`
+	Update     *bool         `json:"update,omitempty"`
+	StudentIDs []string      `json:"student_ids"`
+	Grades     *GradesConfig `json:"grades,omitempty"`
 }
 
 type GroupDefinition struct {
@@ -239,6 +240,71 @@ type GroupDefinition struct {
 	Update     bool
 	StudentIDs []string
 	Contests   []GroupContestRef
+	Grades     *GradesConfig
+}
+
+// GradesConfig — описание таблицы оценок группы (из group.json).
+type GradesConfig struct {
+	Title   string        `json:"title,omitempty"`
+	Round   *int          `json:"round,omitempty"` // знаков после запятой у итога; nil = 1
+	Columns []GradeColumn `json:"columns"`
+}
+
+type GradeColumn struct {
+	ID        string        `json:"id"`
+	Title     string        `json:"title"`
+	Weight    float64       `json:"weight"`
+	Type      string        `json:"type"`                 // "table" | "manual"
+	TableName string        `json:"table_name,omitempty"` // для type=table; пусто = все контесты
+	Metric    string        `json:"metric,omitempty"`     // "plus" | "score"
+	Normalize NormalizeSpec `json:"normalize,omitempty"`  // "max" | "total" | число
+}
+
+const (
+	GradeColumnTable  = "table"
+	GradeColumnManual = "manual"
+	GradeMetricPlus   = "plus"
+	GradeMetricScore  = "score"
+
+	NormalizeMax   = "max"
+	NormalizeTotal = "total"
+	NormalizeFixed = "fixed"
+)
+
+// NormalizeSpec — способ нормировки табличной оценки: "max", "total" или число.
+type NormalizeSpec struct {
+	Mode  string
+	Value float64
+}
+
+func (n *NormalizeSpec) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		n.Mode = NormalizeMax
+		return nil
+	}
+
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err == nil {
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "", NormalizeMax:
+			n.Mode = NormalizeMax
+		case NormalizeTotal:
+			n.Mode = NormalizeTotal
+		default:
+			return fmt.Errorf("normalize must be %q, %q or a number", NormalizeMax, NormalizeTotal)
+		}
+		return nil
+	}
+
+	var f float64
+	if err := json.Unmarshal(trimmed, &f); err == nil {
+		n.Mode = NormalizeFixed
+		n.Value = f
+		return nil
+	}
+
+	return fmt.Errorf("normalize must be %q, %q or a number", NormalizeMax, NormalizeTotal)
 }
 
 type GroupContestRef struct {
@@ -359,7 +425,29 @@ type GeneratedGroupStandings struct {
 	FormLink           string                           `json:"form_link,omitempty"`
 	SolvedSummarySites []string                         `json:"solved_summary_sites,omitempty"`
 	SolvedSummary      []GeneratedGroupSolvedSummaryRow `json:"solved_summary,omitempty"`
+	Grades             *GeneratedGrades                 `json:"grades,omitempty"`
 	Contests           []GeneratedContestStandings      `json:"contests"`
+}
+
+// GeneratedGrades — готовая таблица оценок (считается в generate, рендерится сервером).
+type GeneratedGrades struct {
+	Title   string                 `json:"title,omitempty"`
+	Columns []GeneratedGradeColumn `json:"columns"`
+	Rows    []GeneratedGradeRow    `json:"rows"`
+}
+
+type GeneratedGradeColumn struct {
+	Title  string  `json:"title"`
+	Weight float64 `json:"weight"`
+}
+
+type GeneratedGradeRow struct {
+	StudentID  string `json:"student_id"`
+	PublicName string `json:"public_name"`
+	// Values — по одному значению на столбец; nil = нет оценки (в среднее не идёт).
+	Values []*float64 `json:"values"`
+	// Final — итоговое взвешенное среднее; nil, если ни одной оценки нет.
+	Final *float64 `json:"final,omitempty"`
 }
 
 type GeneratedGroupSolvedSummaryRow struct {

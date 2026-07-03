@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -16,8 +17,15 @@ import (
 const defaultACMPBaseURL = "https://acmp.ru"
 
 var (
-	acmpBlockRe  = regexp.MustCompile(`(?is)<b\s+class=btext>.*?</b>\s*<p\s+class=text>(.*?)</p>`)
+	// Захватываем заголовок блока (группа 1) и список задач (группа 2), чтобы
+	// классифицировать блок по названию, а не по позиции.
+	acmpBlockRe  = regexp.MustCompile(`(?is)<b\s+class=btext>([^<]*)</b>\s*<p\s+class=text>(.*?)</p>`)
 	acmpTaskIDRe = regexp.MustCompile(`id_task=(\d+)`)
+
+	// Маркеры заголовков в кодировке windows-1251 (страница acmp в cp1251).
+	// "Нерешен" = Н е р е ш е н; "Решен" = Р е ш е н (с заглавной Р).
+	acmpUnsolvedMarker = []byte{0xCD, 0xE5, 0xF0, 0xE5, 0xF8, 0xE5, 0xED}
+	acmpSolvedMarker   = []byte{0xD0, 0xE5, 0xF8, 0xE5, 0xED}
 )
 
 type ACMPClient struct {
@@ -111,25 +119,42 @@ func parseACMPUserPage(body []byte) (map[int]struct{}, map[int]struct{}, error) 
 		return nil, nil, fmt.Errorf("acmp: no task blocks found")
 	}
 
-	taskBlocks := make([][]byte, 0, 4)
+	solved := make(map[int]struct{})
+	attemptedOnly := make(map[int]struct{})
+	found := false
+
+	// На странице может быть несколько списков «Решенные задачи» (например, общий
+	// и по разделу «Курсы»). Классифицируем каждый блок по заголовку и объединяем
+	// все решённые (и все нерешённые), а не берём только первый список.
 	for _, m := range matches {
-		if len(m) < 2 {
+		if len(m) < 3 {
 			continue
 		}
-		if !acmpTaskIDRe.Match(m[1]) {
+		header := m[1]
+		tasksBlock := m[2]
+		if !acmpTaskIDRe.Match(tasksBlock) {
 			continue
 		}
-		taskBlocks = append(taskBlocks, m[1])
+
+		switch {
+		case bytes.Contains(header, acmpUnsolvedMarker):
+			for taskID := range extractTaskIDs(tasksBlock) {
+				attemptedOnly[taskID] = struct{}{}
+			}
+			found = true
+		case bytes.Contains(header, acmpSolvedMarker):
+			for taskID := range extractTaskIDs(tasksBlock) {
+				solved[taskID] = struct{}{}
+			}
+			found = true
+		}
 	}
 
-	if len(taskBlocks) < 2 {
+	if !found {
 		return nil, nil, fmt.Errorf("acmp: solved/unsolved blocks not found")
 	}
 
-	solved := extractTaskIDs(taskBlocks[0])
-	attemptedOnly := extractTaskIDs(taskBlocks[1])
-
-	// Ensure precedence solved > attempted.
+	// Решено имеет приоритет над попытками.
 	for taskID := range solved {
 		delete(attemptedOnly, taskID)
 	}

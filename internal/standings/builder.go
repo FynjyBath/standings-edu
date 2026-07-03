@@ -526,6 +526,17 @@ func (b *Builder) expandCodeforcesContestRefs(ctx context.Context, data *domain.
 	return out
 }
 
+// expandedContestProblemURL строит ссылку на задачу из исходной ссылки на
+// контест Codeforces, сохраняя её форму (group/contest/gym): <contestURL>/problem/<idx>.
+func expandedContestProblemURL(contestURL, problemIndex string) string {
+	base := strings.TrimRight(strings.TrimSpace(contestURL), "/")
+	index := strings.TrimSpace(problemIndex)
+	if base == "" || index == "" {
+		return strings.TrimSpace(contestURL)
+	}
+	return base + "/problem/" + index
+}
+
 type taskColumn struct {
 	fromContest   *domain.GeneratedContestStandings // != nil => столбец из развёрнутого CF-контеста
 	problemIndex  int
@@ -561,10 +572,14 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 					continue // развернуть не удалось — запись пропускаем
 				}
 				for problemIndex, problemTask := range contestStandings.Tasks {
+					// Ссылку задачи строим из ИСХОДНОЙ ссылки на контест
+					// (group/contest/gym — как вписал пользователь), а не из
+					// формы, которую вернул провайдер, чтобы не терять префикс группы.
+					problemURL := expandedContestProblemURL(rawTaskURL, problemTask.Label)
 					task := domain.GeneratedTask{
 						Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
-						URL:           problemTask.URL,
-						NormalizedURL: problemTask.NormalizedURL,
+						URL:           problemURL,
+						NormalizedURL: domain.NormalizeTaskURL(problemURL),
 					}
 					generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
 					out.Tasks = append(out.Tasks, task)

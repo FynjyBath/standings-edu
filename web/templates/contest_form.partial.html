@@ -21,8 +21,8 @@
 
   <div id="c-tasks-section" style="margin-top:0.9rem;">
     <div id="c-times" class="admin-form-grid">
-      <label><span>start_time (ISO, опц.)</span><input type="text" id="c-start" placeholder="2026-09-01T18:00:00+03:00" /></label>
-      <label><span>end_time (ISO, опц.)</span><input type="text" id="c-end" placeholder="2026-09-01T20:00:00+03:00" /></label>
+      <label><span>Начало (опц., ваше локальное время)</span><input type="datetime-local" id="c-start" step="60" /></label>
+      <label><span>Конец (опц.)</span><input type="datetime-local" id="c-end" step="60" /></label>
     </div>
     <div style="margin-top:0.5rem;"><strong>Подконтесты</strong> <span class="empty-hint">(задачи — по одной в строке; можно ссылку на контест CF целиком)</span>
       <div id="c-subcontests"></div>
@@ -46,6 +46,26 @@
   window.ContestForm = (function () {
     var $ = function (id) { return document.getElementById(id); };
     var root = $("contest-form");
+
+    function pad2(n) { return String(n).padStart(2, "0"); }
+    // RFC3339 (как в JSON) -> значение datetime-local в локальном времени браузера.
+    function timeFromISO(iso) {
+      if (!iso) return "";
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    // Значение datetime-local -> RFC3339 со сдвигом браузера (его ждёт сервер).
+    function timeToISO(v) {
+      if (!v) return "";
+      var d = new Date(v);
+      if (isNaN(d.getTime())) return "";
+      var off = -d.getTimezoneOffset();
+      var sign = off < 0 ? "-" : "+";
+      var abs = Math.abs(off);
+      var secs = v.length > 16 ? "" : ":00";
+      return v + secs + sign + pad2(Math.floor(abs / 60)) + ":" + pad2(abs % 60);
+    }
 
     function toggleSections() {
       var isProvider = $("c-source").value === "provider";
@@ -97,7 +117,7 @@
         $("c-provider").value = c.provider || "codeforces_contest";
         $("c-provider-config").value = c.provider_config ? JSON.stringify(c.provider_config, null, 2) : "";
       } else {
-        $("c-start").value = c.start_time || ""; $("c-end").value = c.end_time || "";
+        $("c-start").value = timeFromISO(c.start_time); $("c-end").value = timeFromISO(c.end_time);
         $("c-subcontests").innerHTML = "";
         var subs = c.subcontests || [];
         if (!subs.length) addSub("", []);
@@ -121,7 +141,7 @@
       if ($("c-source").value === "provider") {
         body.provider = $("c-provider").value; body.provider_config = $("c-provider-config").value;
       } else {
-        body.start_time = $("c-start").value; body.end_time = $("c-end").value;
+        body.start_time = timeToISO($("c-start").value); body.end_time = timeToISO($("c-end").value);
         var subs = [];
         $("c-subcontests").querySelectorAll(".sub-block").forEach(function (box) {
           var tasks = (box.querySelector(".sub-tasks").value || "").split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
@@ -141,7 +161,11 @@
     function setTimesVisible(visible) { $("c-times").style.display = visible ? "" : "none"; }
 
     reset();
-    return { fill: fill, reset: reset, collect: collect, show: show, hide: hide, setTimesVisible: setTimesVisible };
+    return {
+      fill: fill, reset: reset, collect: collect, show: show, hide: hide,
+      setTimesVisible: setTimesVisible,
+      timeFromISO: timeFromISO, timeToISO: timeToISO
+    };
   })();
 </script>
 {{end}}

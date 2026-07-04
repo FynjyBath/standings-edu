@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"standings-edu/internal/domain"
 	"standings-edu/internal/storage"
 	"standings-edu/internal/web"
 )
@@ -430,6 +432,45 @@ func TestAdminContestSaveAndDelete(t *testing.T) {
 	body, _ := os.ReadFile(filepath.Join(dataDir, "contests.json"))
 	if strings.Contains(string(body), "c1") {
 		t.Fatalf("contest not deleted: %s", body)
+	}
+}
+
+// До начала контеста ссылки на задачи вычищаются из отдаваемых standings
+// (страницы, сводная, API); после начала — остаются.
+func TestHideUpcomingContestTaskURLs(t *testing.T) {
+	future := time.Now().Add(2 * time.Hour)
+	past := time.Now().Add(-2 * time.Hour)
+	standings := domain.GeneratedGroupStandings{
+		Contests: []domain.GeneratedContestStandings{
+			{
+				ID: "upcoming", StartTime: &future,
+				Tasks:       []domain.GeneratedTask{{Label: "A", URL: "https://acmp.ru/?id=1", NormalizedURL: "acmp.ru/?id=1"}},
+				Subcontests: []domain.GeneratedSubcontest{{Tasks: []domain.GeneratedTask{{Label: "A", URL: "https://acmp.ru/?id=1"}}}},
+			},
+			{
+				ID: "running", StartTime: &past,
+				Tasks: []domain.GeneratedTask{{Label: "B", URL: "https://acmp.ru/?id=2"}},
+			},
+			{
+				ID:    "no-window",
+				Tasks: []domain.GeneratedTask{{Label: "C", URL: "https://acmp.ru/?id=3"}},
+			},
+		},
+	}
+	hideUpcomingContestTaskURLs(&standings)
+
+	up := standings.Contests[0]
+	if up.Tasks[0].URL != "" || up.Tasks[0].NormalizedURL != "" || up.Subcontests[0].Tasks[0].URL != "" {
+		t.Fatalf("upcoming contest URLs must be hidden: %+v", up)
+	}
+	if up.Tasks[0].Label != "A" {
+		t.Fatalf("labels must stay: %+v", up.Tasks)
+	}
+	if standings.Contests[1].Tasks[0].URL == "" {
+		t.Fatalf("running contest URLs must stay: %+v", standings.Contests[1])
+	}
+	if standings.Contests[2].Tasks[0].URL == "" {
+		t.Fatalf("no-window contest URLs must stay: %+v", standings.Contests[2])
 	}
 }
 

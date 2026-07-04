@@ -57,6 +57,7 @@ func (h *Handlers) ConfigureSourceDir(dataDir string) {
 func (h *Handlers) loadGroupStandings(slug string) (domain.GeneratedGroupStandings, error) {
 	standings, err := h.loader.LoadGroupStandings(slug)
 	if err == nil {
+		hideUpcomingContestTaskURLs(&standings)
 		return standings, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -72,6 +73,30 @@ func (h *Handlers) loadGroupStandings(slug string) (domain.GeneratedGroupStandin
 		return domain.GeneratedGroupStandings{}, err
 	}
 	return empty, nil
+}
+
+// hideUpcomingContestTaskURLs убирает ссылки на задачи у контестов, которые ещё
+// не начались (StartTime в будущем), чтобы задачи нельзя было подсмотреть до
+// старта — ни на страницах, ни в JSON (API и встраиваемый в сводную страницу).
+// Названия задач остаются: виден объём контеста, но не условия.
+func hideUpcomingContestTaskURLs(standings *domain.GeneratedGroupStandings) {
+	now := time.Now()
+	for i := range standings.Contests {
+		contest := &standings.Contests[i]
+		if contest.StartTime == nil || !now.Before(*contest.StartTime) {
+			continue
+		}
+		for j := range contest.Tasks {
+			contest.Tasks[j].URL = ""
+			contest.Tasks[j].NormalizedURL = ""
+		}
+		for j := range contest.Subcontests {
+			for k := range contest.Subcontests[j].Tasks {
+				contest.Subcontests[j].Tasks[k].URL = ""
+				contest.Subcontests[j].Tasks[k].NormalizedURL = ""
+			}
+		}
+	}
 }
 
 func (h *Handlers) loadEmptyGroupFromSource(slug string) (domain.GeneratedGroupStandings, bool, error) {

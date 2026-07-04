@@ -587,6 +587,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		ContestType: domain.ContestTypeTasks,
 		TableNames:  contest.TableNames,
 		Materials:   domain.NormalizeContestMaterials(contest.Materials),
+		StartTime:   contest.StartTime,
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),

@@ -403,7 +403,10 @@ type GeneratedContestStandings struct {
 	// GeneratedAt — момент последней генерации именно этой таблицы. У контестов
 	// с update=false он остаётся старым, поэтому видно, что таблица давно не
 	// обновлялась. nil — для таблиц, сгенерированных до появления этого поля.
-	GeneratedAt *time.Time            `json:"generated_at,omitempty"`
+	GeneratedAt *time.Time `json:"generated_at,omitempty"`
+	// StartTime — начало контеста (из определения или записи группы). До этого
+	// момента сервер не отдаёт ссылки на задачи, чтобы их нельзя было подсмотреть.
+	StartTime   *time.Time            `json:"start_time,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`
@@ -419,6 +422,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		TableNames  TableNameList         `json:"table_name,omitempty"`
 		Materials   []ContestMaterial     `json:"materials,omitempty"`
 		GeneratedAt *time.Time            `json:"generated_at,omitempty"`
+		StartTime   *time.Time            `json:"start_time,omitempty"`
 		Subcontests []GeneratedSubcontest `json:"subcontests"`
 		Tasks       []GeneratedTask       `json:"tasks"`
 		Rows        []GeneratedRow        `json:"rows"`
@@ -436,6 +440,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		TableNames:  raw.TableNames,
 		Materials:   raw.Materials,
 		GeneratedAt: raw.GeneratedAt,
+		StartTime:   raw.StartTime,
 		Subcontests: raw.Subcontests,
 		Tasks:       raw.Tasks,
 		Rows:        raw.Rows,

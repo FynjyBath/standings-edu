@@ -32,7 +32,7 @@
   {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table">
-      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (start / end, ISO, опц.)</th><th></th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц.)</th><th></th></tr></thead>
       <tbody>
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
@@ -46,8 +46,8 @@
           <td>
             {{if .Inline}}<span class="grade-weight">в теле контеста</span>
             {{else}}
-            <input type="text" class="c-start" value="{{.StartTime}}" placeholder="2026-09-01T18:00:00+03:00" style="min-width:13rem;" />
-            <input type="text" class="c-end" value="{{.EndTime}}" placeholder="2026-09-01T20:00:00+03:00" style="min-width:13rem;" />
+            <input type="datetime-local" class="c-start" step="60" data-iso="{{.StartTime}}" />
+            <input type="datetime-local" class="c-end" step="60" data-iso="{{.EndTime}}" />
             {{end}}
           </td>
           <td style="white-space:nowrap;">
@@ -113,18 +113,22 @@
 
     document.querySelectorAll("tr[data-id]").forEach(function (row) {
       var id = row.dataset.id;
+      // Окно показываем в локальном времени браузера, на сервер шлём RFC3339.
+      var st = row.querySelector(".c-start");
+      var en = row.querySelector(".c-end");
+      if (st) st.value = ContestForm.timeFromISO(st.dataset.iso || "");
+      if (en) en.value = ContestForm.timeFromISO(en.dataset.iso || "");
+
       var apply = row.querySelector(".c-apply");
       if (apply) apply.addEventListener("click", function () {
         var tn = row.querySelector(".c-tablename");
-        var st = row.querySelector(".c-start");
-        var en = row.querySelector(".c-end");
         setStatus("Сохранение…", false);
         post("/api/admin/group/contests/set-options", {
           slug: slug, id: id,
           update: row.querySelector(".c-update").checked,
           table_name: tn ? (tn.value || "").trim() : "",
-          start_time: st ? (st.value || "").trim() : "",
-          end_time: en ? (en.value || "").trim() : ""
+          start_time: st ? ContestForm.timeToISO(st.value) : "",
+          end_time: en ? ContestForm.timeToISO(en.value) : ""
         }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
           .catch(function (err) { setStatus(err.message, true); });
       });

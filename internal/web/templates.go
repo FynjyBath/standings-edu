@@ -41,6 +41,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"hasProviderStatusColumn": hasProviderStatusColumn,
 			"taskCells":               taskCells,
 			"contestGeneratedAt":      contestGeneratedAt,
+			"contestNotStarted":       contestNotStarted,
 			"gradeText":               gradeText,
 			"numText":                 numText,
 		},
@@ -110,6 +111,12 @@ func gradeText(v *float64) string {
 		return ""
 	}
 	return numText(*v)
+}
+
+// contestNotStarted — контест ещё не начался (StartTime в будущем): сервер уже
+// спрятал ссылки на задачи, а шаблон показывает подсказку с временем старта.
+func contestNotStarted(startTime *time.Time) bool {
+	return startTime != nil && time.Now().Before(*startTime)
 }
 
 func contestGeneratedAt(generatedAt *time.Time) string {

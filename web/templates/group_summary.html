@@ -188,12 +188,17 @@
           subTasks.forEach(function (task) {
             var th = document.createElement("th");
             th.className = "task-col";
-            var a = document.createElement("a");
-            a.href = task.url || "#";
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.textContent = task.label || "?";
-            th.appendChild(a);
+            if (task.url) {
+              var a = document.createElement("a");
+              a.href = task.url;
+              a.target = "_blank";
+              a.rel = "noopener noreferrer";
+              a.textContent = task.label || "?";
+              th.appendChild(a);
+            } else {
+              // Ссылки скрыты до начала контеста — показываем только метку.
+              th.textContent = task.label || "?";
+            }
             trBottom.appendChild(th);
           });
         });

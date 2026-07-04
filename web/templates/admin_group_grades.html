@@ -48,7 +48,7 @@
 
 <script>
   (function () {
-    var slug = {{printf "%q" .GroupSlug}};
+    var slug = {{.GroupSlug}};
     var saveBtn = document.getElementById("grades-save");
     var statusNode = document.getElementById("grades-status");
     if (!saveBtn) return;

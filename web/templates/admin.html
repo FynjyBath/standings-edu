@@ -325,7 +325,7 @@
       });
     });
 
-    var defaultPath = {{printf "%q" .DefaultPath}};
+    var defaultPath = {{.DefaultPath}};
     if (defaultPath && select.options.length > 0) {
       select.value = defaultPath;
     }

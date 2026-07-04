@@ -83,7 +83,7 @@
 <script id="inline-data" type="application/json">{{.InlineJSON}}</script>
 <script>
   (function () {
-    var slug = {{printf "%q" .GroupSlug}};
+    var slug = {{.GroupSlug}};
     var inlineById = {};
     try { inlineById = JSON.parse(document.getElementById("inline-data").textContent || "{}") || {}; } catch (e) {}
 

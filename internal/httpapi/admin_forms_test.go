@@ -300,6 +300,12 @@ func TestAdminGroupManagePageRenders(t *testing.T) {
 		}
 	}
 
+	// Регрессия: html/template в JS-контексте сам оборачивает строку в кавычки;
+	// printf "%q" давал var slug = "\"grp\"" и сервер отвечал "group not found".
+	if !strings.Contains(html, `var slug = "grp";`) {
+		t.Fatalf("slug embedded incorrectly in page JS")
+	}
+
 	// Встроенный JSON inline-контестов должен корректно парситься.
 	start := strings.Index(html, `<script id="inline-data" type="application/json">`)
 	if start < 0 {

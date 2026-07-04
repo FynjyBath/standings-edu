@@ -27,61 +27,146 @@
 </section>
 
 <section class="admin-block">
-  <h2>Контесты группы</h2>
-  {{if gt .InlineCount 0}}
-  <p class="empty-hint">В группе есть inline-контесты ({{.InlineCount}}) — они сохраняются как есть, редактируйте их через JSON.</p>
-  {{end}}
-  <div class="admin-editor-tools">
-    <button type="button" id="contests-save" class="admin-btn">Сохранить контесты</button>
-    <span id="contests-status" class="admin-editor-status"></span>
-  </div>
+  <h2>Контесты группы ({{len .Entries}})</h2>
+  <p class="empty-hint">Ссылка берёт контест из глобального <code>contests.json</code>. Inline-контест хранится прямо в группе. После изменений не забудьте перегенерировать.</p>
+  {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table">
-      <thead><tr><th>В группе</th><th>Контест</th><th>Обновлять</th><th>table_name (переопределение)</th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th></th></tr></thead>
       <tbody>
-        {{range .Contests}}
-        <tr data-id="{{.ID}}">
-          <td><input type="checkbox" class="c-attached" {{if .Attached}}checked{{end}} /></td>
+        {{range .Entries}}
+        <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
           <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
+          <td>{{if .Inline}}inline{{else}}ссылка{{end}}</td>
           <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
-          <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:12rem;" /></td>
+          <td>
+            {{if .Inline}}<span class="grade-weight">в теле контеста</span>
+            {{else}}<input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:11rem;" />{{end}}
+          </td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
+            {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
+            <button type="button" class="admin-btn admin-btn--secondary c-remove">Удал.</button>
+          </td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
+  {{else}}
+  <p class="empty-hint">В группе пока нет контестов.</p>
+  {{end}}
+
+  <div class="admin-editor-tools" style="margin-top:0.9rem;flex-wrap:wrap;gap:0.5rem;">
+    <label style="display:flex;align-items:center;gap:0.4rem;">
+      <span>Добавить из глобальных:</span>
+      <select id="add-ref-select">
+        <option value="">— выберите контест —</option>
+        {{range .AddableContests}}<option value="{{.ID}}">{{.Title}} ({{.ID}})</option>{{end}}
+      </select>
+    </label>
+    <button type="button" id="add-ref-btn" class="admin-btn">Добавить ссылку</button>
+    <button type="button" id="add-inline-btn" class="admin-btn admin-btn--secondary">+ inline-контест</button>
+    <span id="contests-status" class="admin-editor-status"></span>
+  </div>
 </section>
 
+<section class="admin-block" id="inline-form-block" style="display:none;">
+  {{template "contestForm" .}}
+  <div class="admin-editor-tools" style="margin-top:0.8rem;">
+    <button type="button" id="inline-save" class="admin-btn">Сохранить inline-контест</button>
+    <button type="button" id="inline-cancel" class="admin-btn admin-btn--secondary">Отмена</button>
+    <span id="inline-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<script id="inline-data" type="application/json">{{.InlineJSON}}</script>
 <script>
   (function () {
     var slug = {{printf "%q" .GroupSlug}};
+    var inlineById = {};
+    try { inlineById = JSON.parse(document.getElementById("inline-data").textContent || "{}") || {}; } catch (e) {}
+
+    function post(url, body) {
+      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
+    }
 
     document.querySelectorAll(".member-remove").forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (!confirm("Убрать «" + btn.dataset.name + "» из группы?")) return;
-        fetch("/api/admin/group/members/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, student_id: btn.dataset.id }) })
-          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+        post("/api/admin/group/members/remove", { slug: slug, student_id: btn.dataset.id })
           .then(function () { location.reload(); })
           .catch(function (err) { alert(err.message); });
       });
     });
 
     var status = document.getElementById("contests-status");
-    document.getElementById("contests-save").addEventListener("click", function () {
-      var contests = [];
-      document.querySelectorAll("tr[data-id]").forEach(function (row) {
-        if (!row.querySelector(".c-attached").checked) return;
-        contests.push({
-          id: row.dataset.id,
+    function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+
+    document.querySelectorAll("tr[data-id]").forEach(function (row) {
+      var id = row.dataset.id;
+      var apply = row.querySelector(".c-apply");
+      if (apply) apply.addEventListener("click", function () {
+        var tn = row.querySelector(".c-tablename");
+        setStatus("Сохранение…", false);
+        post("/api/admin/group/contests/set-options", {
+          slug: slug, id: id,
           update: row.querySelector(".c-update").checked,
-          table_name: (row.querySelector(".c-tablename").value || "").trim()
-        });
+          table_name: tn ? (tn.value || "").trim() : ""
+        }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
+          .catch(function (err) { setStatus(err.message, true); });
       });
-      status.textContent = "Сохранение…"; status.className = "admin-editor-status";
-      fetch("/api/admin/group/contests/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, contests: contests }) })
-        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
-        .then(function () { status.textContent = "Сохранено. Не забудьте перегенерировать."; status.className = "admin-editor-status admin-editor-status--ok"; })
-        .catch(function (err) { status.textContent = err.message; status.className = "admin-editor-status admin-editor-status--error"; });
+      var remove = row.querySelector(".c-remove");
+      if (remove) remove.addEventListener("click", function () {
+        if (!confirm("Убрать контест «" + id + "» из группы?")) return;
+        post("/api/admin/group/contests/remove", { slug: slug, id: id })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+      var editInline = row.querySelector(".c-edit-inline");
+      if (editInline) editInline.addEventListener("click", function () {
+        var c = inlineById[id];
+        if (c) { ContestForm.fill(c); openInlineForm(); }
+      });
+    });
+
+    document.getElementById("add-ref-btn").addEventListener("click", function () {
+      var sel = document.getElementById("add-ref-select");
+      var id = sel.value;
+      if (!id) { setStatus("Выберите контест", true); return; }
+      setStatus("Добавление…", false);
+      post("/api/admin/group/contests/add-ref", { slug: slug, id: id })
+        .then(function () { location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    // ---- Inline-форма ----
+    var block = document.getElementById("inline-form-block");
+    var inlineStatus = document.getElementById("inline-status");
+    function setInlineStatus(m, err) { inlineStatus.textContent = m; inlineStatus.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+    function openInlineForm() {
+      block.style.display = "";
+      ContestForm.show();
+      block.scrollIntoView({ behavior: "smooth" });
+    }
+
+    document.getElementById("add-inline-btn").addEventListener("click", function () {
+      ContestForm.reset();
+      setInlineStatus("", false);
+      openInlineForm();
+    });
+    document.getElementById("inline-cancel").addEventListener("click", function () {
+      block.style.display = "none";
+      setInlineStatus("", false);
+    });
+    document.getElementById("inline-save").addEventListener("click", function () {
+      var body = ContestForm.collect();
+      body.slug = slug;
+      setInlineStatus("Сохранение…", false);
+      post("/api/admin/group/contests/inline-save", body)
+        .then(function () { location.reload(); })
+        .catch(function (err) { setInlineStatus(err.message, true); });
     });
   })();
 </script>

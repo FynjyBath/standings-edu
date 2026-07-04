@@ -48,10 +48,13 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 }
 
 func (r *TemplateRenderer) Render(w http.ResponseWriter, statusCode int, pageTemplate string, data any) error {
-	tmpl, err := template.New("layout.html").Funcs(r.funcMap).ParseFiles(
-		filepath.Join(r.templatesDir, "layout.html"),
-		filepath.Join(r.templatesDir, pageTemplate),
-	)
+	files := []string{filepath.Join(r.templatesDir, "layout.html")}
+	// Общие partial-шаблоны (переиспользуемые блоки, напр. форма контеста).
+	partials, _ := filepath.Glob(filepath.Join(r.templatesDir, "*.partial.html"))
+	files = append(files, partials...)
+	files = append(files, filepath.Join(r.templatesDir, pageTemplate))
+
+	tmpl, err := template.New("layout.html").Funcs(r.funcMap).ParseFiles(files...)
 	if err != nil {
 		return fmt.Errorf("parse templates: %w", err)
 	}

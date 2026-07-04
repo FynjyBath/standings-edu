@@ -282,19 +282,23 @@ func (h *Handlers) writeGroupFile(slug string, groupFile domain.GroupFile) error
 
 // ---- Управление группой (участники + контесты) ----
 
+// groupInlineContestKeys — держать в синхроне с inlineContestKeys в
+// internal/storage/source_loader.go: и админка, и генератор должны одинаково
+// отличать inline-определение от ссылки по id.
 var groupInlineContestKeys = []string{
 	"title", "score_system", "source_type", "contest_type", "provider", "provider_config", "subcontests", "materials",
 }
 
 type AdminGroupManagePageData struct {
-	PageTitle   string
-	Footer      FooterInfo
-	GroupSlug   string
-	GroupTitle  string
-	Members     []AdminGroupMember
-	Contests    []AdminGroupContestRow
-	InlineCount int
-	HasGrades   bool
+	PageTitle       string
+	Footer          FooterInfo
+	GroupSlug       string
+	GroupTitle      string
+	Members         []AdminGroupMember
+	Entries         []AdminGroupContestEntry
+	AddableContests []AdminGroupContestOption
+	InlineJSON      template.JS
+	HasGrades       bool
 }
 
 type AdminGroupMember struct {
@@ -302,13 +306,18 @@ type AdminGroupMember struct {
 	PublicName string
 }
 
-type AdminGroupContestRow struct {
+type AdminGroupContestEntry struct {
 	ID        string
 	Title     string
-	Attached  bool
 	Update    bool
 	TableName string
+	Inline    bool
 	Missing   bool // ссылка на контест, которого нет в глобальном contests.json
+}
+
+type AdminGroupContestOption struct {
+	ID    string
+	Title string
 }
 
 // groupContestEntry — разобранный элемент groups/<slug>/contests.json.
@@ -333,6 +342,9 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 	for _, item := range raw {
 		var keys map[string]json.RawMessage
 		if err := json.Unmarshal(item, &keys); err != nil {
+			// Не-объект (битая запись): в UI не показываем, но raw сохраняем,
+			// чтобы write-эндпоинты не удаляли его молча.
+			out = append(out, groupContestEntry{raw: item, update: true})
 			continue
 		}
 		var meta struct {
@@ -403,23 +415,6 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	refByID := make(map[string]groupContestEntry)
-	refOrder := make([]string, 0)
-	inlineCount := 0
-	for _, e := range entries {
-		if e.inline {
-			inlineCount++
-			continue
-		}
-		if e.id == "" {
-			continue
-		}
-		if _, dup := refByID[e.id]; !dup {
-			refOrder = append(refOrder, e.id)
-		}
-		refByID[e.id] = e
-	}
-
 	globalContests, err := h.loadContestsList()
 	if err != nil {
 		h.logger.Printf("ERROR admin group manage read global contests: %v", err)
@@ -427,51 +422,76 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	titleByID := make(map[string]string, len(globalContests))
-	globalOrder := make([]string, 0, len(globalContests))
+	for _, c := range globalContests {
+		if id := strings.TrimSpace(c.ID); id != "" {
+			titleByID[id] = strings.TrimSpace(c.Title)
+		}
+	}
+
+	// Список контестов самой группы (ссылки + inline), в их порядке.
+	rows := make([]AdminGroupContestEntry, 0, len(entries))
+	inGroup := make(map[string]struct{}, len(entries))
+	inlineByID := make(map[string]domain.Contest)
+	for _, e := range entries {
+		if e.id == "" {
+			continue
+		}
+		inGroup[e.id] = struct{}{}
+		row := AdminGroupContestEntry{ID: e.id, Update: e.update, TableName: e.tableName, Inline: e.inline}
+		if e.inline {
+			var inlineContest domain.Contest
+			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
+				inlineByID[e.id] = inlineContest
+				row.Title = strings.TrimSpace(inlineContest.Title)
+			}
+			if row.Title == "" {
+				row.Title = e.id
+			}
+		} else {
+			ctitle, ok := titleByID[e.id]
+			row.Missing = !ok
+			if ctitle == "" {
+				ctitle = e.id
+			}
+			row.Title = ctitle
+		}
+		rows = append(rows, row)
+	}
+
+	// Глобальные контесты, которых ещё нет в группе — для выпадающего «добавить ссылку».
+	addable := make([]AdminGroupContestOption, 0)
 	for _, c := range globalContests {
 		id := strings.TrimSpace(c.ID)
 		if id == "" {
 			continue
 		}
-		titleByID[id] = strings.TrimSpace(c.Title)
-		globalOrder = append(globalOrder, id)
+		if _, ok := inGroup[id]; ok {
+			continue
+		}
+		t := strings.TrimSpace(c.Title)
+		if t == "" {
+			t = id
+		}
+		addable = append(addable, AdminGroupContestOption{ID: id, Title: t})
 	}
 
-	rows := make([]AdminGroupContestRow, 0)
-	seen := make(map[string]struct{})
-	appendRow := func(id string) {
-		if _, ok := seen[id]; ok {
-			return
-		}
-		seen[id] = struct{}{}
-		ref, attached := refByID[id]
-		ctitle, inGlobal := titleByID[id]
-		if ctitle == "" {
-			ctitle = id
-		}
-		row := AdminGroupContestRow{ID: id, Title: ctitle, Attached: attached, Update: true, Missing: !inGlobal}
-		if attached {
-			row.Update = ref.update
-			row.TableName = ref.tableName
-		}
-		rows = append(rows, row)
-	}
-	for _, id := range refOrder { // текущие ссылки группы — в их порядке
-		appendRow(id)
-	}
-	for _, id := range globalOrder { // остальные глобальные контесты
-		appendRow(id)
+	inlineBlob, err := json.Marshal(inlineByID)
+	if err != nil {
+		h.logger.Printf("ERROR admin group manage marshal inline: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 
 	page := AdminGroupManagePageData{
-		PageTitle:   "Группа: " + title,
-		Footer:      h.buildFooterInfo(),
-		GroupSlug:   slug,
-		GroupTitle:  title,
-		Members:     members,
-		Contests:    rows,
-		InlineCount: inlineCount,
-		HasGrades:   groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
+		PageTitle:       "Группа: " + title,
+		Footer:          h.buildFooterInfo(),
+		GroupSlug:       slug,
+		GroupTitle:      title,
+		Members:         members,
+		Entries:         rows,
+		AddableContests: addable,
+		InlineJSON:      template.JS(inlineBlob),
+		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group.html", page); err != nil {
 		h.logger.Printf("ERROR render admin group manage slug=%s: %v", slug, err)
@@ -517,18 +537,224 @@ func (h *Handlers) AdminGroupMemberRemove(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func (h *Handlers) AdminGroupContestsSave(w http.ResponseWriter, r *http.Request) {
+// writeGroupContestRaw атомарно перезаписывает groups/<slug>/contests.json
+// набором сырых элементов (ссылки и inline вперемешку, порядок сохраняется).
+func (h *Handlers) writeGroupContestRaw(slug string, entries []json.RawMessage) error {
+	return fileutil.WriteJSON(h.dataPath("groups", slug, "contests.json"), entries, 0o644)
+}
+
+// AdminGroupContestAddRef добавляет в группу ссылку на глобальный контест.
+func (h *Handlers) AdminGroupContestAddRef(w http.ResponseWriter, r *http.Request) {
 	if h.admin == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
 		return
 	}
 	var req struct {
-		Slug     string `json:"slug"`
-		Contests []struct {
-			ID        string `json:"id"`
-			Update    bool   `json:"update"`
-			TableName string `json:"table_name"`
-		} `json:"contests"`
+		Slug string `json:"slug"`
+		ID   string `json:"id"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	id := strings.TrimSpace(req.ID)
+	if !domain.IsValidSlug(slug) || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+		return
+	}
+	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	globals, err := h.loadContestsList()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	inGlobal := false
+	for _, c := range globals {
+		if strings.TrimSpace(c.ID) == id {
+			inGlobal = true
+			break
+		}
+	}
+	if !inGlobal {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "нет такого глобального контеста"})
+		return
+	}
+
+	entries, err := h.loadGroupContestEntries(slug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	out := make([]json.RawMessage, 0, len(entries)+1)
+	for _, e := range entries {
+		if e.id == id {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест уже добавлен в группу"})
+			return
+		}
+		out = append(out, e.raw)
+	}
+	encoded, err := json.Marshal(map[string]any{"id": id, "update": true})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	out = append(out, encoded)
+
+	if err := h.writeGroupContestRaw(slug, out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// AdminGroupContestRemove убирает контест группы (ссылку или inline) по id.
+func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug string `json:"slug"`
+		ID   string `json:"id"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	id := strings.TrimSpace(req.ID)
+	if !domain.IsValidSlug(slug) || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+		return
+	}
+	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	entries, err := h.loadGroupContestEntries(slug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	out := make([]json.RawMessage, 0, len(entries))
+	removed := false
+	for _, e := range entries {
+		if e.id == id {
+			removed = true
+			continue
+		}
+		out = append(out, e.raw)
+	}
+	if !removed {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест не найден в группе"})
+		return
+	}
+	if err := h.writeGroupContestRaw(slug, out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// AdminGroupContestSetOptions меняет флаг update (и table_name для ссылок) у
+// контеста группы. Для inline table_name живёт в теле контеста и правится формой.
+func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug      string `json:"slug"`
+		ID        string `json:"id"`
+		Update    bool   `json:"update"`
+		TableName string `json:"table_name"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	id := strings.TrimSpace(req.ID)
+	if !domain.IsValidSlug(slug) || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+		return
+	}
+	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	entries, err := h.loadGroupContestEntries(slug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	out := make([]json.RawMessage, 0, len(entries))
+	found := false
+	for _, e := range entries {
+		if e.id != id {
+			out = append(out, e.raw)
+			continue
+		}
+		found = true
+		if e.inline {
+			// Правим только "update" внутри существующего объекта, остальное — как есть.
+			var m map[string]json.RawMessage
+			if err := json.Unmarshal(e.raw, &m); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			upd, _ := json.Marshal(req.Update)
+			m["update"] = upd
+			encoded, err := json.Marshal(m)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			out = append(out, encoded)
+		} else {
+			entry := map[string]any{"id": id, "update": req.Update}
+			if tn := parseTableNameField(req.TableName); len(tn) == 1 {
+				entry["table_name"] = tn[0]
+			} else if len(tn) > 1 {
+				entry["table_name"] = tn
+			}
+			encoded, err := json.Marshal(entry)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			out = append(out, encoded)
+		}
+	}
+	if !found {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест не найден в группе"})
+		return
+	}
+	if err := h.writeGroupContestRaw(slug, out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// AdminGroupContestInlineSave создаёт/редактирует inline-контест группы через
+// ту же форму, что и глобальные контесты, но хранит его прямо в contests.json группы.
+func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		adminContestSaveRequest
+		Slug   string `json:"slug"`
+		Update *bool  `json:"update"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
@@ -544,48 +770,80 @@ func (h *Handlers) AdminGroupContestsSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Сохраняем inline-контесты как есть, ссылки — из формы.
+	contest, err := buildContestFromRequest(req.adminContestSaveRequest)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	id := contest.ID
+	originalID := strings.TrimSpace(req.OriginalID)
+
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	out := make([]json.RawMessage, 0, len(req.Contests)+len(entries))
-	seen := make(map[string]struct{})
-	for _, c := range req.Contests {
-		id := strings.TrimSpace(c.ID)
-		if id == "" {
-			continue
-		}
-		if _, dup := seen[id]; dup {
-			continue
-		}
-		seen[id] = struct{}{}
-
-		entry := map[string]any{"id": id, "update": c.Update}
-		if tn := parseTableNameField(c.TableName); len(tn) == 1 {
-			entry["table_name"] = tn[0]
-		} else if len(tn) > 1 {
-			entry["table_name"] = tn
-		}
-		encoded, err := json.Marshal(entry)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+	// id должен быть уникален среди контестов группы (кроме редактируемого).
+	for _, e := range entries {
+		if e.id == id && e.id != originalID {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест с таким id уже есть в группе"})
 			return
 		}
-		out = append(out, encoded)
-	}
-	for _, e := range entries { // inline-контесты сохраняем без изменений
-		if e.inline {
-			out = append(out, e.raw)
-		}
 	}
 
-	if err := fileutil.WriteJSON(h.dataPath("groups", slug, "contests.json"), out, 0o644); err != nil {
+	// Флаг update: явный из запроса, иначе сохраняем прежний (при редактировании),
+	// иначе true для нового контеста. Форма контеста его не редактирует.
+	update := true
+	if originalID != "" {
+		for _, e := range entries {
+			if e.id == originalID {
+				update = e.update
+				break
+			}
+		}
+	}
+	if req.Update != nil {
+		update = *req.Update
+	}
+
+	// Сериализуем контест и добавляем entry-level поле "update".
+	contestBlob, err := json.Marshal(contest)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(contestBlob, &m); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	updBlob, _ := json.Marshal(update)
+	m["update"] = updBlob
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	out := make([]json.RawMessage, 0, len(entries)+1)
+	replaced := false
+	for _, e := range entries {
+		if originalID != "" && e.id == originalID {
+			out = append(out, encoded)
+			replaced = true
+			continue
+		}
+		out = append(out, e.raw)
+	}
+	if !replaced {
+		out = append(out, encoded)
+	}
+
+	if err := h.writeGroupContestRaw(slug, out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
 // parseTableNameField разбирает поле table_name из формы: пусто → nil,
@@ -682,21 +940,12 @@ type adminContestSaveRequest struct {
 	ProviderConfig string `json:"provider_config"`
 }
 
-func (h *Handlers) AdminContestSave(w http.ResponseWriter, r *http.Request) {
-	if h.admin == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
-		return
-	}
-	var req adminContestSaveRequest
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-
+// buildContestFromRequest собирает domain.Contest из данных формы (общий код для
+// глобальных контестов и inline-контестов группы). Возвращает ошибку валидации.
+func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error) {
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "id обязателен"})
-		return
+		return domain.Contest{}, errors.New("id обязателен")
 	}
 
 	contest := domain.Contest{
@@ -716,44 +965,61 @@ func (h *Handlers) AdminContestSave(w http.ResponseWriter, r *http.Request) {
 		contest.ContestType = domain.ContestTypeProvider
 		contest.Provider = strings.TrimSpace(req.Provider)
 		if contest.Provider == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "для provider-контеста укажите provider"})
-			return
+			return domain.Contest{}, errors.New("для provider-контеста укажите provider")
 		}
 		cfg := strings.TrimSpace(req.ProviderConfig)
 		if cfg != "" {
 			if !json.Valid([]byte(cfg)) {
-				writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "provider_config: невалидный JSON"})
-				return
+				return domain.Contest{}, errors.New("provider_config: невалидный JSON")
 			}
 			contest.ProviderConfig = json.RawMessage(cfg)
 		}
 		contest.Subcontests = []domain.Subcontest{}
-	} else {
-		subcontests := make([]domain.Subcontest, 0, len(req.Subcontests))
-		for _, sub := range req.Subcontests {
-			tasks := make([]string, 0, len(sub.Tasks))
-			for _, task := range sub.Tasks {
-				if t := strings.TrimSpace(task); t != "" {
-					tasks = append(tasks, t)
-				}
-			}
-			subcontests = append(subcontests, domain.Subcontest{Title: strings.TrimSpace(sub.Title), Tasks: tasks})
-		}
-		contest.Subcontests = subcontests
-
-		if start, ok := parseAdminTime(req.StartTime); ok {
-			contest.StartTime = start
-		} else if strings.TrimSpace(req.StartTime) != "" {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "start_time: ожидается ISO (напр. 2026-09-01T18:00:00+03:00)"})
-			return
-		}
-		if end, ok := parseAdminTime(req.EndTime); ok {
-			contest.EndTime = end
-		} else if strings.TrimSpace(req.EndTime) != "" {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "end_time: ожидается ISO"})
-			return
-		}
+		return contest, nil
 	}
+
+	subcontests := make([]domain.Subcontest, 0, len(req.Subcontests))
+	for _, sub := range req.Subcontests {
+		tasks := make([]string, 0, len(sub.Tasks))
+		for _, task := range sub.Tasks {
+			if t := strings.TrimSpace(task); t != "" {
+				tasks = append(tasks, t)
+			}
+		}
+		subcontests = append(subcontests, domain.Subcontest{Title: strings.TrimSpace(sub.Title), Tasks: tasks})
+	}
+	contest.Subcontests = subcontests
+
+	if start, ok := parseAdminTime(req.StartTime); ok {
+		contest.StartTime = start
+	} else if strings.TrimSpace(req.StartTime) != "" {
+		return domain.Contest{}, errors.New("start_time: ожидается ISO (напр. 2026-09-01T18:00:00+03:00)")
+	}
+	if end, ok := parseAdminTime(req.EndTime); ok {
+		contest.EndTime = end
+	} else if strings.TrimSpace(req.EndTime) != "" {
+		return domain.Contest{}, errors.New("end_time: ожидается ISO")
+	}
+	return contest, nil
+}
+
+func (h *Handlers) AdminContestSave(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req adminContestSaveRequest
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+
+	contest, err := buildContestFromRequest(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	id := contest.ID
 
 	contests, err := h.loadContestsList()
 	if err != nil {

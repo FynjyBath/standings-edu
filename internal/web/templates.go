@@ -57,6 +57,9 @@ func (r *TemplateRenderer) Render(w http.ResponseWriter, statusCode int, pageTem
 
 	tmpl, err := template.New("layout.html").Funcs(r.funcMap).ParseFiles(files...)
 	if err != nil {
+		// Ошибка парсинга (например, шаблоны новее бинарника и используют
+		// незнакомую функцию) — отвечаем явной 500, а не пустой страницей.
+		http.Error(w, "internal error: template parse failed", http.StatusInternalServerError)
 		return fmt.Errorf("parse templates: %w", err)
 	}
 

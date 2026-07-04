@@ -41,6 +41,7 @@
     var byId = {};
     try { JSON.parse(document.getElementById("contests-data").textContent || "[]").forEach(function (c) { byId[c.id] = c; }); } catch (e) {}
     ContestForm.show();
+    ContestForm.setTimesVisible(false); // окно контеста задаётся на стороне группы
 
     var status = document.getElementById("c-status");
     function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }

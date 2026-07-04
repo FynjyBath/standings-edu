@@ -96,7 +96,17 @@ func Build(cfg *domain.GradesConfig, standings domain.GeneratedGroupStandings, r
 		})
 	}
 
+	// Сортировка по убыванию итога; без итога — вниз; при равенстве — по имени.
 	sort.SliceStable(rows, func(i, j int) bool {
+		fi, fj := rows[i].Final, rows[j].Final
+		switch {
+		case fi != nil && fj == nil:
+			return true
+		case fi == nil && fj != nil:
+			return false
+		case fi != nil && fj != nil && *fi != *fj:
+			return *fi > *fj
+		}
 		return strings.ToLower(rows[i].PublicName) < strings.ToLower(rows[j].PublicName)
 	})
 

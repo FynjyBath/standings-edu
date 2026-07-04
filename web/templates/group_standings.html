@@ -13,11 +13,11 @@
 </section>
 
 {{if .Standings.SolvedSummary}}
-<section class="contest-block contest-block--pinned">
-  <div class="contest-block-head">
+<details class="contest-block contest-block--pinned honor-board">
+  <summary class="contest-block-head honor-board-summary">
     <h2>Доска почёта</h2>
-    <span class="pinned-badge">Закреплено</span>
-  </div>
+    <span class="pinned-badge honor-board-badge" aria-hidden="true"></span>
+  </summary>
   <div class="table-wrap">
     <table class="standings-table">
       <thead>
@@ -42,7 +42,7 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>
 {{end}}
 
 {{if .Standings.Contests}}

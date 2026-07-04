@@ -28,6 +28,22 @@ func TestParseGroupContestItemAdminFormats(t *testing.T) {
 		}
 	})
 
+	t.Run("ref with group-side start/end window", func(t *testing.T) {
+		ref, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","update":true,"start_time":"2026-09-01T18:00:00+03:00","end_time":"2026-09-01T20:00:00+03:00"}`))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if ref.Inline != nil {
+			t.Fatalf("start/end must not make entry inline: %+v", ref)
+		}
+		if ref.StartTime == nil || ref.EndTime == nil {
+			t.Fatalf("window not parsed: %+v", ref)
+		}
+		if ref.StartTime.UTC().Hour() != 15 {
+			t.Fatalf("unexpected start time: %v", ref.StartTime)
+		}
+	})
+
 	t.Run("ref with list table_name", func(t *testing.T) {
 		ref, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","update":true,"table_name":["A","B"]}`))
 		if err != nil {

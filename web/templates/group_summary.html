@@ -98,16 +98,44 @@
           }
         });
       });
-      var students = Array.from(studentsMap.values()).sort(function (a, b) {
-        return (a.public_name || "").localeCompare(b.public_name || "", "ru");
-      });
-
       var contestRowMaps = contests.map(function (contest) {
         var rowMap = new Map();
         (contest.rows || []).forEach(function (row) {
           if (row && row.student_id) rowMap.set(row.student_id, row);
         });
         return rowMap;
+      });
+
+      // Итоги ученика по контестам вкладки: Σ баллов (ioi) и Σ плюсов.
+      function totalsOf(studentId) {
+        var totalScore = 0;
+        var totalPlus = 0;
+        contests.forEach(function (contest, contestIdx) {
+          var row = contestRowMaps[contestIdx].get(studentId);
+          if (!row) return;
+          var isIoi = String(contest.score_system || "edu").toLowerCase() === "ioi";
+          var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
+          for (var i = 0; i < tasks.length; i++) {
+            if (isIoi && Array.isArray(row.scores) && i < row.scores.length) {
+              var s = row.scores[i];
+              if (typeof s === "number" && Number.isFinite(s)) totalScore += s;
+            }
+            if (Array.isArray(row.statuses) && row.statuses[i] === "solved") totalPlus++;
+          }
+        });
+        return { score: totalScore, plus: totalPlus };
+      }
+
+      // Сортировка по убыванию результатов; при равенстве — по имени.
+      var students = Array.from(studentsMap.values());
+      var totalsById = new Map();
+      students.forEach(function (s) { totalsById.set(s.student_id, totalsOf(s.student_id)); });
+      students.sort(function (a, b) {
+        var ta = totalsById.get(a.student_id);
+        var tb = totalsById.get(b.student_id);
+        if (ta.score !== tb.score) return tb.score - ta.score;
+        if (ta.plus !== tb.plus) return tb.plus - ta.plus;
+        return (a.public_name || "").localeCompare(b.public_name || "", "ru");
       });
 
       var table = document.createElement("table");

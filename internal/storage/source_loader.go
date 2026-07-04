@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
@@ -214,6 +215,8 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 		ID         string               `json:"id"`
 		Update     *bool                `json:"update"`
 		TableNames domain.TableNameList `json:"table_name"`
+		StartTime  *time.Time           `json:"start_time"`
+		EndTime    *time.Time           `json:"end_time"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return domain.GroupContestRef{}, err
@@ -223,6 +226,8 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 		ID:         strings.TrimSpace(meta.ID),
 		Update:     true,
 		TableNames: meta.TableNames,
+		StartTime:  meta.StartTime,
+		EndTime:    meta.EndTime,
 	}
 	if meta.Update != nil {
 		ref.Update = *meta.Update

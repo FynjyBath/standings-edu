@@ -341,6 +341,11 @@ type GroupContestRef struct {
 	// Позволяет указать table_name даже для ссылки на глобальный контест.
 	// nil — использовать table_name из определения контеста.
 	TableNames TableNameList
+	// StartTime/EndTime — окно контеста, заданное на стороне группы (в записи
+	// groups/<slug>/contests.json). Непустое значение переопределяет окно из
+	// определения контеста. nil — оставить как в определении.
+	StartTime *time.Time
+	EndTime   *time.Time
 }
 
 type SourceData struct {

@@ -84,7 +84,7 @@ func readGroupContestsRaw(t *testing.T, dataDir, slug string) []map[string]any {
 func TestAdminGroupContestAddRef(t *testing.T) {
 	h, dataDir := newTestHandlers(t)
 	writeTestFile(t, filepath.Join(dataDir, "contests.json"),
-		`[{"id":"g1","title":"Глобальный","score_system":"edu","subcontests":[]}]`)
+		`[{"id":"g1","title":"Глобальный","score_system":"edu","subcontests":[]},{"id":"g2","title":"Второй","score_system":"edu","subcontests":[]}]`)
 	setupGroup(t, dataDir, "grp", `[]`)
 
 	code, resp := postJSON(t, h.AdminGroupContestAddRef, `{"slug":"grp","id":"g1"}`)
@@ -94,6 +94,16 @@ func TestAdminGroupContestAddRef(t *testing.T) {
 	items := readGroupContestsRaw(t, dataDir, "grp")
 	if len(items) != 1 || items[0]["id"] != "g1" || items[0]["update"] != true {
 		t.Fatalf("unexpected contests.json: %v", items)
+	}
+
+	// Следующий добавленный контест встаёт сверху списка.
+	code, resp = postJSON(t, h.AdminGroupContestAddRef, `{"slug":"grp","id":"g2"}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("second add-ref failed: code=%d resp=%v", code, resp)
+	}
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if len(items) != 2 || items[0]["id"] != "g2" || items[1]["id"] != "g1" {
+		t.Fatalf("new contest must be prepended: %v", items)
 	}
 
 	// Повторное добавление — отказ.
@@ -171,6 +181,30 @@ func TestAdminGroupContestSetOptionsRef(t *testing.T) {
 	if items[0]["table_name"] != "Одна" {
 		t.Fatalf("single table_name should be a string: %v", items)
 	}
+
+	// Окно контеста на стороне группы: пишется в запись ссылки.
+	code, resp = postJSON(t, h.AdminGroupContestSetOptions,
+		`{"slug":"grp","id":"a","update":true,"start_time":"2026-09-01T18:00:00+03:00","end_time":"2026-09-01T20:00:00+03:00"}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("set-options with window failed: code=%d resp=%v", code, resp)
+	}
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if items[0]["start_time"] != "2026-09-01T18:00:00+03:00" || items[0]["end_time"] != "2026-09-01T20:00:00+03:00" {
+		t.Fatalf("window not saved: %v", items)
+	}
+
+	// Пустое окно — поля убираются из записи.
+	postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"start_time":"","end_time":""}`)
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if _, has := items[0]["start_time"]; has {
+		t.Fatalf("empty window must clear start_time: %v", items)
+	}
+
+	// Невалидный ISO — отказ.
+	code, _ = postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"start_time":"завтра"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected bad start_time rejection, got code=%d", code)
+	}
 }
 
 func TestAdminGroupContestSetOptionsInlinePreservesBody(t *testing.T) {
@@ -198,15 +232,18 @@ func TestAdminGroupContestInlineSave(t *testing.T) {
 	writeTestFile(t, filepath.Join(dataDir, "contests.json"), `[]`)
 	setupGroup(t, dataDir, "grp", `[{"id":"ref1","update":true}]`)
 
-	// Создание.
+	// Создание: новый контест встаёт в начало списка.
 	code, resp := postJSON(t, h.AdminGroupContestInlineSave,
 		`{"slug":"grp","id":"inl1","title":"Новый","score_system":"edu","source_type":"tasks","subcontests":[{"title":"S","tasks":["https://acmp.ru/?main=task&id_task=1"]}]}`)
 	if code != http.StatusOK || resp["ok"] != true {
 		t.Fatalf("inline create failed: code=%d resp=%v", code, resp)
 	}
 	items := readGroupContestsRaw(t, dataDir, "grp")
-	if len(items) != 2 || items[1]["id"] != "inl1" || items[1]["update"] != true || items[1]["title"] != "Новый" {
-		t.Fatalf("inline not appended: %v", items)
+	if len(items) != 2 || items[0]["id"] != "inl1" || items[0]["update"] != true || items[0]["title"] != "Новый" {
+		t.Fatalf("inline not prepended: %v", items)
+	}
+	if items[1]["id"] != "ref1" {
+		t.Fatalf("existing entry must stay after new one: %v", items)
 	}
 
 	// id, совпадающий с существующей ссылкой — отказ.
@@ -224,20 +261,20 @@ func TestAdminGroupContestInlineSave(t *testing.T) {
 		t.Fatalf("inline edit failed: code=%d resp=%v", code, resp)
 	}
 	items = readGroupContestsRaw(t, dataDir, "grp")
-	e := items[1]
+	e := items[0]
 	if e["title"] != "Правка" || e["score_system"] != "ioi" || e["update"] != false {
 		t.Fatalf("inline edit lost fields or update flag: %v", e)
 	}
 
-	// Переименование id через original_id.
+	// Переименование id через original_id: позиция записи сохраняется.
 	code, _ = postJSON(t, h.AdminGroupContestInlineSave,
 		`{"slug":"grp","original_id":"inl1","id":"inl2","title":"Правка","score_system":"ioi","source_type":"tasks","subcontests":[]}`)
 	if code != http.StatusOK {
 		t.Fatalf("inline rename failed: code=%d", code)
 	}
 	items = readGroupContestsRaw(t, dataDir, "grp")
-	if len(items) != 2 || items[1]["id"] != "inl2" {
-		t.Fatalf("rename did not replace entry: %v", items)
+	if len(items) != 2 || items[0]["id"] != "inl2" {
+		t.Fatalf("rename did not replace entry in place: %v", items)
 	}
 
 	// Невалидный provider_config — отказ.
@@ -247,16 +284,16 @@ func TestAdminGroupContestInlineSave(t *testing.T) {
 		t.Fatalf("expected provider_config rejection, got code=%d", code)
 	}
 
-	// Provider-контест с валидным конфигом.
+	// Provider-контест с валидным конфигом — тоже встаёт в начало.
 	code, _ = postJSON(t, h.AdminGroupContestInlineSave,
 		`{"slug":"grp","id":"p1","source_type":"provider","provider":"codeforces_contest","provider_config":"{\"contest_id\":1711}"}`)
 	if code != http.StatusOK {
 		t.Fatalf("provider inline create failed: code=%d", code)
 	}
 	items = readGroupContestsRaw(t, dataDir, "grp")
-	last := items[len(items)-1]
-	if last["source_type"] != "provider" || last["provider"] != "codeforces_contest" {
-		t.Fatalf("provider inline fields missing: %v", last)
+	first := items[0]
+	if first["id"] != "p1" || first["source_type"] != "provider" || first["provider"] != "codeforces_contest" {
+		t.Fatalf("provider inline fields missing or not prepended: %v", first)
 	}
 }
 

@@ -32,7 +32,7 @@
   {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table">
-      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th></th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (start / end, ISO, опц.)</th><th></th></tr></thead>
       <tbody>
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
@@ -42,6 +42,13 @@
           <td>
             {{if .Inline}}<span class="grade-weight">в теле контеста</span>
             {{else}}<input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:11rem;" />{{end}}
+          </td>
+          <td>
+            {{if .Inline}}<span class="grade-weight">в теле контеста</span>
+            {{else}}
+            <input type="text" class="c-start" value="{{.StartTime}}" placeholder="2026-09-01T18:00:00+03:00" style="min-width:13rem;" />
+            <input type="text" class="c-end" value="{{.EndTime}}" placeholder="2026-09-01T20:00:00+03:00" style="min-width:13rem;" />
+            {{end}}
           </td>
           <td style="white-space:nowrap;">
             <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
@@ -109,11 +116,15 @@
       var apply = row.querySelector(".c-apply");
       if (apply) apply.addEventListener("click", function () {
         var tn = row.querySelector(".c-tablename");
+        var st = row.querySelector(".c-start");
+        var en = row.querySelector(".c-end");
         setStatus("Сохранение…", false);
         post("/api/admin/group/contests/set-options", {
           slug: slug, id: id,
           update: row.querySelector(".c-update").checked,
-          table_name: tn ? (tn.value || "").trim() : ""
+          table_name: tn ? (tn.value || "").trim() : "",
+          start_time: st ? (st.value || "").trim() : "",
+          end_time: en ? (en.value || "").trim() : ""
         }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
           .catch(function (err) { setStatus(err.message, true); });
       });

@@ -385,6 +385,30 @@ button.summary-link-btn {
   );
 }
 
+/* Доска почёта: свёрнута по умолчанию, раскрывается кликом по заголовку. */
+.honor-board > .honor-board-summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.honor-board > .honor-board-summary::-webkit-details-marker {
+  display: none;
+}
+
+.honor-board-badge::before {
+  content: "Развернуть ▾";
+}
+
+.honor-board[open] .honor-board-badge::before {
+  content: "Свернуть ▴";
+}
+
+.honor-board[open] > .honor-board-summary {
+  margin-bottom: 0.8rem;
+}
+
 .pinned-badge {
   display: inline-flex;
   align-items: center;

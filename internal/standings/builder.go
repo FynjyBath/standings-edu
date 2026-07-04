@@ -151,6 +151,13 @@ func resolveGroupContestDef(data *domain.SourceData, contestRef domain.GroupCont
 	if contestRef.TableNames != nil {
 		contest.TableNames = contestRef.TableNames
 	}
+	// Окно контеста, заданное на стороне группы, приоритетнее окна из определения.
+	if contestRef.StartTime != nil {
+		contest.StartTime = contestRef.StartTime
+	}
+	if contestRef.EndTime != nil {
+		contest.EndTime = contestRef.EndTime
+	}
 	return contest, true
 }
 

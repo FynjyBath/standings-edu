@@ -311,6 +311,8 @@ type AdminGroupContestEntry struct {
 	Title     string
 	Update    bool
 	TableName string
+	StartTime string // окно контеста на стороне группы (ISO); пусто — не задано
+	EndTime   string
 	Inline    bool
 	Missing   bool // ссылка на контест, которого нет в глобальном contests.json
 }
@@ -327,6 +329,8 @@ type groupContestEntry struct {
 	inline    bool
 	update    bool
 	tableName string
+	startTime string // ISO-представление окна из записи; пусто — не задано
+	endTime   string
 }
 
 func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, error) {
@@ -351,6 +355,8 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			ID         string               `json:"id"`
 			Update     *bool                `json:"update"`
 			TableNames domain.TableNameList `json:"table_name"`
+			StartTime  string               `json:"start_time"`
+			EndTime    string               `json:"end_time"`
 		}
 		_ = json.Unmarshal(item, &meta)
 
@@ -359,6 +365,8 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			id:        strings.TrimSpace(meta.ID),
 			update:    true,
 			tableName: strings.Join(meta.TableNames, ", "),
+			startTime: strings.TrimSpace(meta.StartTime),
+			endTime:   strings.TrimSpace(meta.EndTime),
 		}
 		if meta.Update != nil {
 			entry.update = *meta.Update
@@ -437,7 +445,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		inGroup[e.id] = struct{}{}
-		row := AdminGroupContestEntry{ID: e.id, Update: e.update, TableName: e.tableName, Inline: e.inline}
+		row := AdminGroupContestEntry{ID: e.id, Update: e.update, TableName: e.tableName, StartTime: e.startTime, EndTime: e.endTime, Inline: e.inline}
 		if e.inline {
 			var inlineContest domain.Contest
 			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
@@ -590,7 +598,14 @@ func (h *Handlers) AdminGroupContestAddRef(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	encoded, err := json.Marshal(map[string]any{"id": id, "update": true})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	// Новый контест — сверху списка (обычно он самый актуальный).
 	out := make([]json.RawMessage, 0, len(entries)+1)
+	out = append(out, encoded)
 	for _, e := range entries {
 		if e.id == id {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест уже добавлен в группу"})
@@ -598,12 +613,6 @@ func (h *Handlers) AdminGroupContestAddRef(w http.ResponseWriter, r *http.Reques
 		}
 		out = append(out, e.raw)
 	}
-	encoded, err := json.Marshal(map[string]any{"id": id, "update": true})
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	out = append(out, encoded)
 
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -662,8 +671,9 @@ func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// AdminGroupContestSetOptions меняет флаг update (и table_name для ссылок) у
-// контеста группы. Для inline table_name живёт в теле контеста и правится формой.
+// AdminGroupContestSetOptions меняет флаг update (а для ссылок — table_name и
+// окно start/end) у контеста группы. Для inline эти поля живут в теле контеста
+// и правятся формой.
 func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Request) {
 	if h.admin == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
@@ -674,6 +684,8 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		ID        string `json:"id"`
 		Update    bool   `json:"update"`
 		TableName string `json:"table_name"`
+		StartTime string `json:"start_time"`
+		EndTime   string `json:"end_time"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
@@ -683,6 +695,16 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 	id := strings.TrimSpace(req.ID)
 	if !domain.IsValidSlug(slug) || id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+		return
+	}
+	startTime, ok := parseAdminTime(req.StartTime)
+	if !ok && strings.TrimSpace(req.StartTime) != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "start_time: ожидается ISO (напр. 2026-09-01T18:00:00+03:00)"})
+		return
+	}
+	endTime, ok := parseAdminTime(req.EndTime)
+	if !ok && strings.TrimSpace(req.EndTime) != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "end_time: ожидается ISO"})
 		return
 	}
 	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
@@ -724,6 +746,12 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 				entry["table_name"] = tn[0]
 			} else if len(tn) > 1 {
 				entry["table_name"] = tn
+			}
+			if startTime != nil {
+				entry["start_time"] = startTime
+			}
+			if endTime != nil {
+				entry["end_time"] = endTime
 			}
 			encoded, err := json.Marshal(entry)
 			if err != nil {
@@ -836,7 +864,8 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 		out = append(out, e.raw)
 	}
 	if !replaced {
-		out = append(out, encoded)
+		// Новый inline-контест — сверху списка, как и добавление ссылки.
+		out = append([]json.RawMessage{encoded}, out...)
 	}
 
 	if err := h.writeGroupContestRaw(slug, out); err != nil {

@@ -20,7 +20,7 @@
   </div>
 
   <div id="c-tasks-section" style="margin-top:0.9rem;">
-    <div class="admin-form-grid">
+    <div id="c-times" class="admin-form-grid">
       <label><span>start_time (ISO, опц.)</span><input type="text" id="c-start" placeholder="2026-09-01T18:00:00+03:00" /></label>
       <label><span>end_time (ISO, опц.)</span><input type="text" id="c-end" placeholder="2026-09-01T20:00:00+03:00" /></label>
     </div>
@@ -135,8 +135,13 @@
     function show() { root.style.display = ""; }
     function hide() { root.style.display = "none"; }
 
+    // Окно контеста задаётся на стороне группы; редактор глобальных контестов
+    // скрывает эти поля, но fill/collect продолжают переносить существующие
+    // значения, чтобы редактирование не стирало их.
+    function setTimesVisible(visible) { $("c-times").style.display = visible ? "" : "none"; }
+
     reset();
-    return { fill: fill, reset: reset, collect: collect, show: show, hide: hide };
+    return { fill: fill, reset: reset, collect: collect, show: show, hide: hide, setTimesVisible: setTimesVisible };
   })();
 </script>
 {{end}}

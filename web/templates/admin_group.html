@@ -32,7 +32,7 @@
   {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table">
-      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц.)</th><th></th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th></th></tr></thead>
       <tbody>
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">

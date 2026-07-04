@@ -1,0 +1,194 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Контесты</h1>
+  <p class="summary-links"><a class="summary-link-btn" href="/standings/admin">← В админку</a></p>
+</section>
+
+<section class="admin-block">
+  <h2 id="contest-form-title">Новый контест</h2>
+  <input type="hidden" id="c-original-id" value="" />
+  <div class="admin-form-grid">
+    <label><span>id *</span><input type="text" id="c-id" placeholder="contest_basics" /></label>
+    <label><span>Название</span><input type="text" id="c-title" placeholder="Базовые задачи" /></label>
+    <label><span>score_system</span>
+      <select id="c-score"><option value="edu">edu (плюсы)</option><option value="ioi">ioi (баллы)</option></select>
+    </label>
+    <label><span>Тип</span>
+      <select id="c-source"><option value="tasks">tasks (набор задач)</option><option value="provider">provider (внешняя таблица)</option></select>
+    </label>
+    <label><span>table_name (вкладки, через запятую)</span><input type="text" id="c-tablename" placeholder="Тематические" /></label>
+  </div>
+
+  <div style="margin-top:0.7rem;"><strong>Материалы</strong>
+    <div id="c-materials"></div>
+    <button type="button" id="c-add-material" class="admin-btn admin-btn--secondary" style="margin-top:0.4rem;">+ материал</button>
+  </div>
+
+  <div id="c-tasks-section" style="margin-top:0.9rem;">
+    <div class="admin-form-grid">
+      <label><span>start_time (ISO, опц.)</span><input type="text" id="c-start" placeholder="2026-09-01T18:00:00+03:00" /></label>
+      <label><span>end_time (ISO, опц.)</span><input type="text" id="c-end" placeholder="2026-09-01T20:00:00+03:00" /></label>
+    </div>
+    <div style="margin-top:0.5rem;"><strong>Подконтесты</strong> <span class="empty-hint">(задачи — по одной в строке; можно ссылку на контест CF целиком)</span>
+      <div id="c-subcontests"></div>
+      <button type="button" id="c-add-sub" class="admin-btn admin-btn--secondary" style="margin-top:0.4rem;">+ подконтест</button>
+    </div>
+  </div>
+
+  <div id="c-provider-section" style="margin-top:0.9rem;display:none;">
+    <div class="admin-form-grid">
+      <label><span>provider</span>
+        <select id="c-provider"><option value="codeforces_contest">codeforces_contest</option><option value="html_table_import">html_table_import</option></select>
+      </label>
+    </div>
+    <label style="display:block;margin-top:0.5rem;"><span>provider_config (JSON)</span>
+      <textarea id="c-provider-config" class="account-list" rows="6" spellcheck="false" placeholder='{ "contest_id": 1711, "show_unofficial": true }'></textarea>
+    </label>
+  </div>
+
+  <div class="admin-editor-tools" style="margin-top:0.8rem;">
+    <button type="button" id="c-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="c-reset" class="admin-btn admin-btn--secondary">Очистить форму</button>
+    <span id="c-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
+  <h2>Список ({{len .Contests}})</h2>
+  {{if .Contests}}
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead><tr><th>Название</th><th>id</th><th>Тип</th><th>score</th><th></th></tr></thead>
+      <tbody>
+        {{range .Contests}}
+        <tr>
+          <td>{{.Title}}</td><td><code>{{.ID}}</code></td><td>{{.Type}}</td><td>{{.ScoreSystem}}</td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="admin-btn admin-btn--secondary c-edit" data-id="{{.ID}}">Изм.</button>
+            <button type="button" class="admin-btn admin-btn--secondary c-delete" data-id="{{.ID}}">Удал.</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<p class="empty-hint">Контестов пока нет.</p>{{end}}
+</section>
+
+<script id="contests-data" type="application/json">{{.ContestsJSON}}</script>
+<script>
+  (function () {
+    var contests = [];
+    try { contests = JSON.parse(document.getElementById("contests-data").textContent || "[]"); } catch (e) {}
+    var byId = {}; contests.forEach(function (c) { byId[c.id] = c; });
+
+    var $ = function (id) { return document.getElementById(id); };
+    var status = $("c-status");
+    function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+
+    function toggleSections() {
+      var isProvider = $("c-source").value === "provider";
+      $("c-provider-section").style.display = isProvider ? "" : "none";
+      $("c-tasks-section").style.display = isProvider ? "none" : "";
+    }
+    $("c-source").addEventListener("change", toggleSections);
+
+    function addMaterial(title, url) {
+      var row = document.createElement("div");
+      row.className = "material-row"; row.style.cssText = "display:flex;gap:0.5rem;margin-top:0.4rem;";
+      row.innerHTML = '<input type="text" class="m-title" placeholder="название" style="max-width:14rem;"><input type="text" class="m-url" placeholder="URL">';
+      var del = document.createElement("button"); del.type = "button"; del.className = "admin-btn admin-btn--secondary"; del.textContent = "×";
+      del.addEventListener("click", function () { row.remove(); });
+      row.querySelector(".m-title").value = title || ""; row.querySelector(".m-url").value = url || "";
+      row.appendChild(del); $("c-materials").appendChild(row);
+    }
+    $("c-add-material").addEventListener("click", function () { addMaterial("", ""); });
+
+    function addSub(title, tasks) {
+      var box = document.createElement("div");
+      box.className = "sub-block"; box.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:0.6rem;margin-top:0.5rem;";
+      var head = document.createElement("div"); head.style.cssText = "display:flex;gap:0.5rem;align-items:center;";
+      var t = document.createElement("input"); t.type = "text"; t.className = "sub-title"; t.placeholder = "название подконтеста"; t.value = title || "";
+      var del = document.createElement("button"); del.type = "button"; del.className = "admin-btn admin-btn--secondary"; del.textContent = "удалить"; del.addEventListener("click", function () { box.remove(); });
+      head.appendChild(t); head.appendChild(del);
+      var ta = document.createElement("textarea"); ta.className = "sub-tasks account-list"; ta.rows = 5; ta.spellcheck = false; ta.placeholder = "по одной ссылке в строке";
+      ta.value = (tasks || []).join("\n");
+      box.appendChild(head); box.appendChild(ta); $("c-subcontests").appendChild(box);
+    }
+    $("c-add-sub").addEventListener("click", function () { addSub("", []); });
+
+    function resetForm() {
+      $("c-original-id").value = ""; $("c-id").value = ""; $("c-title").value = "";
+      $("c-score").value = "edu"; $("c-source").value = "tasks"; $("c-tablename").value = "";
+      $("c-start").value = ""; $("c-end").value = ""; $("c-provider").value = "codeforces_contest"; $("c-provider-config").value = "";
+      $("c-materials").innerHTML = ""; $("c-subcontests").innerHTML = ""; addSub("", []);
+      $("contest-form-title").textContent = "Новый контест"; toggleSections(); setStatus("", false);
+    }
+
+    function fillForm(c) {
+      resetForm();
+      $("c-original-id").value = c.id; $("c-id").value = c.id; $("c-title").value = c.title || "";
+      $("c-score").value = (c.score_system || "edu");
+      $("c-source").value = (c.source_type === "provider") ? "provider" : "tasks";
+      $("c-tablename").value = (c.table_name || []).join(", ");
+      $("c-materials").innerHTML = ""; (c.materials || []).forEach(function (m) { addMaterial(m.title, m.url); });
+      if (c.source_type === "provider") {
+        $("c-provider").value = c.provider || "codeforces_contest";
+        $("c-provider-config").value = c.provider_config ? JSON.stringify(c.provider_config, null, 2) : "";
+      } else {
+        $("c-start").value = c.start_time || ""; $("c-end").value = c.end_time || "";
+        $("c-subcontests").innerHTML = "";
+        var subs = c.subcontests || [];
+        if (!subs.length) addSub("", []);
+        subs.forEach(function (s) { addSub(s.title, (s.tasks || []).map(function (t) { return t.url || t; })); });
+      }
+      $("contest-form-title").textContent = "Редактирование: " + (c.title || c.id);
+      toggleSections(); window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    document.querySelectorAll(".c-edit").forEach(function (b) { b.addEventListener("click", function () { var c = byId[b.dataset.id]; if (c) fillForm(c); }); });
+    $("c-reset").addEventListener("click", resetForm);
+
+    $("c-save").addEventListener("click", function () {
+      var materials = [];
+      $("c-materials").querySelectorAll(".material-row").forEach(function (row) {
+        var u = (row.querySelector(".m-url").value || "").trim();
+        if (u) materials.push({ title: (row.querySelector(".m-title").value || "").trim(), url: u });
+      });
+      var body = {
+        original_id: $("c-original-id").value, id: $("c-id").value, title: $("c-title").value,
+        score_system: $("c-score").value, source_type: $("c-source").value,
+        table_name: $("c-tablename").value, materials: materials
+      };
+      if ($("c-source").value === "provider") {
+        body.provider = $("c-provider").value; body.provider_config = $("c-provider-config").value;
+      } else {
+        body.start_time = $("c-start").value; body.end_time = $("c-end").value;
+        var subs = [];
+        $("c-subcontests").querySelectorAll(".sub-block").forEach(function (box) {
+          var tasks = (box.querySelector(".sub-tasks").value || "").split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
+          subs.push({ title: (box.querySelector(".sub-title").value || "").trim(), tasks: tasks });
+        });
+        body.subcontests = subs;
+      }
+      setStatus("Сохранение…", false);
+      fetch("/api/admin/contests/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+        .then(function () { location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    document.querySelectorAll(".c-delete").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (!confirm("Удалить контест «" + b.dataset.id + "»?")) return;
+        fetch("/api/admin/contests/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: b.dataset.id }) })
+          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+    });
+
+    resetForm();
+  })();
+</script>
+{{end}}

@@ -1,0 +1,151 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Ученики</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+  </p>
+  <p class="empty-hint">Добавление в группы делается через форму/обработчик. Здесь — ученики и их аккаунты.</p>
+</section>
+
+<section class="admin-block">
+  <h2 id="student-form-title">Новый ученик</h2>
+  <input type="hidden" id="student-id" value="" />
+  <div class="admin-form-grid">
+    <label><span>ФИО *</span><input type="text" id="student-fullname" placeholder="Иванов Иван Иванович" /></label>
+    <label><span>public_name</span><input type="text" id="student-publicname" placeholder="Иванов И. (по умолчанию — из ФИО)" /></label>
+  </div>
+  <div style="margin-top:0.7rem;">
+    <strong>Аккаунты</strong>
+    <div id="student-accounts"></div>
+    <button type="button" id="student-add-account" class="admin-btn admin-btn--secondary" style="margin-top:0.5rem;">+ аккаунт</button>
+  </div>
+  <div class="admin-editor-tools" style="margin-top:0.8rem;">
+    <button type="button" id="student-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="student-reset" class="admin-btn admin-btn--secondary">Очистить форму</button>
+    <span id="student-status" class="admin-editor-status"></span>
+  </div>
+  <datalist id="known-sites">
+    <option value="codeforces"></option>
+    <option value="informatics"></option>
+    <option value="acmp"></option>
+  </datalist>
+</section>
+
+<section class="admin-block">
+  <h2>Список ({{len .Students}})</h2>
+  {{if .Students}}
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead><tr><th class="student-col">Ученик</th><th>ФИО</th><th>Аккаунты</th><th>Группы</th><th></th></tr></thead>
+      <tbody>
+        {{range .Students}}
+        <tr>
+          <td class="student-name">{{.PublicName}}</td>
+          <td>{{.FullName}}</td>
+          <td>{{range .Accounts}}<span class="grade-weight">{{.Site}}:</span>{{.AccountID}} {{end}}</td>
+          <td>{{range .Groups}}<code>{{.}}</code> {{end}}</td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="admin-btn admin-btn--secondary student-edit" data-id="{{.ID}}">Изм.</button>
+            <button type="button" class="admin-btn admin-btn--secondary student-delete" data-id="{{.ID}}" data-name="{{.PublicName}}">Удал.</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty-hint">Учеников пока нет.</p>
+  {{end}}
+</section>
+
+<script id="students-data" type="application/json">{{.StudentsJSON}}</script>
+
+<script>
+  (function () {
+    var byId = {};
+    try {
+      JSON.parse(document.getElementById("students-data").textContent || "[]").forEach(function (s) { byId[s.id] = s; });
+    } catch (e) {}
+
+    var idField = document.getElementById("student-id");
+    var fullName = document.getElementById("student-fullname");
+    var publicName = document.getElementById("student-publicname");
+    var accountsBox = document.getElementById("student-accounts");
+    var title = document.getElementById("student-form-title");
+    var statusNode = document.getElementById("student-status");
+
+    function setStatus(msg, isError) {
+      statusNode.textContent = msg;
+      statusNode.className = isError ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+
+    function addAccountRow(site, account) {
+      var row = document.createElement("div");
+      row.className = "account-row";
+      row.style.cssText = "display:flex;gap:0.5rem;margin-top:0.4rem;align-items:center;";
+      var siteInp = document.createElement("input");
+      siteInp.type = "text"; siteInp.className = "acc-site"; siteInp.placeholder = "сайт";
+      siteInp.setAttribute("list", "known-sites"); siteInp.style.maxWidth = "12rem";
+      siteInp.value = site || "";
+      var idInp = document.createElement("input");
+      idInp.type = "text"; idInp.className = "acc-id"; idInp.placeholder = "account_id"; idInp.value = account || "";
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "admin-btn admin-btn--secondary"; del.textContent = "×";
+      del.addEventListener("click", function () { row.remove(); });
+      row.appendChild(siteInp); row.appendChild(idInp); row.appendChild(del);
+      accountsBox.appendChild(row);
+    }
+
+    function resetForm() {
+      idField.value = ""; fullName.value = ""; publicName.value = "";
+      accountsBox.innerHTML = ""; addAccountRow("", "");
+      title.textContent = "Новый ученик";
+      setStatus("", false);
+    }
+
+    function fillForm(s) {
+      idField.value = s.id; fullName.value = s.full_name; publicName.value = s.public_name;
+      accountsBox.innerHTML = "";
+      (s.accounts || []).forEach(function (a) { addAccountRow(a.site, a.account_id); });
+      if (!(s.accounts || []).length) addAccountRow("", "");
+      title.textContent = "Редактирование: " + (s.public_name || s.full_name);
+      setStatus("", false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    document.getElementById("student-add-account").addEventListener("click", function () { addAccountRow("", ""); });
+    document.getElementById("student-reset").addEventListener("click", resetForm);
+
+    document.querySelectorAll(".student-edit").forEach(function (btn) {
+      btn.addEventListener("click", function () { var s = byId[btn.dataset.id]; if (s) fillForm(s); });
+    });
+
+    document.getElementById("student-save").addEventListener("click", function () {
+      var accounts = [];
+      accountsBox.querySelectorAll(".account-row").forEach(function (row) {
+        var site = (row.querySelector(".acc-site").value || "").trim();
+        var acc = (row.querySelector(".acc-id").value || "").trim();
+        if (site && acc) accounts.push({ site: site, account_id: acc });
+      });
+      var body = { id: idField.value, full_name: fullName.value, public_name: publicName.value, accounts: accounts };
+      setStatus("Сохранение…", false);
+      fetch("/api/admin/students/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); })
+        .then(function () { setStatus("Сохранено. Обновляю…", false); location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    document.querySelectorAll(".student-delete").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!confirm("Удалить ученика «" + btn.dataset.name + "»? Он также будет убран из групп.")) return;
+        fetch("/api/admin/students/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: btn.dataset.id }) })
+          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+    });
+
+    resetForm();
+  })();
+</script>
+{{end}}

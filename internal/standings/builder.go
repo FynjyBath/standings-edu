@@ -18,6 +18,9 @@ type accountStatuses struct {
 	solved    map[string]struct{}
 	attempted map[string]struct{}
 	scores    map[string]int
+	// timed — посылки с временем по нормализованному URL задачи (для сайтов,
+	// отдающих время: codeforces, informatics). Нужно для фильтрации по окну.
+	timed map[string][]source.TimedSubmission
 }
 
 type preparedGroup struct {
@@ -312,6 +315,10 @@ func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, account
 				out.scores[normalized] = score
 			}
 		}
+
+		if len(result.Timed) > 0 {
+			out.timed[normalized] = append(out.timed[normalized], result.Timed...)
+		}
 	}
 
 	return out, nil
@@ -547,6 +554,14 @@ type taskColumn struct {
 func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
+	var windowStart, windowEnd time.Time
+	windowActive := false
+	if contest.StartTime != nil && contest.EndTime != nil {
+		windowStart = contest.StartTime.UTC()
+		windowEnd = contest.EndTime.UTC()
+		windowActive = !windowEnd.Before(windowStart)
+	}
+
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
@@ -666,6 +681,28 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 				continue
 			}
 
+			// Окно контеста: для сайтов с временем посылок учитываем только окно,
+			// после конца — дорешка. Нет данных о времени (ACMP) — падаем на
+			// обычную логику (всё время).
+			if windowActive {
+				if st, sc, hasScore, up, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI); hasData {
+					row.Statuses[i] = st
+					if st == domain.TaskStatusSolved {
+						row.SolvedCount++
+					}
+					if isIOI && hasScore {
+						value := sc
+						row.Scores[i] = &value
+						row.TotalScore += sc
+					}
+					if up {
+						upsolved[i] = true
+						hasUpsolved = true
+					}
+					continue
+				}
+			}
+
 			if _, ok := combined.solved[col.normalizedURL]; ok {
 				status = domain.TaskStatusSolved
 				row.SolvedCount++
@@ -743,6 +780,83 @@ func assignTaskContestPlaces(rows []domain.GeneratedRow, isIOI bool) {
 	}
 }
 
+// windowedTaskResult вычисляет статус/балл/пометку дорешки по посылкам с временем
+// и окну контеста [start, end]. Посылки до start игнорируются, в окне идут в зачёт,
+// после end — в дорешку. Для IOI показывается больший балл (окна или дорешки), и
+// если победил балл дорешки — ячейка помечается дорешкой.
+// hasData=false — нет посылок с временем (нужно упасть на обычную логику).
+func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool) (status string, score int, hasScore bool, upsolved bool, hasData bool) {
+	if len(timed) == 0 {
+		return domain.TaskStatusNone, 0, false, false, false
+	}
+
+	inSolved, inAttempted := false, false
+	afterSolved, afterAttempted := false, false
+	inBest, inHas := 0, false
+	afterBest, afterHas := 0, false
+
+	for _, sub := range timed {
+		if sub.At.Before(start) {
+			continue // до начала — игнорируем
+		}
+		subScore := 0
+		if sub.Score != nil {
+			subScore = domain.ClampScore(*sub.Score)
+		}
+		if !sub.At.After(end) { // в окне [start, end]
+			inAttempted = true
+			if sub.Solved {
+				inSolved = true
+			}
+			if !inHas || subScore > inBest {
+				inBest, inHas = subScore, true
+			}
+		} else { // после окончания — дорешка
+			afterAttempted = true
+			if sub.Solved {
+				afterSolved = true
+			}
+			if !afterHas || subScore > afterBest {
+				afterBest, afterHas = subScore, true
+			}
+		}
+	}
+
+	// Статус и базовая пометка дорешки — по факту решения/попытки.
+	switch {
+	case inSolved:
+		status, upsolved = domain.TaskStatusSolved, false
+	case afterSolved:
+		status, upsolved = domain.TaskStatusSolved, true
+	case inAttempted:
+		status, upsolved = domain.TaskStatusAttempted, false
+	case afterAttempted:
+		status, upsolved = domain.TaskStatusAttempted, true
+	default:
+		status, upsolved = domain.TaskStatusNone, false
+	}
+
+	if isIOI && status != domain.TaskStatusNone {
+		inScore := 0
+		if inHas {
+			inScore = inBest
+		}
+		afterScore := 0
+		if afterHas {
+			afterScore = afterBest
+		}
+		// Балл дорешки показываем, только если он строго больше балла в окне.
+		if afterScore > inScore {
+			score, upsolved = afterScore, true
+		} else {
+			score, upsolved = inScore, false
+		}
+		hasScore = true
+	}
+
+	return status, score, hasScore, upsolved, true
+}
+
 func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskURL string, useRealScores bool) (int, bool) {
 	if status == domain.TaskStatusNone {
 		return 0, false
@@ -774,6 +888,7 @@ func newAccountStatusesValue() accountStatuses {
 		solved:    make(map[string]struct{}),
 		attempted: make(map[string]struct{}),
 		scores:    make(map[string]int),
+		timed:     make(map[string][]source.TimedSubmission),
 	}
 }
 
@@ -791,5 +906,11 @@ func mergeStatuses(dst *accountStatuses, src accountStatuses) {
 		if prev, ok := dst.scores[key]; !ok || value > prev {
 			dst.scores[key] = value
 		}
+	}
+	for key, subs := range src.timed {
+		if dst.timed == nil {
+			dst.timed = make(map[string][]source.TimedSubmission)
+		}
+		dst.timed[key] = append(dst.timed[key], subs...)
 	}
 }

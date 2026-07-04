@@ -710,13 +710,22 @@ func mergeCodeforcesSubmissionsIntoAggregatesSinceID(submissions []codeforcesSub
 
 		agg := aggByTask[taskURL]
 		agg.attempted = true
-		if submission.Verdict == "OK" {
+		solved := submission.Verdict == "OK"
+		if solved {
 			agg.solved = true
 		}
 		score := codeforcesSubmissionScore(submission)
 		if !agg.hasScore || score > agg.score {
 			agg.score = score
 			agg.hasScore = true
+		}
+		if submission.CreationTimeSeconds > 0 {
+			submissionScore := score
+			agg.timed = append(agg.timed, TimedSubmission{
+				At:     time.Unix(submission.CreationTimeSeconds, 0).UTC(),
+				Solved: solved,
+				Score:  &submissionScore,
+			})
 		}
 		aggByTask[taskURL] = agg
 	}
@@ -744,6 +753,9 @@ func mergeCodeforcesStateIntoAggregates(aggByTask map[string]codeforcesTaskAggre
 				agg.score = score
 				agg.hasScore = true
 			}
+		}
+		if len(result.Timed) > 0 {
+			agg.timed = append(agg.timed, cloneTimedSubmissions(result.Timed)...)
 		}
 		aggByTask[taskURL] = agg
 	}
@@ -776,11 +788,16 @@ func codeforcesAggregatesToTaskResults(aggByTask map[string]codeforcesTaskAggreg
 			}
 		}
 		score := domain.ClampScore(agg.score)
+		timed := agg.timed
+		sort.SliceStable(timed, func(i, j int) bool {
+			return timed[i].At.Before(timed[j].At)
+		})
 		out = append(out, TaskResult{
 			TaskURL:   taskURL,
 			Attempted: agg.attempted,
 			Solved:    agg.solved,
 			Score:     &score,
+			Timed:     timed,
 		})
 	}
 
@@ -854,7 +871,8 @@ func (c *CodeforcesAPIClient) loadStateLocked() error {
 	if err := json.Unmarshal(b, &decoded); err != nil {
 		return fmt.Errorf("decode codeforces state %q: %w", c.statePath, err)
 	}
-	if decoded.Accounts == nil {
+	if decoded.Version != codeforcesStateVersion || decoded.Accounts == nil {
+		// Старая/несовместимая версия кэша — игнорируем и пересчитываем заново.
 		decoded.Accounts = make(map[string]codeforcesAccountState)
 	}
 
@@ -868,7 +886,7 @@ func (c *CodeforcesAPIClient) persistStateLocked() error {
 		return nil
 	}
 
-	state := codeforcesStateFile{Accounts: c.accountState}
+	state := codeforcesStateFile{Version: codeforcesStateVersion, Accounts: c.accountState}
 	b, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal codeforces state: %w", err)
@@ -933,10 +951,11 @@ type codeforcesAPIResponse struct {
 }
 
 type codeforcesSubmission struct {
-	ID      int               `json:"id"`
-	Verdict string            `json:"verdict"`
-	Points  *float64          `json:"points"`
-	Problem codeforcesProblem `json:"problem"`
+	ID                  int               `json:"id"`
+	Verdict             string            `json:"verdict"`
+	Points              *float64          `json:"points"`
+	CreationTimeSeconds int64             `json:"creationTimeSeconds"`
+	Problem             codeforcesProblem `json:"problem"`
 }
 
 type codeforcesTaskAggregate struct {
@@ -944,9 +963,16 @@ type codeforcesTaskAggregate struct {
 	solved    bool
 	score     int
 	hasScore  bool
+	timed     []TimedSubmission
 }
 
+// codeforcesStateVersion — версия схемы кэша. Поднята при добавлении времени
+// посылок (Timed): при несовпадении версии старый кэш игнорируется и результаты
+// пересчитываются с нуля.
+const codeforcesStateVersion = 2
+
 type codeforcesStateFile struct {
+	Version  int                               `json:"version"`
 	Accounts map[string]codeforcesAccountState `json:"accounts"`
 }
 

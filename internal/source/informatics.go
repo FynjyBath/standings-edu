@@ -310,7 +310,8 @@ func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int
 
 		agg := aggByTask[taskURL]
 		agg.attempted = true
-		if isInformaticsSolvedStatus(run.EjudgeStatus) {
+		solved := isInformaticsSolvedStatus(run.EjudgeStatus)
+		if solved {
 			agg.solved = true
 		}
 
@@ -320,9 +321,25 @@ func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int
 			agg.hasScore = true
 		}
 
+		if at, ok := parseInformaticsTime(run.CreateTime); ok {
+			submissionScore := score
+			agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore})
+		}
+
 		aggByTask[taskURL] = agg
 	}
 	return false
+}
+
+func parseInformaticsTime(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t.UTC(), true
+	}
+	return time.Time{}, false
 }
 
 func inferInformaticsScore(run informaticsRun) int {
@@ -401,6 +418,9 @@ func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, sta
 				agg.hasScore = true
 			}
 		}
+		if len(result.Timed) > 0 {
+			agg.timed = append(agg.timed, cloneTimedSubmissions(result.Timed)...)
+		}
 		aggByTask[url] = agg
 	}
 
@@ -430,11 +450,17 @@ func aggregatesToTaskResults(aggByTask map[string]informaticsTaskAggregate) []Ta
 			score = &value
 		}
 
+		timed := agg.timed
+		sort.SliceStable(timed, func(i, j int) bool {
+			return timed[i].At.Before(timed[j].At)
+		})
+
 		out = append(out, TaskResult{
 			TaskURL:   taskURL,
 			Attempted: agg.attempted,
 			Solved:    agg.solved,
 			Score:     score,
+			Timed:     timed,
 		})
 	}
 
@@ -689,6 +715,7 @@ type informaticsRun struct {
 	EjudgeStatus int                `json:"ejudge_status"`
 	EjudgeScore  maybeInt           `json:"ejudge_score"`
 	Score        maybeInt           `json:"score"`
+	CreateTime   string             `json:"create_time"`
 	Problem      informaticsProblem `json:"problem"`
 }
 
@@ -747,12 +774,13 @@ type informaticsTaskAggregate struct {
 	solved    bool
 	score     int
 	hasScore  bool
+	timed     []TimedSubmission
 }
 
 // informaticsStateVersion — версия схемы/логики кэша. При изменении правил
-// трактовки вердиктов (например, добавление статуса «Зачтено») версию повышаем,
-// чтобы старый кэш игнорировался и результаты пересчитались с нуля.
-const informaticsStateVersion = 2
+// трактовки вердиктов или формата (добавление статуса «Зачтено», времени посылок)
+// версию повышаем, чтобы старый кэш игнорировался и результаты пересчитались с нуля.
+const informaticsStateVersion = 3
 
 type informaticsStateFile struct {
 	Version  int                                `json:"version"`

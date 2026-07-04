@@ -1,0 +1,88 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Группа: {{.GroupTitle}} <span class="grade-weight">({{.GroupSlug}})</span></h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}" target="_blank" rel="noopener noreferrer">Страница группы</a>
+    <a class="summary-link-btn" href="/standings/admin/group-accounts?slug={{.GroupSlug}}">Аккаунты</a>
+    <a class="summary-link-btn" href="/standings/admin/group-grades?slug={{.GroupSlug}}">Оценки (ручные)</a>
+  </p>
+</section>
+
+<section class="admin-block">
+  <h2>Участники ({{len .Members}})</h2>
+  <p class="empty-hint">Добавление — через форму/обработчик. Здесь можно только удалить.</p>
+  {{if .Members}}
+  <ul class="admin-groups-list">
+    {{range .Members}}
+    <li>
+      <span>{{.PublicName}}</span> <code>{{.StudentID}}</code>
+      <button type="button" class="admin-btn admin-btn--secondary member-remove" data-id="{{.StudentID}}" data-name="{{.PublicName}}">Убрать</button>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="empty-hint">В группе нет участников.</p>
+  {{end}}
+</section>
+
+<section class="admin-block">
+  <h2>Контесты группы</h2>
+  {{if gt .InlineCount 0}}
+  <p class="empty-hint">В группе есть inline-контесты ({{.InlineCount}}) — они сохраняются как есть, редактируйте их через JSON.</p>
+  {{end}}
+  <div class="admin-editor-tools">
+    <button type="button" id="contests-save" class="admin-btn">Сохранить контесты</button>
+    <span id="contests-status" class="admin-editor-status"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead><tr><th>В группе</th><th>Контест</th><th>Обновлять</th><th>table_name (переопределение)</th></tr></thead>
+      <tbody>
+        {{range .Contests}}
+        <tr data-id="{{.ID}}">
+          <td><input type="checkbox" class="c-attached" {{if .Attached}}checked{{end}} /></td>
+          <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
+          <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
+          <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:12rem;" /></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var slug = {{printf "%q" .GroupSlug}};
+
+    document.querySelectorAll(".member-remove").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!confirm("Убрать «" + btn.dataset.name + "» из группы?")) return;
+        fetch("/api/admin/group/members/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, student_id: btn.dataset.id }) })
+          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+    });
+
+    var status = document.getElementById("contests-status");
+    document.getElementById("contests-save").addEventListener("click", function () {
+      var contests = [];
+      document.querySelectorAll("tr[data-id]").forEach(function (row) {
+        if (!row.querySelector(".c-attached").checked) return;
+        contests.push({
+          id: row.dataset.id,
+          update: row.querySelector(".c-update").checked,
+          table_name: (row.querySelector(".c-tablename").value || "").trim()
+        });
+      });
+      status.textContent = "Сохранение…"; status.className = "admin-editor-status";
+      fetch("/api/admin/group/contests/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, contests: contests }) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+        .then(function () { status.textContent = "Сохранено. Не забудьте перегенерировать."; status.className = "admin-editor-status admin-editor-status--ok"; })
+        .catch(function (err) { status.textContent = err.message; status.className = "admin-editor-status admin-editor-status--error"; });
+    });
+  })();
+</script>
+{{end}}

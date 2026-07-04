@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"strings"
+	"time"
 
 	"standings-edu/internal/domain"
 )
@@ -12,6 +13,33 @@ type TaskResult struct {
 	Attempted bool
 	Solved    bool
 	Score     *int
+	// Timed — посылки с временем (для сайтов, которые его отдают: codeforces,
+	// informatics). Пусто — сайт время не отдаёт, фильтрация по окну контеста
+	// к этой задаче не применяется. Хранится в кэше.
+	Timed []TimedSubmission `json:"Timed,omitempty"`
+}
+
+// TimedSubmission — одна посылка с временем (для фильтрации по окну контеста).
+type TimedSubmission struct {
+	At     time.Time `json:"at"`
+	Solved bool      `json:"solved,omitempty"`
+	Score  *int      `json:"score,omitempty"`
+}
+
+func cloneTimedSubmissions(in []TimedSubmission) []TimedSubmission {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]TimedSubmission, 0, len(in))
+	for _, sub := range in {
+		copySub := sub
+		if sub.Score != nil {
+			score := *sub.Score
+			copySub.Score = &score
+		}
+		out = append(out, copySub)
+	}
+	return out
 }
 
 type SiteClient interface {

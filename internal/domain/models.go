@@ -133,7 +133,12 @@ type Contest struct {
 	Provider       string            `json:"provider,omitempty"`
 	ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
 	Materials      []ContestMaterial `json:"materials,omitempty"`
-	Subcontests    []Subcontest      `json:"subcontests"`
+	// StartTime/EndTime — окно tasks-контеста (ISO 8601 с явным сдвигом, напр.
+	// "2026-09-01T18:00:00+03:00"). Если заданы, для сайтов с временем посылок
+	// в зачёт идут только посылки в окне, остальное после конца — в дорешку.
+	StartTime   *time.Time   `json:"start_time,omitempty"`
+	EndTime     *time.Time   `json:"end_time,omitempty"`
+	Subcontests []Subcontest `json:"subcontests"`
 }
 
 func (c *Contest) UnmarshalJSON(data []byte) error {
@@ -147,6 +152,8 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		Provider       string            `json:"provider,omitempty"`
 		ProviderConfig json.RawMessage   `json:"provider_config,omitempty"`
 		Materials      []ContestMaterial `json:"materials,omitempty"`
+		StartTime      *time.Time        `json:"start_time,omitempty"`
+		EndTime        *time.Time        `json:"end_time,omitempty"`
 		Subcontests    []Subcontest      `json:"subcontests"`
 	}
 
@@ -163,6 +170,8 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		Provider:       raw.Provider,
 		ProviderConfig: raw.ProviderConfig,
 		Materials:      raw.Materials,
+		StartTime:      raw.StartTime,
+		EndTime:        raw.EndTime,
 		Subcontests:    raw.Subcontests,
 		ScoreSystem:    ScoreSystemEdu,
 	}

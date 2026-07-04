@@ -286,6 +286,20 @@ type NormalizeSpec struct {
 	Value float64
 }
 
+// MarshalJSON пишет normalize обратно в формат group.json ("max"/"total"/число).
+// Без него перезапись group.json (intake, админка) превращала поле в объект
+// {"Mode":...}, который UnmarshalJSON затем не принимал — группа «ломалась».
+func (n NormalizeSpec) MarshalJSON() ([]byte, error) {
+	switch n.Mode {
+	case NormalizeTotal:
+		return json.Marshal(NormalizeTotal)
+	case NormalizeFixed:
+		return json.Marshal(n.Value)
+	default: // "" и "max" — режим по умолчанию
+		return json.Marshal(NormalizeMax)
+	}
+}
+
 func (n *NormalizeSpec) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || string(trimmed) == "null" {

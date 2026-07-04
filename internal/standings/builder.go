@@ -26,7 +26,11 @@ type accountStatuses struct {
 type preparedGroup struct {
 	group    domain.GroupDefinition
 	students []domain.Student
+	// contests — только update=true: их пересобираем с нуля.
 	contests []domain.Contest
+	// allContests — все контесты группы (и update=false): по ним считаем
+	// требуемые сайты и доску почёта, чтобы те оставались живыми.
+	allContests []domain.Contest
 }
 
 type Builder struct {
@@ -85,11 +89,12 @@ func (b *Builder) prepareGroups(data *domain.SourceData, groups []domain.GroupDe
 	out := make([]preparedGroup, 0, len(groups))
 	for _, group := range groups {
 		students := b.resolveGroupStudents(data, group)
-		contests := b.resolveGroupContests(data, group)
+		buildContests, allContests := b.resolveGroupContests(data, group)
 		out = append(out, preparedGroup{
-			group:    group,
-			students: students,
-			contests: contests,
+			group:       group,
+			students:    students,
+			contests:    buildContests,
+			allContests: allContests,
 		})
 	}
 	return out
@@ -108,17 +113,23 @@ func (b *Builder) resolveGroupStudents(data *domain.SourceData, group domain.Gro
 	return students
 }
 
-func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.GroupDefinition) []domain.Contest {
-	contests := make([]domain.Contest, 0, len(group.Contests))
+// resolveGroupContests резолвит контесты группы и делит их на «пересобираемые»
+// (update=true) и полный список (для сайтов и доски почёта).
+func (b *Builder) resolveGroupContests(data *domain.SourceData, group domain.GroupDefinition) (buildContests, allContests []domain.Contest) {
+	buildContests = make([]domain.Contest, 0, len(group.Contests))
+	allContests = make([]domain.Contest, 0, len(group.Contests))
 	for _, contestRef := range group.Contests {
 		contest, ok := resolveGroupContestDef(data, contestRef)
 		if !ok {
 			b.logger.Printf("WARN group=%s unknown contest_id=%s", group.Slug, contestRef.ID)
 			continue
 		}
-		contests = append(contests, contest)
+		allContests = append(allContests, contest)
+		if contestRef.Update {
+			buildContests = append(buildContests, contest)
+		}
 	}
-	return contests
+	return buildContests, allContests
 }
 
 // resolveGroupContestDef резолвит ссылку/inline в определение контеста с учётом
@@ -161,7 +172,7 @@ func uniqueStudents(prepared []preparedGroup) []domain.Student {
 func (b *Builder) collectRequiredTaskSites(prepared []preparedGroup) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, pg := range prepared {
-		for _, contest := range pg.contests {
+		for _, contest := range pg.allContests {
 			if contest.TypeOrDefault() != domain.ContestTypeTasks {
 				continue
 			}
@@ -357,7 +368,7 @@ func (b *Builder) buildGroupStandings(
 			return domain.GeneratedGroupStandings{}, fmt.Errorf("contest_id=%s unsupported contest_type=%s", contest.ID, contest.TypeOrDefault())
 		}
 	}
-	out.SolvedSummarySites, out.SolvedSummary = b.buildGroupSolvedSummary(pg.contests, pg.students, statusByStudent)
+	out.SolvedSummarySites, out.SolvedSummary = b.buildGroupSolvedSummary(pg.allContests, pg.students, statusByStudent)
 
 	return out, nil
 }

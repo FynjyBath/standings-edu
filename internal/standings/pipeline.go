@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/grades"
@@ -88,7 +89,7 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 			p.logger.Printf("ERROR group=%s source group not found", group.Slug)
 			continue
 		}
-		mergedStandings, ok := p.mergeWithNonUpdatedContests(fullGroup, updatedStandings)
+		mergedStandings, ok := p.mergeWithNonUpdatedContests(fullGroup, updatedStandings, data.Students)
 		if !ok {
 			p.logger.Printf("ERROR group=%s merge failed; skip writing to avoid data loss", group.Slug)
 			continue
@@ -167,7 +168,7 @@ func (p *Pipeline) buildGroupGrades(group domain.GroupDefinition, standings doma
 	return grades.Build(group.Grades, standings, roster, manual)
 }
 
-func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings) (domain.GeneratedGroupStandings, bool) {
+func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings, students map[string]domain.Student) (domain.GeneratedGroupStandings, bool) {
 	hasNonUpdatedContests := false
 	for _, contest := range group.Contests {
 		if !contest.Update {
@@ -207,19 +208,14 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 		}
 	}
 
-	solvedSummary := updated.SolvedSummary
-	solvedSummarySites := updated.SolvedSummarySites
-	if hasNonUpdatedContests && hasExisting {
-		solvedSummary = existing.SolvedSummary
-		solvedSummarySites = existing.SolvedSummarySites
-	}
-
+	// Доска почёта всегда свежая: builder считает её по всем контестам группы
+	// (включая update=false), поэтому новые участники появляются сразу.
 	merged := domain.GeneratedGroupStandings{
 		GroupSlug:          group.Slug,
 		GroupTitle:         group.Title,
 		FormLink:           group.FormLink,
-		SolvedSummarySites: solvedSummarySites,
-		SolvedSummary:      solvedSummary,
+		SolvedSummarySites: updated.SolvedSummarySites,
+		SolvedSummary:      updated.SolvedSummary,
 		Contests:           make([]domain.GeneratedContestStandings, 0, len(group.Contests)),
 	}
 
@@ -245,10 +241,65 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 			p.logger.Printf("WARN group=%s contest=%s update=false but missing in previous standings", group.Slug, contestRef.ID)
 			continue
 		}
+		reconcileContestRoster(&contest, group, students)
 		merged.Contests = append(merged.Contests, contest)
 	}
 
 	return merged, true
+}
+
+// reconcileContestRoster согласует строки перенесённого без пересчёта контеста
+// (update=false) с текущим составом группы: новые участники получают пустые
+// строки, выбывшие убираются, имена обновляются. Результаты не трогаем.
+// Легаси-таблицы, где у строк нет student_id, оставляем как есть — сопоставить
+// их с учениками не по чему.
+func reconcileContestRoster(contest *domain.GeneratedContestStandings, group domain.GroupDefinition, students map[string]domain.Student) {
+	rowByStudent := make(map[string]domain.GeneratedRow, len(contest.Rows))
+	for _, row := range contest.Rows {
+		if strings.TrimSpace(row.StudentID) == "" {
+			return // легаси-формат без student_id
+		}
+		rowByStudent[row.StudentID] = row
+	}
+
+	roster := make(map[string]struct{}, len(group.StudentIDs))
+	for _, studentID := range group.StudentIDs {
+		roster[studentID] = struct{}{}
+	}
+
+	// Существующие строки — в прежнем порядке (соответствует местам), без выбывших.
+	rows := make([]domain.GeneratedRow, 0, len(group.StudentIDs))
+	for _, row := range contest.Rows {
+		if _, inRoster := roster[row.StudentID]; !inRoster {
+			continue
+		}
+		if student, ok := students[row.StudentID]; ok && strings.TrimSpace(student.PublicName) != "" {
+			row.PublicName = student.PublicName
+		}
+		rows = append(rows, row)
+	}
+
+	// Новые участники — пустые строки в конце, в порядке состава группы.
+	for _, studentID := range group.StudentIDs {
+		if _, has := rowByStudent[studentID]; has {
+			continue
+		}
+		publicName := studentID
+		if student, ok := students[studentID]; ok && strings.TrimSpace(student.PublicName) != "" {
+			publicName = student.PublicName
+		}
+		statuses := make([]string, len(contest.Tasks))
+		for i := range statuses {
+			statuses[i] = domain.TaskStatusNone
+		}
+		rows = append(rows, domain.GeneratedRow{
+			StudentID:  studentID,
+			PublicName: publicName,
+			Statuses:   statuses,
+		})
+	}
+
+	contest.Rows = rows
 }
 
 func mapContestsByID(contests []domain.GeneratedContestStandings) (map[string]domain.GeneratedContestStandings, error) {
@@ -280,22 +331,16 @@ func filterGroupsToUpdate(groups []domain.GroupDefinition) []domain.GroupDefinit
 	return out
 }
 
+// selectGroupsWithUpdatableContests оставляет группы, где есть хоть один контест
+// (builder сам пересобирает только update=true, но доску почёта, оценки и состав
+// участников обновляет по всей группе — поэтому контесты здесь не фильтруются).
 func selectGroupsWithUpdatableContests(groups []domain.GroupDefinition) []domain.GroupDefinition {
 	out := make([]domain.GroupDefinition, 0, len(groups))
 	for _, group := range groups {
-		contests := make([]domain.GroupContestRef, 0, len(group.Contests))
-		for _, contest := range group.Contests {
-			if contest.Update {
-				contests = append(contests, contest)
-			}
-		}
-		if len(contests) == 0 {
+		if len(group.Contests) == 0 {
 			continue
 		}
-
-		groupCopy := group
-		groupCopy.Contests = contests
-		out = append(out, groupCopy)
+		out = append(out, group)
 	}
 	return out
 }

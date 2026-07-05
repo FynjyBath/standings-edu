@@ -331,6 +331,11 @@ func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int
 	return false
 }
 
+// parseInformaticsTime разбирает create_time посылки. Сейчас API отдаёт
+// RFC3339 с честным "+00:00" (время в UTC; их фронтенд просто отрезает сдвиг,
+// поэтому на сайте время выглядит «минус 3 часа от МСК»). На случай смены
+// формата на наивный (без сдвига) интерпретируем его тоже как UTC — иначе
+// посылки молча потеряют время и окно/заморозка перестанут фильтровать.
 func parseInformaticsTime(raw string) (time.Time, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -338,6 +343,11 @@ func parseInformaticsTime(raw string) (time.Time, bool) {
 	}
 	if t, err := time.Parse(time.RFC3339, raw); err == nil {
 		return t.UTC(), true
+	}
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05"} {
+		if t, err := time.ParseInLocation(layout, raw, time.UTC); err == nil {
+			return t, true
+		}
 	}
 	return time.Time{}, false
 }

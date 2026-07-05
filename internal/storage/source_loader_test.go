@@ -44,6 +44,35 @@ func TestParseGroupContestItemAdminFormats(t *testing.T) {
 		}
 	})
 
+	t.Run("ref with freeze", func(t *testing.T) {
+		ref, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","update":true,"freeze":"1h"}`))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if ref.Inline != nil || ref.Freeze == nil || ref.Freeze.All || ref.Freeze.Duration.String() != "1h0m0s" {
+			t.Fatalf("freeze not parsed: %+v", ref.Freeze)
+		}
+
+		ref, err = parseGroupContestItem(json.RawMessage(`{"id":"c1","freeze":"all"}`))
+		if err != nil || ref.Freeze == nil || !ref.Freeze.All {
+			t.Fatalf("freeze all not parsed: %+v %v", ref.Freeze, err)
+		}
+
+		if _, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","freeze":"скоро"}`)); err == nil {
+			t.Fatal("invalid freeze must fail")
+		}
+	})
+
+	t.Run("inline with entry-level freeze", func(t *testing.T) {
+		ref, err := parseGroupContestItem(json.RawMessage(`{"id":"inl","title":"И","score_system":"edu","subcontests":[],"update":false,"freeze":"30m"}`))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if ref.Inline == nil || ref.Freeze == nil || ref.Freeze.Duration.String() != "30m0s" {
+			t.Fatalf("inline freeze not parsed: %+v", ref)
+		}
+	})
+
 	t.Run("ref with list table_name", func(t *testing.T) {
 		ref, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","update":true,"table_name":["A","B"]}`))
 		if err != nil {

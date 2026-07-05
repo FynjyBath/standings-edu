@@ -136,8 +136,11 @@ type Contest struct {
 	// StartTime/EndTime — окно tasks-контеста (ISO 8601 с явным сдвигом, напр.
 	// "2026-09-01T18:00:00+03:00"). Если заданы, для сайтов с временем посылок
 	// в зачёт идут только посылки в окне, остальное после конца — в дорешку.
-	StartTime   *time.Time   `json:"start_time,omitempty"`
-	EndTime     *time.Time   `json:"end_time,omitempty"`
+	StartTime *time.Time `json:"start_time,omitempty"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
+	// FreezeTime — вычисленный момент заморозки (из записи группы). Не хранится
+	// в определении контеста: проставляется при резолве контеста группы.
+	FreezeTime  *time.Time   `json:"-"`
 	Subcontests []Subcontest `json:"subcontests"`
 }
 
@@ -346,6 +349,50 @@ type GroupContestRef struct {
 	// определения контеста. nil — оставить как в определении.
 	StartTime *time.Time
 	EndTime   *time.Time
+	// Freeze — заморозка результатов (поле "freeze" записи группы): в публичную
+	// таблицу попадают только посылки до момента заморозки. nil — заморозки нет.
+	Freeze *FreezeSpec
+}
+
+// FreezeSpec — параметр заморозки: либо всё соревнование ("all"), либо
+// длительность от конца окна (напр. "1h" → последний час скрыт).
+type FreezeSpec struct {
+	All      bool
+	Duration time.Duration
+}
+
+// ParseFreezeSpec разбирает поле "freeze": "" → nil (нет заморозки), "all" →
+// всё соревнование, иначе — Go-длительность ("30m", "1h", "1h30m") строго > 0.
+func ParseFreezeSpec(raw string) (*FreezeSpec, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	if strings.EqualFold(raw, "all") {
+		return &FreezeSpec{All: true}, nil
+	}
+	dur, err := time.ParseDuration(raw)
+	if err != nil || dur <= 0 {
+		return nil, fmt.Errorf(`freeze: ожидается "all" или длительность > 0 (напр. "1h", "30m", "1h30m")`)
+	}
+	return &FreezeSpec{Duration: dur}, nil
+}
+
+// FreezeMoment возвращает момент заморозки для окна [start, end]: для "all" —
+// начало окна, иначе end−Duration (не раньше начала). Без полного окна — nil,
+// заморозке не от чего отсчитываться.
+func (f *FreezeSpec) FreezeMoment(start, end *time.Time) *time.Time {
+	if f == nil || start == nil || end == nil || end.Before(*start) {
+		return nil
+	}
+	moment := *start
+	if !f.All {
+		moment = end.Add(-f.Duration)
+		if moment.Before(*start) {
+			moment = *start
+		}
+	}
+	return &moment
 }
 
 type SourceData struct {
@@ -406,7 +453,10 @@ type GeneratedContestStandings struct {
 	GeneratedAt *time.Time `json:"generated_at,omitempty"`
 	// StartTime — начало контеста (из определения или записи группы). До этого
 	// момента сервер не отдаёт ссылки на задачи, чтобы их нельзя было подсмотреть.
-	StartTime   *time.Time            `json:"start_time,omitempty"`
+	StartTime *time.Time `json:"start_time,omitempty"`
+	// FrozenAt — таблица заморожена: в неё вошли только посылки до этого момента.
+	// nil — таблица полная.
+	FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`
@@ -423,6 +473,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Materials   []ContestMaterial     `json:"materials,omitempty"`
 		GeneratedAt *time.Time            `json:"generated_at,omitempty"`
 		StartTime   *time.Time            `json:"start_time,omitempty"`
+		FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
 		Subcontests []GeneratedSubcontest `json:"subcontests"`
 		Tasks       []GeneratedTask       `json:"tasks"`
 		Rows        []GeneratedRow        `json:"rows"`
@@ -441,6 +492,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Materials:   raw.Materials,
 		GeneratedAt: raw.GeneratedAt,
 		StartTime:   raw.StartTime,
+		FrozenAt:    raw.FrozenAt,
 		Subcontests: raw.Subcontests,
 		Tasks:       raw.Tasks,
 		Rows:        raw.Rows,

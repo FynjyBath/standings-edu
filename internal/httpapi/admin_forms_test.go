@@ -207,6 +207,60 @@ func TestAdminGroupContestSetOptionsRef(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Fatalf("expected bad start_time rejection, got code=%d", code)
 	}
+
+	// Заморозка: пишется в запись, очищается, невалидная — отказ.
+	code, resp = postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"freeze":"1h30m"}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("set freeze failed: code=%d resp=%v", code, resp)
+	}
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if items[0]["freeze"] != "1h30m" {
+		t.Fatalf("freeze not saved: %v", items)
+	}
+	postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"freeze":""}`)
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if _, has := items[0]["freeze"]; has {
+		t.Fatalf("empty freeze must clear the field: %v", items)
+	}
+	code, _ = postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"freeze":"полчаса"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected bad freeze rejection, got code=%d", code)
+	}
+}
+
+// Заморозка у inline-контеста: ставится через set-options (entry-поле) и
+// переживает редактирование тела через inline-save.
+func TestAdminGroupContestFreezeInline(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	setupGroup(t, dataDir, "grp",
+		`[{"id":"inl","title":"Инлайн","score_system":"edu","subcontests":[],"custom_field":"keep"}]`)
+
+	code, resp := postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"inl","update":true,"freeze":"all"}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("set freeze on inline failed: code=%d resp=%v", code, resp)
+	}
+	items := readGroupContestsRaw(t, dataDir, "grp")
+	if items[0]["freeze"] != "all" || items[0]["custom_field"] != "keep" {
+		t.Fatalf("inline freeze not saved or body damaged: %v", items)
+	}
+
+	// Редактирование тела не должно стирать заморозку.
+	code, _ = postJSON(t, h.AdminGroupContestInlineSave,
+		`{"slug":"grp","original_id":"inl","id":"inl","title":"Инлайн v2","score_system":"edu","source_type":"tasks","subcontests":[]}`)
+	if code != http.StatusOK {
+		t.Fatalf("inline edit failed: code=%d", code)
+	}
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if items[0]["title"] != "Инлайн v2" || items[0]["freeze"] != "all" {
+		t.Fatalf("freeze lost on inline edit: %v", items)
+	}
+
+	// Снятие заморозки с inline.
+	postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"inl","update":true,"freeze":""}`)
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if _, has := items[0]["freeze"]; has {
+		t.Fatalf("freeze must be removed from inline: %v", items)
+	}
 }
 
 func TestAdminGroupContestSetOptionsInlinePreservesBody(t *testing.T) {

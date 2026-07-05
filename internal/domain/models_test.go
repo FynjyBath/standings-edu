@@ -4,7 +4,57 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
+
+// Разбор параметра заморозки и расчёт момента заморозки от окна.
+func TestParseFreezeSpecAndMoment(t *testing.T) {
+	if spec, err := ParseFreezeSpec(""); err != nil || spec != nil {
+		t.Fatalf("empty must be nil: %v %v", spec, err)
+	}
+	if _, err := ParseFreezeSpec("вчера"); err == nil {
+		t.Fatal("invalid duration must fail")
+	}
+	if _, err := ParseFreezeSpec("-1h"); err == nil {
+		t.Fatal("negative duration must fail")
+	}
+	if _, err := ParseFreezeSpec("0s"); err == nil {
+		t.Fatal("zero duration must fail")
+	}
+
+	start := time.Date(2026, 9, 1, 15, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 9, 1, 19, 0, 0, 0, time.UTC)
+
+	spec, err := ParseFreezeSpec("1h")
+	if err != nil {
+		t.Fatalf("1h: %v", err)
+	}
+	m := spec.FreezeMoment(&start, &end)
+	if m == nil || !m.Equal(end.Add(-time.Hour)) {
+		t.Fatalf("1h freeze moment wrong: %v", m)
+	}
+
+	// Длительность больше окна — прижимается к началу.
+	spec, _ = ParseFreezeSpec("10h")
+	if m = spec.FreezeMoment(&start, &end); m == nil || !m.Equal(start) {
+		t.Fatalf("over-long freeze must clamp to start: %v", m)
+	}
+
+	// all — с самого начала.
+	spec, _ = ParseFreezeSpec("ALL")
+	if m = spec.FreezeMoment(&start, &end); m == nil || !m.Equal(start) {
+		t.Fatalf("all freeze must equal start: %v", m)
+	}
+
+	// Без полного окна заморозке не от чего отсчитываться.
+	if spec.FreezeMoment(&start, nil) != nil || spec.FreezeMoment(nil, &end) != nil {
+		t.Fatal("freeze without full window must be nil")
+	}
+	var none *FreezeSpec
+	if none.FreezeMoment(&start, &end) != nil {
+		t.Fatal("nil spec must give nil moment")
+	}
+}
 
 // Round-trip group.json с настроенными grades: перезапись файла (intake,
 // админка) не должна менять формат полей. Регрессия: NormalizeSpec без

@@ -217,8 +217,14 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 		TableNames domain.TableNameList `json:"table_name"`
 		StartTime  *time.Time           `json:"start_time"`
 		EndTime    *time.Time           `json:"end_time"`
+		Freeze     string               `json:"freeze"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
+		return domain.GroupContestRef{}, err
+	}
+
+	freeze, err := domain.ParseFreezeSpec(meta.Freeze)
+	if err != nil {
 		return domain.GroupContestRef{}, err
 	}
 
@@ -228,6 +234,7 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 		TableNames: meta.TableNames,
 		StartTime:  meta.StartTime,
 		EndTime:    meta.EndTime,
+		Freeze:     freeze,
 	}
 	if meta.Update != nil {
 		ref.Update = *meta.Update

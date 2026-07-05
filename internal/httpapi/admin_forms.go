@@ -313,6 +313,7 @@ type AdminGroupContestEntry struct {
 	TableName string
 	StartTime string // окно контеста на стороне группы (ISO); пусто — не задано
 	EndTime   string
+	Freeze    string // заморозка: "all" или длительность от конца ("1h"); пусто — нет
 	Inline    bool
 	Missing   bool // ссылка на контест, которого нет в глобальном contests.json
 }
@@ -331,6 +332,7 @@ type groupContestEntry struct {
 	tableName string
 	startTime string // ISO-представление окна из записи; пусто — не задано
 	endTime   string
+	freeze    string // поле "freeze" записи как есть; пусто — нет заморозки
 }
 
 func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, error) {
@@ -357,6 +359,7 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			TableNames domain.TableNameList `json:"table_name"`
 			StartTime  string               `json:"start_time"`
 			EndTime    string               `json:"end_time"`
+			Freeze     string               `json:"freeze"`
 		}
 		_ = json.Unmarshal(item, &meta)
 
@@ -367,6 +370,7 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			tableName: strings.Join(meta.TableNames, ", "),
 			startTime: strings.TrimSpace(meta.StartTime),
 			endTime:   strings.TrimSpace(meta.EndTime),
+			freeze:    strings.TrimSpace(meta.Freeze),
 		}
 		if meta.Update != nil {
 			entry.update = *meta.Update
@@ -445,7 +449,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 			continue
 		}
 		inGroup[e.id] = struct{}{}
-		row := AdminGroupContestEntry{ID: e.id, Update: e.update, TableName: e.tableName, StartTime: e.startTime, EndTime: e.endTime, Inline: e.inline}
+		row := AdminGroupContestEntry{ID: e.id, Update: e.update, TableName: e.tableName, StartTime: e.startTime, EndTime: e.endTime, Freeze: e.freeze, Inline: e.inline}
 		if e.inline {
 			var inlineContest domain.Contest
 			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
@@ -686,6 +690,7 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		TableName string `json:"table_name"`
 		StartTime string `json:"start_time"`
 		EndTime   string `json:"end_time"`
+		Freeze    string `json:"freeze"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
@@ -707,6 +712,11 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "end_time: ожидается ISO"})
 		return
 	}
+	freeze := strings.TrimSpace(req.Freeze)
+	if _, err := domain.ParseFreezeSpec(freeze); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
 	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
 		return
@@ -726,7 +736,8 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		}
 		found = true
 		if e.inline {
-			// Правим только "update" внутри существующего объекта, остальное — как есть.
+			// Правим только entry-поля ("update", "freeze") внутри существующего
+			// объекта, тело контеста — как есть.
 			var m map[string]json.RawMessage
 			if err := json.Unmarshal(e.raw, &m); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -734,6 +745,12 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			}
 			upd, _ := json.Marshal(req.Update)
 			m["update"] = upd
+			if freeze != "" {
+				fz, _ := json.Marshal(freeze)
+				m["freeze"] = fz
+			} else {
+				delete(m, "freeze")
+			}
 			encoded, err := json.Marshal(m)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -752,6 +769,9 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			}
 			if endTime != nil {
 				entry["end_time"] = endTime
+			}
+			if freeze != "" {
+				entry["freeze"] = freeze
 			}
 			encoded, err := json.Marshal(entry)
 			if err != nil {
@@ -819,13 +839,16 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	// Флаг update: явный из запроса, иначе сохраняем прежний (при редактировании),
-	// иначе true для нового контеста. Форма контеста его не редактирует.
+	// Entry-поля update/freeze форма контеста не редактирует: при редактировании
+	// сохраняем прежние значения записи, для нового контеста — update=true без
+	// заморозки. Явный update из запроса имеет приоритет.
 	update := true
+	freeze := ""
 	if originalID != "" {
 		for _, e := range entries {
 			if e.id == originalID {
 				update = e.update
+				freeze = e.freeze
 				break
 			}
 		}
@@ -847,6 +870,10 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 	}
 	updBlob, _ := json.Marshal(update)
 	m["update"] = updBlob
+	if freeze != "" {
+		fzBlob, _ := json.Marshal(freeze)
+		m["freeze"] = fzBlob
+	}
 	encoded, err := json.Marshal(m)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})

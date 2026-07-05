@@ -32,7 +32,7 @@
   {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table">
-      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th></th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th></th></tr></thead>
       <tbody>
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
@@ -50,6 +50,7 @@
             <input type="datetime-local" class="c-end" step="60" data-iso="{{.EndTime}}" />
             {{end}}
           </td>
+          <td><input type="text" class="c-freeze" value="{{.Freeze}}" placeholder="1h | all" style="max-width:6rem;" title="Заморозка: длительность от конца окна (1h, 30m) или all — всё соревнование. Пусто — нет. Для разморозки очистите и перегенерируйте." /></td>
           <td style="white-space:nowrap;">
             <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
             {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
@@ -123,12 +124,14 @@
       if (apply) apply.addEventListener("click", function () {
         var tn = row.querySelector(".c-tablename");
         setStatus("Сохранение…", false);
+        var fz = row.querySelector(".c-freeze");
         post("/api/admin/group/contests/set-options", {
           slug: slug, id: id,
           update: row.querySelector(".c-update").checked,
           table_name: tn ? (tn.value || "").trim() : "",
           start_time: st ? ContestForm.timeToISO(st.value) : "",
-          end_time: en ? ContestForm.timeToISO(en.value) : ""
+          end_time: en ? ContestForm.timeToISO(en.value) : "",
+          freeze: fz ? (fz.value || "").trim() : ""
         }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
           .catch(function (err) { setStatus(err.message, true); });
       });

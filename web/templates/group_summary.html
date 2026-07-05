@@ -173,7 +173,9 @@
         var top = document.createElement("th");
         top.className = "subcontest-head";
         top.colSpan = tasks.length;
-        top.textContent = contest.title || contest.id || "Контест";
+        var contestTitle = contest.title || contest.id || "Контест";
+        if (contest.frozen_at) contestTitle += " ❄ (заморожено)";
+        top.textContent = contestTitle;
         trTop.appendChild(top);
 
         contestSubcontests(contest).forEach(function (subcontest) {

@@ -49,7 +49,15 @@
   {{range .Standings.Contests}}
   {{$contest := .}}
   <section class="contest-block">
+    {{if .FrozenAt}}
+    <div class="contest-block-head">
+      <h2>{{.Title}}</h2>
+      <span class="pinned-badge">❄ Заморожено</span>
+    </div>
+    <p class="empty-hint">Результаты после {{contestGeneratedAt .FrozenAt}} скрыты до разморозки.</p>
+    {{else}}
     <h2>{{.Title}}</h2>
+    {{end}}
     {{if contestNotStarted .StartTime}}
     <p class="empty-hint">Контест ещё не начался — ссылки на задачи появятся {{contestGeneratedAt .StartTime}}.</p>
     {{end}}

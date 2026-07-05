@@ -158,6 +158,8 @@ func resolveGroupContestDef(data *domain.SourceData, contestRef domain.GroupCont
 	if contestRef.EndTime != nil {
 		contest.EndTime = contestRef.EndTime
 	}
+	// Заморозка отсчитывается от итогового окна (после переопределений).
+	contest.FreezeTime = contestRef.Freeze.FreezeMoment(contest.StartTime, contest.EndTime)
 	return contest, true
 }
 
@@ -580,6 +582,14 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		windowActive = !windowEnd.Before(windowStart)
 	}
 
+	// Заморозка: в таблицу входят только посылки до момента заморозки, всё
+	// позже (включая дорешку) полностью скрыто до разморозки и перегенерации.
+	frozen := false
+	if windowActive && contest.FreezeTime != nil {
+		windowEnd = contest.FreezeTime.UTC()
+		frozen = true
+	}
+
 	out := domain.GeneratedContestStandings{
 		ID:          contest.ID,
 		Title:       contest.Title,
@@ -591,6 +601,9 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
+	}
+	if frozen {
+		out.FrozenAt = contest.FreezeTime
 	}
 
 	columns := make([]taskColumn, 0)
@@ -701,10 +714,11 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			}
 
 			// Окно контеста: для сайтов с временем посылок учитываем только окно,
-			// после конца — дорешка. Нет данных о времени (ACMP) — падаем на
+			// после конца — дорешка (при заморозке всё после момента заморозки
+			// скрывается полностью). Нет данных о времени (ACMP) — падаем на
 			// обычную логику (всё время).
 			if windowActive {
-				if st, sc, hasScore, up, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI); hasData {
+				if st, sc, hasScore, up, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI, frozen); hasData {
 					row.Statuses[i] = st
 					if st == domain.TaskStatusSolved {
 						row.SolvedCount++
@@ -804,7 +818,10 @@ func assignTaskContestPlaces(rows []domain.GeneratedRow, isIOI bool) {
 // после end — в дорешку. Для IOI показывается больший балл (окна или дорешки), и
 // если победил балл дорешки — ячейка помечается дорешкой.
 // hasData=false — нет посылок с временем (нужно упасть на обычную логику).
-func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool) (status string, score int, hasScore bool, upsolved bool, hasData bool) {
+// windowedTaskResult считает результат задачи по посылкам с временем. frozen —
+// таблица заморожена: end здесь момент заморозки, и всё после него (включая
+// дорешку) игнорируется полностью, чтобы результаты не протекали до разморозки.
+func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool, frozen bool) (status string, score int, hasScore bool, upsolved bool, hasData bool) {
 	if len(timed) == 0 {
 		return domain.TaskStatusNone, 0, false, false, false
 	}
@@ -817,6 +834,9 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 	for _, sub := range timed {
 		if sub.At.Before(start) {
 			continue // до начала — игнорируем
+		}
+		if frozen && sub.At.After(end) {
+			continue // заморозка: посылки после момента заморозки скрыты
 		}
 		subScore := 0
 		if sub.Score != nil {

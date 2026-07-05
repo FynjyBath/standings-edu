@@ -1055,6 +1055,7 @@ type adminContestSaveRequest struct {
 	TableName   string `json:"table_name"`
 	StartTime   string `json:"start_time"`
 	EndTime     string `json:"end_time"`
+	ZeroPenalty int    `json:"zero_penalty"`
 	Materials   []struct {
 		Title string `json:"title"`
 		URL   string `json:"url"`
@@ -1075,11 +1076,15 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 		return domain.Contest{}, errors.New("id обязателен")
 	}
 
+	if req.ZeroPenalty < 0 {
+		return domain.Contest{}, errors.New("zero_penalty: ожидается неотрицательное число")
+	}
 	contest := domain.Contest{
 		ID:          id,
 		Title:       strings.TrimSpace(req.Title),
 		ScoreSystem: domain.ScoreSystem(req.ScoreSystem).Normalized(),
 		TableNames:  domain.NormalizeTableNames(parseTableNameField(req.TableName)),
+		ZeroPenalty: req.ZeroPenalty,
 	}
 
 	materials := make([]domain.ContestMaterial, 0, len(req.Materials))

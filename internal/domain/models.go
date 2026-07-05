@@ -140,7 +140,10 @@ type Contest struct {
 	EndTime   *time.Time `json:"end_time,omitempty"`
 	// FreezeTime — вычисленный момент заморозки (из записи группы). Не хранится
 	// в определении контеста: проставляется при резолве контеста группы.
-	FreezeTime  *time.Time   `json:"-"`
+	FreezeTime *time.Time `json:"-"`
+	// ZeroPenalty — штраф (в баллах) за каждую задачу без баллов: пустую или с
+	// нулём. Действует только при score_system=ioi; 0 — выключено.
+	ZeroPenalty int          `json:"zero_penalty,omitempty"`
 	Subcontests []Subcontest `json:"subcontests"`
 }
 
@@ -157,6 +160,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		Materials      []ContestMaterial `json:"materials,omitempty"`
 		StartTime      *time.Time        `json:"start_time,omitempty"`
 		EndTime        *time.Time        `json:"end_time,omitempty"`
+		ZeroPenalty    int               `json:"zero_penalty,omitempty"`
 		Subcontests    []Subcontest      `json:"subcontests"`
 	}
 
@@ -175,6 +179,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		Materials:      raw.Materials,
 		StartTime:      raw.StartTime,
 		EndTime:        raw.EndTime,
+		ZeroPenalty:    raw.ZeroPenalty,
 		Subcontests:    raw.Subcontests,
 		ScoreSystem:    ScoreSystemEdu,
 	}
@@ -273,6 +278,10 @@ type GradeColumn struct {
 	TableName string        `json:"table_name,omitempty"` // для type=table; пусто = все контесты
 	Metric    string        `json:"metric,omitempty"`     // "plus" | "score"
 	Normalize NormalizeSpec `json:"normalize,omitempty"`  // "max" | "total" | число
+	// Upsolving — коэффициент учёта дорешки (0..1): вклад задачи =
+	// max(основной, дорешка×коэффициент). nil — старое поведение (дорешка
+	// на полную, как основной результат).
+	Upsolving *float64 `json:"upsolving,omitempty"`
 }
 
 const (
@@ -436,7 +445,11 @@ type GeneratedRow struct {
 	SolvedCount    int      `json:"solved_count"`
 	TotalScore     int      `json:"total_score,omitempty"`
 	Statuses       []string `json:"statuses"`
-	Scores         []*int   `json:"scores,omitempty"`
+	// Scores — баллы в основное время (в окне контеста); без окна — общие.
+	Scores []*int `json:"scores,omitempty"`
+	// PracticeScores[i] — балл в дорешке, если он строго больше основного
+	// (показывается в скобках: «50 (70)»). nil/элемент nil — дорешки нет.
+	PracticeScores []*int `json:"practice_scores,omitempty"`
 	// Upsolved[i] == true означает, что задача i решена/попытана только в
 	// дорешке (после контеста). Такие ячейки показываются в скобках и не влияют
 	// на место/штраф. Пустой/nil — дорешки нет.
@@ -454,9 +467,12 @@ type GeneratedContestStandings struct {
 	// с update=false он остаётся старым, поэтому видно, что таблица давно не
 	// обновлялась. nil — для таблиц, сгенерированных до появления этого поля.
 	GeneratedAt *time.Time `json:"generated_at,omitempty"`
-	// StartTime — начало контеста (из определения или записи группы). До этого
-	// момента сервер не отдаёт ссылки на задачи, чтобы их нельзя было подсмотреть.
+	// StartTime/EndTime — окно контеста (из определения или записи группы).
+	// До StartTime сервер не отдаёт ссылки на задачи; окно показывается в шапке.
 	StartTime *time.Time `json:"start_time,omitempty"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
+	// ZeroPenalty — применённый при сборке штраф за задачу без баллов (ioi).
+	ZeroPenalty int `json:"zero_penalty,omitempty"`
 	// FrozenAt — таблица заморожена: в неё вошли только посылки до этого момента.
 	// nil — таблица полная.
 	FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
@@ -479,6 +495,8 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Materials   []ContestMaterial     `json:"materials,omitempty"`
 		GeneratedAt *time.Time            `json:"generated_at,omitempty"`
 		StartTime   *time.Time            `json:"start_time,omitempty"`
+		EndTime     *time.Time            `json:"end_time,omitempty"`
+		ZeroPenalty int                   `json:"zero_penalty,omitempty"`
 		FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
 		Subcontests []GeneratedSubcontest `json:"subcontests"`
 		Tasks       []GeneratedTask       `json:"tasks"`
@@ -499,6 +517,8 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Materials:   raw.Materials,
 		GeneratedAt: raw.GeneratedAt,
 		StartTime:   raw.StartTime,
+		EndTime:     raw.EndTime,
+		ZeroPenalty: raw.ZeroPenalty,
 		FrozenAt:    raw.FrozenAt,
 		Subcontests: raw.Subcontests,
 		Tasks:       raw.Tasks,

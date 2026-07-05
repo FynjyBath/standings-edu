@@ -42,6 +42,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"taskCells":               taskCells,
 			"contestGeneratedAt":      contestGeneratedAt,
 			"contestNotStarted":       contestNotStarted,
+			"contestWindowText":       contestWindowText,
 			"gradeText":               gradeText,
 			"numText":                 numText,
 		},
@@ -80,8 +81,9 @@ type TaskCell struct {
 	Practice bool   // дорешка: добавляет CSS-класс practice
 }
 
-// taskCells объединяет статусы, баллы и пометку дорешки в единый набор ячеек,
-// чтобы шаблон одинаково рендерил IOI и обычный режим, оборачивая дорешку в скобки.
+// taskCells объединяет статусы, баллы и пометку дорешки в единый набор ячеек.
+// Для IOI основной балл и дорешка показываются вместе: «50 (70)» — 50 в окне,
+// 70 в дорешке; только дорешка — «(70)». Фон ячейки — по лучшему из них.
 func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCell {
 	isIOI := scoreSystem.IsIOI()
 	cells := make([]TaskCell, 0, len(row.Statuses))
@@ -90,12 +92,28 @@ func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCe
 		cell := TaskCell{IsIOI: isIOI, Practice: practice}
 
 		if isIOI {
-			var score *int
+			var main, practiceScore *int
 			if i < len(row.Scores) {
-				score = row.Scores[i]
+				main = row.Scores[i]
 			}
-			cell.Text = wrapPractice(scoreText(score), practice)
-			cell.Alpha = scoreAlpha(score)
+			if i < len(row.PracticeScores) {
+				practiceScore = row.PracticeScores[i]
+			}
+			effective := main
+			if practiceScore != nil && (main == nil || *practiceScore > *main) {
+				effective = practiceScore
+			}
+			cell.Alpha = scoreAlpha(effective)
+			switch {
+			case main != nil && practiceScore != nil:
+				cell.Text = scoreText(main) + " (" + scoreText(practiceScore) + ")"
+			case practiceScore != nil:
+				cell.Text = "(" + scoreText(practiceScore) + ")"
+			default:
+				// Старые файлы без practice_scores: балл общий, дорешку
+				// помечаем скобками по флагу, как раньше.
+				cell.Text = wrapPractice(scoreText(main), practice)
+			}
 		} else {
 			cell.Status = statusClass(row.Statuses[i])
 			cell.Text = wrapPractice(statusSymbol(row.Statuses[i]), practice)
@@ -120,6 +138,24 @@ func gradeText(v *float64) string {
 // спрятал ссылки на задачи, а шаблон показывает подсказку с временем старта.
 func contestNotStarted(startTime *time.Time) bool {
 	return startTime != nil && time.Now().Before(*startTime)
+}
+
+// contestWindowText — человекочитаемое окно контеста в MSK для шапки таблицы:
+// «04.07.2026 18:00–20:00 MSK» (один день) или полный диапазон с датами.
+// Только начало — «с 04.07.2026 18:00 MSK». Пусто — окна нет.
+func contestWindowText(start, end *time.Time) string {
+	if start == nil {
+		return ""
+	}
+	s := start.In(moscowLocation)
+	if end == nil {
+		return "с " + s.Format("02.01.2006 15:04") + " MSK"
+	}
+	e := end.In(moscowLocation)
+	if s.Year() == e.Year() && s.YearDay() == e.YearDay() {
+		return s.Format("02.01.2006 15:04") + "–" + e.Format("15:04") + " MSK"
+	}
+	return s.Format("02.01.2006 15:04") + " — " + e.Format("02.01.2006 15:04") + " MSK"
 }
 
 func contestGeneratedAt(generatedAt *time.Time) string {

@@ -125,19 +125,25 @@ func computeTableColumn(col domain.GradeColumn, standings domain.GeneratedGroupS
 
 	rawByStudent := make(map[string]float64)
 	taskCount := 0
+	// reference для normalize=max: сумма поконтестных максимумов — «идеальный
+	// ученик», выигравший каждый контест по отдельности.
+	maxReference := 0.0
 
 	for _, contest := range standings.Contests {
 		if wantTable != "" && !containsTableName(contest.TableNames, wantTable) {
 			continue
 		}
 		taskCount += len(contest.Tasks)
+
+		contestMax := 0.0
 		for _, row := range contest.Rows {
-			if useScore {
-				rawByStudent[row.StudentID] += float64(row.TotalScore)
-			} else {
-				rawByStudent[row.StudentID] += float64(row.SolvedCount)
+			value := contestRowValue(col, contest, row, useScore)
+			rawByStudent[row.StudentID] += value
+			if value > contestMax {
+				contestMax = value
 			}
 		}
+		maxReference += contestMax
 	}
 
 	reference := 0.0
@@ -151,14 +157,59 @@ func computeTableColumn(col domain.GradeColumn, standings domain.GeneratedGroupS
 			reference = float64(taskCount)
 		}
 	default: // max (в т.ч. пустой режим)
-		for _, student := range roster {
-			if r := rawByStudent[student.ID]; r > reference {
-				reference = r
-			}
-		}
+		reference = maxReference
 	}
 
 	return rawByStudent, reference
+}
+
+// contestRowValue — вклад одного контеста в колонку оценки для строки ученика.
+// Без коэффициента дорешки (col.Upsolving == nil) — прежнее поведение: готовые
+// TotalScore/SolvedCount (дорешка на полную). С коэффициентом k вклад каждой
+// задачи = max(основной результат, дорешка×k); штраф контеста за нулевые
+// задачи применяется и здесь, чтобы оценка сходилась с таблицей.
+func contestRowValue(col domain.GradeColumn, contest domain.GeneratedContestStandings, row domain.GeneratedRow, useScore bool) float64 {
+	if col.Upsolving == nil {
+		if useScore {
+			return float64(row.TotalScore)
+		}
+		return float64(row.SolvedCount)
+	}
+
+	coef := clamp(*col.Upsolving, 0, 1)
+	total := 0.0
+	zeros := 0
+	for i := range contest.Tasks {
+		contribution := 0.0
+		if useScore {
+			main := 0.0
+			if i < len(row.Scores) && row.Scores[i] != nil {
+				main = float64(*row.Scores[i])
+			}
+			practice := 0.0
+			if i < len(row.PracticeScores) && row.PracticeScores[i] != nil {
+				practice = float64(*row.PracticeScores[i])
+			}
+			contribution = math.Max(main, practice*coef)
+		} else {
+			solved := i < len(row.Statuses) && row.Statuses[i] == domain.TaskStatusSolved
+			practiceOnly := i < len(row.Upsolved) && row.Upsolved[i]
+			switch {
+			case solved && !practiceOnly:
+				contribution = 1
+			case solved && practiceOnly:
+				contribution = coef
+			}
+		}
+		total += contribution
+		if contribution <= 0 {
+			zeros++
+		}
+	}
+	if useScore && contest.ZeroPenalty > 0 {
+		total -= float64(zeros * contest.ZeroPenalty)
+	}
+	return total
 }
 
 func containsTableName(names domain.TableNameList, want string) bool {

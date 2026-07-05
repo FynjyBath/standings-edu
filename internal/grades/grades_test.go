@@ -39,3 +39,91 @@ func TestBuildSortsByFinalDesc(t *testing.T) {
 		t.Fatalf("student without grades must have nil final: %+v", got.Rows[3])
 	}
 }
+
+func iptr(v int) *int         { return &v }
+func fptr(v float64) *float64 { return &v }
+
+// Коэффициент дорешки: вклад задачи = max(основной, дорешка×k); штраф за нули
+// контеста применяется и в оценке; plus-метрика даёт k за дорешанную задачу.
+func TestBuildUpsolvingCoefficient(t *testing.T) {
+	standings := domain.GeneratedGroupStandings{
+		Contests: []domain.GeneratedContestStandings{{
+			ID: "c1", TableNames: domain.TableNameList{"Тематические"}, ZeroPenalty: 5,
+			Tasks: []domain.GeneratedTask{{Label: "A"}, {Label: "B"}, {Label: "C"}, {Label: "D"}},
+			Rows: []domain.GeneratedRow{{
+				StudentID: "a", PublicName: "Аня",
+				// A: 50 в окне и 70 в дорешке; B: только дорешка 70;
+				// C: 100 в окне; D: пусто (ноль со штрафом).
+				Statuses:       []string{"solved", "solved", "solved", "none"},
+				Scores:         []*int{iptr(50), nil, iptr(100), nil},
+				PracticeScores: []*int{iptr(70), iptr(70), nil, nil},
+				Upsolved:       []bool{false, true, false, false},
+				TotalScore:     235, // старый путь (для сравнения)
+				SolvedCount:    3,
+			}},
+		}},
+	}
+	roster := []RosterStudent{{ID: "a", PublicName: "Аня"}}
+
+	// score + k=0.5: max(50,35) + max(0,35) + 100 − 5×1 = 50+35+100−5 = 180.
+	cfg := &domain.GradesConfig{Columns: []domain.GradeColumn{{
+		ID: "e", Title: "Т", Weight: 1, Type: "table", TableName: "Тематические",
+		Metric: domain.GradeMetricScore, Upsolving: fptr(0.5),
+	}}}
+	got := Build(cfg, standings, roster, nil)
+	// normalize max: единственный ученик — reference = его же 180 → 10 баллов.
+	if got.Rows[0].Values[0] == nil || *got.Rows[0].Values[0] != 10 {
+		t.Fatalf("score coef grade wrong: %+v", got.Rows[0].Values)
+	}
+	raw, ref := computeTableColumn(cfg.Columns[0], standings, roster)
+	if raw["a"] != 180 || ref != 180 {
+		t.Fatalf("score coef raw/ref wrong: raw=%v ref=%v", raw["a"], ref)
+	}
+
+	// k=0: дорешка не учитывается вовсе: 50 + 0 + 100 − 5×2 = 140 (B и D — нули).
+	cfg.Columns[0].Upsolving = fptr(0)
+	raw, _ = computeTableColumn(cfg.Columns[0], standings, roster)
+	if raw["a"] != 140 {
+		t.Fatalf("score coef=0 raw wrong: %v", raw["a"])
+	}
+
+	// plus + k=0.5: A решена в окне (1) + B дорешка (0.5) + C (1) + D (0) = 2.5.
+	plusCol := domain.GradeColumn{ID: "p", Title: "П", Weight: 1, Type: "table",
+		TableName: "Тематические", Metric: domain.GradeMetricPlus, Upsolving: fptr(0.5)}
+	raw, _ = computeTableColumn(plusCol, standings, roster)
+	if raw["a"] != 2.5 {
+		t.Fatalf("plus coef raw wrong: %v", raw["a"])
+	}
+
+	// Без коэффициента — прежнее поведение (готовые суммы).
+	oldCol := domain.GradeColumn{ID: "o", Title: "О", Weight: 1, Type: "table",
+		TableName: "Тематические", Metric: domain.GradeMetricScore}
+	raw, _ = computeTableColumn(oldCol, standings, roster)
+	if raw["a"] != 235 {
+		t.Fatalf("no-coef must use TotalScore: %v", raw["a"])
+	}
+}
+
+// normalize max: сумма поконтестных максимумов, а не максимум общей суммы.
+func TestNormalizeMaxPerContest(t *testing.T) {
+	row := func(id string, total int) domain.GeneratedRow {
+		return domain.GeneratedRow{StudentID: id, TotalScore: total}
+	}
+	standings := domain.GeneratedGroupStandings{
+		Contests: []domain.GeneratedContestStandings{
+			{ID: "c1", Rows: []domain.GeneratedRow{row("a", 100), row("b", 40)}},
+			{ID: "c2", Rows: []domain.GeneratedRow{row("a", 20), row("b", 90)}},
+		},
+	}
+	roster := []RosterStudent{{ID: "a", PublicName: "А"}, {ID: "b", PublicName: "Б"}}
+	col := domain.GradeColumn{ID: "s", Title: "С", Weight: 1, Type: "table", Metric: domain.GradeMetricScore}
+
+	raw, ref := computeTableColumn(col, standings, roster)
+	// Раньше reference был max(120, 130)=130; теперь 100+90=190.
+	if ref != 190 {
+		t.Fatalf("reference must be sum of per-contest maxima: %v", ref)
+	}
+	if raw["a"] != 120 || raw["b"] != 130 {
+		t.Fatalf("raw sums wrong: %v", raw)
+	}
+}

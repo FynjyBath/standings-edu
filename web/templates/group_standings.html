@@ -61,6 +61,12 @@
     {{else}}
     <h2>{{.Title}}</h2>
     {{end}}
+    {{with contestWindowText .StartTime .EndTime}}
+    <p class="empty-hint">🕒 Контест: {{.}}</p>
+    {{end}}
+    {{if .ZeroPenalty}}
+    <p class="empty-hint">Штраф за задачу без баллов: −{{.ZeroPenalty}}.</p>
+    {{end}}
     {{if contestNotStarted .StartTime}}
     <p class="empty-hint">Контест ещё не начался — ссылки на задачи появятся {{contestGeneratedAt .StartTime}}.</p>
     {{end}}
@@ -81,7 +87,7 @@
             <th rowspan="2" class="count-col">Место</th>
             <th rowspan="2" class="student-col">Ученик</th>
             <th rowspan="2" class="count-col">{{if eq .ScoreSystem "ioi"}}Баллы{{else}}Решено{{end}}</th>
-            {{if and (eq .ContestType "provider") (hasPenaltyColumn .Rows)}}
+            {{if hasPenaltyColumn .Rows}}
             <th rowspan="2" class="count-col">Штраф</th>
             {{end}}
             {{if .Subcontests}}
@@ -111,7 +117,7 @@
             <td class="solved-count">{{placeText .Place}}</td>
             <td class="student-name">{{.PublicName}}</td>
             <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
-            {{if and (eq $contest.ContestType "provider") (hasPenaltyColumn $contest.Rows)}}
+            {{if hasPenaltyColumn $contest.Rows}}
             <td class="solved-count">{{penaltyText .Penalty}}</td>
             {{end}}
             {{range taskCells . $contest.ScoreSystem}}

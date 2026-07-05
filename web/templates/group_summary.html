@@ -109,7 +109,8 @@
         return rowMap;
       });
 
-      // Итоги ученика по контестам вкладки: Σ баллов (ioi) и Σ плюсов.
+      // Итоги ученика по контестам вкладки: Σ баллов — из готовых сумм контестов
+      // (учитывают дорешку и штраф за нули), Σ плюсов — по ячейкам.
       function totalsOf(studentId) {
         var totalScore = 0;
         var totalPlus = 0;
@@ -117,12 +118,11 @@
           var row = contestRowMaps[contestIdx].get(studentId);
           if (!row) return;
           var isIoi = String(contest.score_system || "edu").toLowerCase() === "ioi";
+          if (isIoi && typeof row.total_score === "number" && Number.isFinite(row.total_score)) {
+            totalScore += row.total_score;
+          }
           var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
           for (var i = 0; i < tasks.length; i++) {
-            if (isIoi && Array.isArray(row.scores) && i < row.scores.length) {
-              var s = row.scores[i];
-              if (typeof s === "number" && Number.isFinite(s)) totalScore += s;
-            }
             if (Array.isArray(row.statuses) && row.statuses[i] === "solved") totalPlus++;
           }
         });
@@ -227,8 +227,9 @@
         tdName.textContent = student.public_name;
         tr.appendChild(tdName);
 
-        var totalScore = 0;
-        var totalPlus = 0;
+        var totals = totalsById.get(student.student_id) || { score: 0, plus: 0 };
+        var totalScore = totals.score;
+        var totalPlus = totals.plus;
         var cells = [];
 
         contests.forEach(function (contest, contestIdx) {
@@ -246,20 +247,28 @@
               var s = row.scores[i];
               if (typeof s === "number" && Number.isFinite(s)) score = s;
             }
-            if (isIoi && score !== null) totalScore += score;
-            if (status === "solved") totalPlus++;
+            var practiceScore = null;
+            if (row && Array.isArray(row.practice_scores) && i < row.practice_scores.length) {
+              var p = row.practice_scores[i];
+              if (typeof p === "number" && Number.isFinite(p)) practiceScore = p;
+            }
 
             var practice = !!(row && Array.isArray(row.upsolved) && row.upsolved[i]);
             var td = document.createElement("td");
             if (isIoi) {
               td.className = practice ? "score-cell practice" : "score-cell";
-              if (score !== null) {
+              // «50 (70)»: основной балл и дорешка; фон — по лучшему из них.
+              var effective = (practiceScore !== null && (score === null || practiceScore > score)) ? practiceScore : score;
+              if (score !== null && practiceScore !== null) {
+                td.textContent = String(score) + " (" + String(practiceScore) + ")";
+              } else if (practiceScore !== null) {
+                td.textContent = "(" + String(practiceScore) + ")";
+              } else if (score !== null) {
                 td.textContent = wrapPractice(String(score), practice);
-                td.style.setProperty("--score-alpha", String(clampScore(score) / 100));
               } else {
                 td.textContent = "";
-                td.style.setProperty("--score-alpha", "0");
               }
+              td.style.setProperty("--score-alpha", effective !== null ? String(clampScore(effective) / 100) : "0");
             } else {
               td.className = "status-cell " + status + (practice ? " practice" : "");
               if (status === "solved") {

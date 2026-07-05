@@ -598,12 +598,19 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		TableNames:  contest.TableNames,
 		Materials:   domain.NormalizeContestMaterials(contest.Materials),
 		StartTime:   contest.StartTime,
+		EndTime:     contest.EndTime,
 		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:       make([]domain.GeneratedTask, 0),
 		Rows:        make([]domain.GeneratedRow, 0, len(students)),
 	}
 	if frozen {
 		out.FrozenAt = contest.FreezeTime
+	}
+	// Штраф за задачу без баллов — только для табличек с баллами.
+	zeroPenalty := 0
+	if isIOI && contest.ZeroPenalty > 0 {
+		zeroPenalty = contest.ZeroPenalty
+		out.ZeroPenalty = zeroPenalty
 	}
 
 	columns := make([]taskColumn, 0)
@@ -682,23 +689,50 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			Statuses:    make([]string, len(out.Tasks)),
 			SolvedCount: 0,
 		}
+		practice := make([]*int, len(out.Tasks))
+		hasPractice := false
 		if isIOI {
 			row.Scores = make([]*int, len(out.Tasks))
 		}
 		upsolved := make([]bool, len(out.Tasks))
 		hasUpsolved := false
+		zeros := 0 // задачи без баллов (пустые или с нулём) — для штрафа
+
+		// addScore учитывает вклад задачи в сумму: максимум из основного балла
+		// и дорешки; обе части nil или ноль — задача «нулевая» (штраф).
+		addScore := func(i int, main, pract *int) {
+			if !isIOI {
+				return
+			}
+			row.Scores[i] = main
+			if pract != nil {
+				practice[i] = pract
+				hasPractice = true
+			}
+			contribution := 0
+			if main != nil {
+				contribution = *main
+			}
+			if pract != nil && *pract > contribution {
+				contribution = *pract
+			}
+			row.TotalScore += contribution
+			if contribution <= 0 {
+				zeros++
+			}
+		}
 
 		for i, col := range columns {
 			status := domain.TaskStatusNone
 
 			if col.fromContest != nil {
+				var providerScore *int
 				if byStudent, ok := expandedRowByStudent[col.fromContest]; ok {
 					if providerRow := byStudent[student.ID]; providerRow != nil && col.problemIndex < len(providerRow.Statuses) {
 						status = providerRow.Statuses[col.problemIndex]
 						if isIOI && col.problemIndex < len(providerRow.Scores) && providerRow.Scores[col.problemIndex] != nil {
 							value := *providerRow.Scores[col.problemIndex]
-							row.Scores[i] = &value
-							row.TotalScore += value
+							providerScore = &value
 						}
 						if col.problemIndex < len(providerRow.Upsolved) && providerRow.Upsolved[col.problemIndex] {
 							upsolved[i] = true
@@ -710,6 +744,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 				if status == domain.TaskStatusSolved {
 					row.SolvedCount++
 				}
+				addScore(i, providerScore, nil)
 				continue
 			}
 
@@ -718,16 +753,12 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			// скрывается полностью). Нет данных о времени (ACMP) — падаем на
 			// обычную логику (всё время).
 			if windowActive {
-				if st, sc, hasScore, up, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI, frozen); hasData {
+				if st, mainSc, practSc, up, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI, frozen); hasData {
 					row.Statuses[i] = st
 					if st == domain.TaskStatusSolved {
 						row.SolvedCount++
 					}
-					if isIOI && hasScore {
-						value := sc
-						row.Scores[i] = &value
-						row.TotalScore += sc
-					}
+					addScore(i, mainSc, practSc)
 					if up {
 						upsolved[i] = true
 						hasUpsolved = true
@@ -745,17 +776,25 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			row.Statuses[i] = status
 
 			if isIOI {
-				score, ok := resolveTaskScore(status, combined, col.normalizedURL, col.useRealScores)
-				if ok {
+				var mainSc *int
+				if score, ok := resolveTaskScore(status, combined, col.normalizedURL, col.useRealScores); ok {
 					value := score
-					row.Scores[i] = &value
-					row.TotalScore += score
+					mainSc = &value
 				}
+				addScore(i, mainSc, nil)
 			}
 		}
 
 		if hasUpsolved {
 			row.Upsolved = upsolved
+		}
+		if hasPractice {
+			row.PracticeScores = practice
+		}
+		if zeroPenalty > 0 {
+			penalty := zeros * zeroPenalty
+			row.Penalty = &penalty
+			row.TotalScore -= penalty
 		}
 		out.Rows = append(out.Rows, row)
 	}
@@ -828,12 +867,15 @@ func assignTaskContestPlaces(rows []domain.GeneratedRow, isIOI bool) {
 // после end — в дорешку. Для IOI показывается больший балл (окна или дорешки), и
 // если победил балл дорешки — ячейка помечается дорешкой.
 // hasData=false — нет посылок с временем (нужно упасть на обычную логику).
-// windowedTaskResult считает результат задачи по посылкам с временем. frozen —
-// таблица заморожена: end здесь момент заморозки, и всё после него (включая
-// дорешку) игнорируется полностью, чтобы результаты не протекали до разморозки.
-func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool, frozen bool) (status string, score int, hasScore bool, upsolved bool, hasData bool) {
+// windowedTaskResult считает результат задачи по посылкам с временем. Для IOI
+// основной балл (в окне) и балл дорешки возвращаются раздельно: mainScore —
+// лучший в окне (nil — в окне не сдавал), practiceScore — лучший после конца,
+// только если он строго больше основного. frozen — таблица заморожена: end
+// здесь момент заморозки, и всё после него (включая дорешку) игнорируется
+// полностью, чтобы результаты не протекали до разморозки.
+func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool, frozen bool) (status string, mainScore, practiceScore *int, upsolved bool, hasData bool) {
 	if len(timed) == 0 {
-		return domain.TaskStatusNone, 0, false, false, false
+		return domain.TaskStatusNone, nil, nil, false, false
 	}
 
 	inSolved, inAttempted := false, false
@@ -886,24 +928,25 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 	}
 
 	if isIOI && status != domain.TaskStatusNone {
-		inScore := 0
-		if inHas {
-			inScore = inBest
+		if inAttempted && inHas {
+			value := inBest
+			mainScore = &value
 		}
-		afterScore := 0
-		if afterHas {
-			afterScore = afterBest
+		// Балл дорешки храним отдельно и только если он строго больше основного —
+		// ячейка показывает «основной (дорешка)», вклад в сумму берёт максимум.
+		if afterAttempted && afterHas {
+			base := 0
+			if mainScore != nil {
+				base = *mainScore
+			}
+			if afterBest > base || mainScore == nil {
+				value := afterBest
+				practiceScore = &value
+			}
 		}
-		// Балл дорешки показываем, только если он строго больше балла в окне.
-		if afterScore > inScore {
-			score, upsolved = afterScore, true
-		} else {
-			score, upsolved = inScore, false
-		}
-		hasScore = true
 	}
 
-	return status, score, hasScore, upsolved, true
+	return status, mainScore, practiceScore, upsolved, true
 }
 
 func resolveTaskScore(status string, combined *accountStatuses, normalizedTaskURL string, useRealScores bool) (int, bool) {

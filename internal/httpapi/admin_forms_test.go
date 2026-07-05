@@ -498,6 +498,22 @@ func TestAdminContestSaveAndDelete(t *testing.T) {
 		t.Fatalf("expected bad start_time rejection, got code=%d", code)
 	}
 
+	// zero_penalty сохраняется в контест; отрицательный — отказ.
+	code, _ = postJSON(t, h.AdminContestSave,
+		`{"original_id":"c1","id":"c1","title":"К1","score_system":"ioi","source_type":"tasks","zero_penalty":5,"subcontests":[]}`)
+	if code != http.StatusOK {
+		t.Fatalf("contest save with zero_penalty failed: code=%d", code)
+	}
+	contestsBody, _ := os.ReadFile(filepath.Join(dataDir, "contests.json"))
+	if !strings.Contains(string(contestsBody), `"zero_penalty": 5`) && !strings.Contains(string(contestsBody), `"zero_penalty":5`) {
+		t.Fatalf("zero_penalty not saved: %s", contestsBody)
+	}
+	code, _ = postJSON(t, h.AdminContestSave,
+		`{"id":"c9","score_system":"ioi","source_type":"tasks","zero_penalty":-3,"subcontests":[]}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("negative zero_penalty must be rejected, got code=%d", code)
+	}
+
 	code, _ = postJSON(t, h.AdminContestDelete, `{"id":"c1"}`)
 	if code != http.StatusOK {
 		t.Fatalf("contest delete failed: code=%d", code)

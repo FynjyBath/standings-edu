@@ -139,9 +139,11 @@ func refreshContestMetadata(standings *domain.GeneratedGroupStandings, data *dom
 		standings.Contests[i].Title = meta.Title
 		standings.Contests[i].TableNames = meta.TableNames
 		standings.Contests[i].Materials = domain.NormalizeContestMaterials(meta.Materials)
-		// Начало контеста (с учётом переопределения из записи группы) — тоже
-		// отображаемая метаданная: по ней сервер прячет ссылки до старта.
+		// Окно контеста (с учётом переопределения из записи группы) — тоже
+		// отображаемые метаданные: по началу сервер прячет ссылки до старта,
+		// окно целиком показывается в шапке таблицы.
 		standings.Contests[i].StartTime = meta.StartTime
+		standings.Contests[i].EndTime = meta.EndTime
 	}
 }
 

@@ -145,3 +145,82 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 		t.Fatalf("rows_full must be absent without freeze: %+v", out.RowsFull)
 	}
 }
+
+// Штраф за нули и раздельные баллы основного времени/дорешки (ioi).
+func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
+	start := time.Date(2026, 9, 1, 15, 0, 0, 0, time.UTC)
+	end := start.Add(2 * time.Hour)
+	inTime := start.Add(30 * time.Minute)
+	afterEnd := end.Add(time.Hour)
+
+	score := func(v int) *int { return &v }
+	contest := domain.Contest{
+		ID: "c", Title: "К", ScoreSystem: domain.ScoreSystemIOI, ZeroPenalty: 5,
+		StartTime: &start, EndTime: &end,
+		Subcontests: []domain.Subcontest{{Title: "S", Tasks: []string{
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=1", // 100 в окне
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=2", // только дорешка 70
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=3", // 50 в окне + 70 в дорешке
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=4", // не сдавал — ноль со штрафом
+		}}},
+	}
+	urls := make([]string, 4)
+	for i, raw := range contest.Subcontests[0].Tasks {
+		urls[i] = domain.NormalizeTaskURL(raw)
+	}
+
+	st := newAccountStatuses()
+	st.solved[urls[0]] = struct{}{}
+	st.solved[urls[1]] = struct{}{}
+	st.solved[urls[2]] = struct{}{}
+	st.timed[urls[0]] = []source.TimedSubmission{{At: inTime, Solved: true, Score: score(100)}}
+	st.timed[urls[1]] = []source.TimedSubmission{{At: afterEnd, Solved: true, Score: score(70)}}
+	st.timed[urls[2]] = []source.TimedSubmission{
+		{At: inTime, Solved: false, Score: score(50)},
+		{At: afterEnd, Solved: true, Score: score(70)},
+	}
+
+	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
+	out := b.buildTaskContestStandings(contest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil)
+
+	if out.ZeroPenalty != 5 {
+		t.Fatalf("contest zero_penalty not stored: %+v", out.ZeroPenalty)
+	}
+	row := out.Rows[0]
+	wantMain := []*int{score(100), nil, score(50), nil}
+	wantPractice := []*int{nil, score(70), score(70), nil}
+	for i := range wantMain {
+		if !intPtrEq(row.Scores[i], wantMain[i]) {
+			t.Fatalf("main score[%d] mismatch: %+v", i, row.Scores)
+		}
+		var got *int
+		if i < len(row.PracticeScores) {
+			got = row.PracticeScores[i]
+		}
+		if !intPtrEq(got, wantPractice[i]) {
+			t.Fatalf("practice score[%d] mismatch: %+v", i, row.PracticeScores)
+		}
+	}
+	// Сумма: 100 + 70 + max(50,70) − 5×1 (одна пустая задача) = 235.
+	if row.TotalScore != 235 {
+		t.Fatalf("total with penalty wrong: %d", row.TotalScore)
+	}
+	if row.Penalty == nil || *row.Penalty != 5 {
+		t.Fatalf("penalty column wrong: %+v", row.Penalty)
+	}
+
+	// edu-контест: штраф игнорируется, Penalty пуст.
+	eduContest := contest
+	eduContest.ScoreSystem = domain.ScoreSystemEdu
+	out = b.buildTaskContestStandings(eduContest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil)
+	if out.ZeroPenalty != 0 || out.Rows[0].Penalty != nil {
+		t.Fatalf("edu must ignore zero_penalty: %+v", out.Rows[0].Penalty)
+	}
+}
+
+func intPtrEq(a, b *int) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	return a == nil || *a == *b
+}

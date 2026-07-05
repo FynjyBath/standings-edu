@@ -195,7 +195,10 @@ func (c *InformaticsAPIClient) MatchTaskURL(taskURL string) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	if host != "informatics.msk.ru" && host != "www.informatics.msk.ru" {
+	switch host {
+	case "informatics.msk.ru", "www.informatics.msk.ru",
+		"informatics.mccme.ru", "www.informatics.mccme.ru": // старое зеркало того же сайта
+	default:
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(u.Path), "/mod/statements/view.php")

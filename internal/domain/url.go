@@ -21,6 +21,16 @@ func NormalizeTaskURL(raw string) string {
 	u.Host = strings.ToLower(u.Host)
 	u.Fragment = ""
 
+	// Зеркала informatics (informatics.mccme.ru — старый домен того же сайта)
+	// канонизируем в informatics.msk.ru, иначе ссылки из контеста не совпадут
+	// с URL, которые строятся из посылок, и плюсы не подсветятся. Канонизация
+	// касается только сопоставления (normalized_url) — видимая ссылка в таблице
+	// остаётся такой, какой её ввели.
+	switch u.Host {
+	case "informatics.mccme.ru", "www.informatics.mccme.ru", "www.informatics.msk.ru":
+		u.Host = "informatics.msk.ru"
+	}
+
 	if canonical, ok := canonicalCodeforcesTaskURL(u); ok {
 		return canonical
 	}

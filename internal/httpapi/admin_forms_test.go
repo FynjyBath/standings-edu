@@ -263,13 +263,15 @@ func TestAdminGroupContestFreezeInline(t *testing.T) {
 	}
 }
 
-func TestAdminGroupContestSetOptionsInlinePreservesBody(t *testing.T) {
+func TestAdminGroupContestSetOptionsInlineUnified(t *testing.T) {
 	h, dataDir := newTestHandlers(t)
-	// Inline с неизвестным полем: оно должно пережить смену update.
+	// Inline с неизвестным полем: тело переживает правку entry-настроек,
+	// а table_name и окно правятся из строки таблицы так же, как у ссылок.
 	setupGroup(t, dataDir, "grp",
 		`[{"id":"inl","title":"Inline","score_system":"edu","subcontests":[],"custom_field":"keep-me"}]`)
 
-	code, resp := postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"inl","update":false,"table_name":"игнор"}`)
+	code, resp := postJSON(t, h.AdminGroupContestSetOptions,
+		`{"slug":"grp","id":"inl","update":false,"table_name":"Тема","start_time":"2026-09-01T18:00:00+03:00","end_time":"2026-09-01T20:00:00+03:00","freeze":"1h"}`)
 	if code != http.StatusOK || resp["ok"] != true {
 		t.Fatalf("set-options inline failed: code=%d resp=%v", code, resp)
 	}
@@ -278,8 +280,25 @@ func TestAdminGroupContestSetOptionsInlinePreservesBody(t *testing.T) {
 	if e["update"] != false || e["title"] != "Inline" || e["custom_field"] != "keep-me" {
 		t.Fatalf("inline body not preserved: %v", e)
 	}
-	if _, has := e["table_name"]; has {
-		t.Fatalf("table_name must not be written into inline entry: %v", e)
+	if e["table_name"] != "Тема" || e["start_time"] != "2026-09-01T18:00:00+03:00" || e["freeze"] != "1h" {
+		t.Fatalf("inline entry settings not applied: %v", e)
+	}
+
+	// Очистка полей убирает ключи из объекта.
+	code, _ = postJSON(t, h.AdminGroupContestSetOptions,
+		`{"slug":"grp","id":"inl","update":true,"table_name":"","start_time":"","end_time":"","freeze":""}`)
+	if code != http.StatusOK {
+		t.Fatalf("clear inline settings failed: code=%d", code)
+	}
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	e = items[0]
+	for _, key := range []string{"table_name", "start_time", "end_time", "freeze"} {
+		if _, has := e[key]; has {
+			t.Fatalf("key %q must be removed: %v", key, e)
+		}
+	}
+	if e["title"] != "Inline" || e["custom_field"] != "keep-me" {
+		t.Fatalf("inline body damaged on clear: %v", e)
 	}
 }
 
@@ -525,6 +544,89 @@ func TestHideUpcomingContestTaskURLs(t *testing.T) {
 	}
 	if standings.Contests[2].Tasks[0].URL == "" {
 		t.Fatalf("no-window contest URLs must stay: %+v", standings.Contests[2])
+	}
+}
+
+// Токенный просмотр: с верным токеном RowsFull/GradesFull подменяют публичные,
+// без токена — вырезаются из ответа. Токен управляется админ-эндпоинтом и
+// переживает перезапись group.json (grades не теряются).
+func TestGroupSecretTokenFlow(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "grp", "group.json"),
+		`{"title":"Т","student_ids":["s1"],"grades":{"columns":[{"id":"z","title":"З","weight":1,"type":"manual"}]}}`)
+
+	// Генерация токена.
+	code, resp := postJSON(t, h.AdminGroupTokenSet, `{"slug":"grp","clear":false}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("token generate failed: code=%d resp=%v", code, resp)
+	}
+	token, _ := resp["token"].(string)
+	if len(token) != 32 {
+		t.Fatalf("unexpected token: %q", token)
+	}
+	var gf domain.GroupFile
+	body, _ := os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
+	if err := json.Unmarshal(body, &gf); err != nil || gf.GroupSecretToken != token {
+		t.Fatalf("token not saved: %v %s", err, body)
+	}
+	if gf.Grades == nil || len(gf.Grades.Columns) != 1 {
+		t.Fatalf("grades lost on token write: %s", body)
+	}
+
+	// applyFreezeView: без токена — full-варианты вырезаются.
+	frozenAt := time.Now().Add(-time.Hour)
+	makeStandings := func() domain.GeneratedGroupStandings {
+		return domain.GeneratedGroupStandings{
+			GroupSlug:  "grp",
+			Grades:     &domain.GeneratedGrades{Title: "Замороженные"},
+			GradesFull: &domain.GeneratedGrades{Title: "Полные"},
+			Contests: []domain.GeneratedContestStandings{{
+				ID: "c", FrozenAt: &frozenAt,
+				Rows:     []domain.GeneratedRow{{StudentID: "s1", SolvedCount: 1}},
+				RowsFull: []domain.GeneratedRow{{StudentID: "s1", SolvedCount: 5}},
+			}},
+		}
+	}
+
+	s := makeStandings()
+	req := httptest.NewRequest(http.MethodGet, "/standings/grp", nil)
+	if h.applyFreezeView(&s, "grp", req) {
+		t.Fatal("no token must not unfreeze")
+	}
+	if s.Contests[0].RowsFull != nil || s.GradesFull != nil || s.Contests[0].Rows[0].SolvedCount != 1 {
+		t.Fatalf("full variants must be stripped: %+v", s)
+	}
+
+	// Неверный токен — тоже публичная версия.
+	s = makeStandings()
+	req = httptest.NewRequest(http.MethodGet, "/standings/grp?token=wrong", nil)
+	if h.applyFreezeView(&s, "grp", req) {
+		t.Fatal("wrong token must not unfreeze")
+	}
+
+	// Верный токен — полная версия, full-поля убраны из ответа.
+	s = makeStandings()
+	req = httptest.NewRequest(http.MethodGet, "/standings/grp?token="+token, nil)
+	if !h.applyFreezeView(&s, "grp", req) {
+		t.Fatal("valid token must unfreeze")
+	}
+	if s.Contests[0].Rows[0].SolvedCount != 5 || s.Grades.Title != "Полные" {
+		t.Fatalf("full variants must be swapped in: %+v", s)
+	}
+	if s.Contests[0].RowsFull != nil || s.GradesFull != nil {
+		t.Fatalf("swapped response must not carry full duplicates: %+v", s)
+	}
+
+	// Удаление токена — доступ закрыт сразу.
+	code, resp = postJSON(t, h.AdminGroupTokenSet, `{"slug":"grp","clear":true}`)
+	if code != http.StatusOK || resp["token"] != "" {
+		t.Fatalf("token clear failed: code=%d resp=%v", code, resp)
+	}
+	s = makeStandings()
+	req = httptest.NewRequest(http.MethodGet, "/standings/grp?token="+token, nil)
+	if h.applyFreezeView(&s, "grp", req) {
+		t.Fatal("cleared token must not unfreeze")
 	}
 }
 

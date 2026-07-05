@@ -780,6 +780,16 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	// Таблицу по набору задач строим сами, значит и места проставляем сами.
 	assignTaskContestPlaces(out.Rows, isIOI)
 
+	// Для замороженного контеста считаем и полную версию строк (просмотр по
+	// токену группы): та же сборка без заморозки — сеть не трогается, только
+	// повторный проход по уже скачанным посылкам.
+	if frozen {
+		fullContest := contest
+		fullContest.FreezeTime = nil
+		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded)
+		out.RowsFull = full.Rows
+	}
+
 	return out
 }
 

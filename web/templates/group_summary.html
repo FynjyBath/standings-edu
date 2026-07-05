@@ -2,8 +2,11 @@
 <section class="page-head">
   <h1>{{.GroupTitle}}</h1>
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}">Списком</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .Token}}?token={{.Token}}{{end}}">Списком</a>
   </p>
+  {{if .UnfrozenView}}
+  <p class="empty-hint">🔓 Просмотр без заморозки (по токену).</p>
+  {{end}}
   <p class="summary-links" id="summary-tabs"></p>
 </section>
 

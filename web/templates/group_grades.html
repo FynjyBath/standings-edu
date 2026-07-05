@@ -1,9 +1,12 @@
 {{define "content"}}
 <section class="page-head">
   <h1>{{.GroupTitle}}{{if .Grades.Title}} — {{.Grades.Title}}{{end}}</h1>
+  {{if .UnfrozenView}}
+  <p class="empty-hint">🔓 Просмотр без заморозки (по токену).</p>
+  {{end}}
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}">Списком</a>
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/summary">Сводная таблица</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .Token}}?token={{.Token}}{{end}}">Списком</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/summary{{if .Token}}?token={{.Token}}{{end}}">Сводная таблица</a>
   </p>
 </section>
 

@@ -119,6 +119,14 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 	if row.SolvedCount != 1 || row.Upsolved != nil {
 		t.Fatalf("frozen row wrong: solved=%d upsolved=%v", row.SolvedCount, row.Upsolved)
 	}
+	// Полная версия для токенного просмотра: все три решения (последнее — дорешка).
+	if len(out.RowsFull) != 1 {
+		t.Fatalf("frozen contest must carry rows_full: %+v", out.RowsFull)
+	}
+	fullRow := out.RowsFull[0]
+	if fullRow.SolvedCount != 3 || fullRow.Upsolved == nil || !fullRow.Upsolved[2] {
+		t.Fatalf("rows_full wrong: %+v", fullRow)
+	}
 
 	// Без заморозки: всё видно, поздняя задача после конца — дорешка.
 	contest.FreezeTime = nil
@@ -132,5 +140,8 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 	}
 	if row.Upsolved == nil || !row.Upsolved[2] || row.Upsolved[0] {
 		t.Fatalf("upsolving mark wrong: %+v", row.Upsolved)
+	}
+	if out.RowsFull != nil {
+		t.Fatalf("rows_full must be absent without freeze: %+v", out.RowsFull)
 	}
 }

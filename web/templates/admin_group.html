@@ -27,6 +27,22 @@
 </section>
 
 <section class="admin-block">
+  <h2>Токен жюри (просмотр без заморозки)</h2>
+  {{if .SecretToken}}
+  <p>Токен: <code id="jury-token">{{.SecretToken}}</code></p>
+  <p>Ссылка для жюри: <a id="jury-link" href="/standings/{{.GroupSlug}}?token={{.SecretToken}}" target="_blank" rel="noopener noreferrer"></a></p>
+  <p class="empty-hint">По ссылке замороженные контесты показываются полностью. Смена или удаление токена действует сразу, без перегенерации.</p>
+  {{else}}
+  <p class="empty-hint">Токен не задан — размороженный просмотр недоступен. Сгенерируйте токен и отдайте ссылку жюри.</p>
+  {{end}}
+  <div class="admin-editor-tools">
+    <button type="button" id="token-generate" class="admin-btn">{{if .SecretToken}}Перегенерировать{{else}}Сгенерировать{{end}}</button>
+    {{if .SecretToken}}<button type="button" id="token-clear" class="admin-btn admin-btn--secondary">Убрать токен</button>{{end}}
+    <span id="token-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
   <h2>Контесты группы ({{len .Entries}})</h2>
   <p class="empty-hint">Ссылка берёт контест из глобального <code>contests.json</code>. Inline-контест хранится прямо в группе. После изменений не забудьте перегенерировать.</p>
   {{if .Entries}}
@@ -39,18 +55,24 @@
           <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
           <td>{{if .Inline}}inline{{else}}ссылка{{end}}</td>
           <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
+          <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:11rem;" /></td>
           <td>
-            {{if .Inline}}<span class="grade-weight">в теле контеста</span>
-            {{else}}<input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:11rem;" />{{end}}
-          </td>
-          <td>
-            {{if .Inline}}<span class="grade-weight">в теле контеста</span>
-            {{else}}
             <input type="datetime-local" class="c-start" step="60" data-iso="{{.StartTime}}" />
             <input type="datetime-local" class="c-end" step="60" data-iso="{{.EndTime}}" />
-            {{end}}
           </td>
-          <td><input type="text" class="c-freeze" value="{{.Freeze}}" placeholder="1h | all" style="max-width:6rem;" title="Заморозка: длительность от конца окна (1h, 30m) или all — всё соревнование. Пусто — нет. Для разморозки очистите и перегенерируйте." /></td>
+          <td>
+            <select class="c-freeze-sel" data-freeze="{{.Freeze}}" title="Заморозка: скрыть результаты последней части соревнования (или всего). Для разморозки выберите «нет» и перегенерируйте.">
+              <option value="">нет</option>
+              <option value="30m">последние 30 мин</option>
+              <option value="1h">последний час</option>
+              <option value="1h30m">последние 1,5 ч</option>
+              <option value="2h">последние 2 ч</option>
+              <option value="3h">последние 3 ч</option>
+              <option value="all">всё соревнование</option>
+              <option value="custom">другое…</option>
+            </select>
+            <input type="text" class="c-freeze" value="" placeholder="45m / 2h15m" style="max-width:6rem;display:none;" title="Go-длительность: 45m, 2h15m…" />
+          </td>
           <td style="white-space:nowrap;">
             <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
             {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
@@ -100,6 +122,20 @@
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
     }
 
+    // Токен жюри: полная ссылка строится от текущего адреса сайта.
+    var juryLink = document.getElementById("jury-link");
+    if (juryLink) juryLink.textContent = location.origin + juryLink.getAttribute("href");
+    var tokenStatus = document.getElementById("token-status");
+    function tokenAction(clear) {
+      if (clear && !confirm("Убрать токен? Старая ссылка жюри перестанет работать сразу.")) return;
+      post("/api/admin/group/token/set", { slug: slug, clear: clear })
+        .then(function () { location.reload(); })
+        .catch(function (err) { tokenStatus.textContent = err.message; tokenStatus.className = "admin-editor-status admin-editor-status--error"; });
+    }
+    document.getElementById("token-generate").addEventListener("click", function () { tokenAction(false); });
+    var tokenClear = document.getElementById("token-clear");
+    if (tokenClear) tokenClear.addEventListener("click", function () { tokenAction(true); });
+
     document.querySelectorAll(".member-remove").forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (!confirm("Убрать «" + btn.dataset.name + "» из группы?")) return;
@@ -120,18 +156,41 @@
       if (st) st.value = ContestForm.timeFromISO(st.dataset.iso || "");
       if (en) en.value = ContestForm.timeFromISO(en.dataset.iso || "");
 
+      // Заморозка: селект с пресетами; «другое…» открывает свободный ввод.
+      var fzSel = row.querySelector(".c-freeze-sel");
+      var fzCustom = row.querySelector(".c-freeze");
+      function syncFreezeCustom() {
+        if (fzCustom) fzCustom.style.display = (fzSel && fzSel.value === "custom") ? "" : "none";
+      }
+      if (fzSel) {
+        var current = (fzSel.dataset.freeze || "").trim();
+        var hasPreset = [].slice.call(fzSel.options).some(function (o) { return o.value === current; });
+        if (current && !hasPreset) {
+          fzSel.value = "custom";
+          if (fzCustom) fzCustom.value = current;
+        } else {
+          fzSel.value = current;
+        }
+        fzSel.addEventListener("change", syncFreezeCustom);
+        syncFreezeCustom();
+      }
+      function freezeValue() {
+        if (!fzSel) return "";
+        if (fzSel.value === "custom") return fzCustom ? (fzCustom.value || "").trim() : "";
+        return fzSel.value;
+      }
+
       var apply = row.querySelector(".c-apply");
       if (apply) apply.addEventListener("click", function () {
         var tn = row.querySelector(".c-tablename");
         setStatus("Сохранение…", false);
-        var fz = row.querySelector(".c-freeze");
         post("/api/admin/group/contests/set-options", {
           slug: slug, id: id,
           update: row.querySelector(".c-update").checked,
           table_name: tn ? (tn.value || "").trim() : "",
           start_time: st ? ContestForm.timeToISO(st.value) : "",
           end_time: en ? ContestForm.timeToISO(en.value) : "",
-          freeze: fz ? (fz.value || "").trim() : ""
+          freeze: freezeValue()
         }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
           .catch(function (err) { setStatus(err.message, true); });
       });

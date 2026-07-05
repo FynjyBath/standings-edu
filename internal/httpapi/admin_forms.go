@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -299,6 +301,7 @@ type AdminGroupManagePageData struct {
 	AddableContests []AdminGroupContestOption
 	InlineJSON      template.JS
 	HasGrades       bool
+	SecretToken     string // group_secret_token — просмотр размороженных таблиц
 }
 
 type AdminGroupMember struct {
@@ -504,6 +507,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		AddableContests: addable,
 		InlineJSON:      template.JS(inlineBlob),
 		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
+		SecretToken:     strings.TrimSpace(groupFile.GroupSecretToken),
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group.html", page); err != nil {
 		h.logger.Printf("ERROR render admin group manage slug=%s: %v", slug, err)
@@ -547,6 +551,50 @@ func (h *Handlers) AdminGroupMemberRemove(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// AdminGroupTokenSet генерирует или удаляет group_secret_token группы —
+// секрет для просмотра размороженных таблиц (?token=… на страницах группы).
+// Действует сразу, без регенерации: проверка идёт при отдаче.
+func (h *Handlers) AdminGroupTokenSet(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug  string `json:"slug"`
+		Clear bool   `json:"clear"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	token := ""
+	if !req.Clear {
+		raw := make([]byte, 16)
+		if _, err := rand.Read(raw); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		token = hex.EncodeToString(raw)
+	}
+	groupFile.GroupSecretToken = token
+	if err := h.writeGroupFile(slug, groupFile); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": token})
 }
 
 // writeGroupContestRaw атомарно перезаписывает groups/<slug>/contests.json
@@ -675,9 +723,9 @@ func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// AdminGroupContestSetOptions меняет флаг update (а для ссылок — table_name и
-// окно start/end) у контеста группы. Для inline эти поля живут в теле контеста
-// и правятся формой.
+// AdminGroupContestSetOptions меняет entry-настройки контеста группы: update,
+// freeze, table_name и окно start/end — одинаково для ссылок и inline (у inline
+// table_name и окно лежат в том же объекте, что и тело контеста).
 func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Request) {
 	if h.admin == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
@@ -750,6 +798,29 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 				m["freeze"] = fz
 			} else {
 				delete(m, "freeze")
+			}
+			// table_name и окно у inline лежат в том же объекте — правим их
+			// теми же полями формы, что и у ссылок (пусто — убрать).
+			if tn := parseTableNameField(req.TableName); len(tn) == 1 {
+				blob, _ := json.Marshal(tn[0])
+				m["table_name"] = blob
+			} else if len(tn) > 1 {
+				blob, _ := json.Marshal(tn)
+				m["table_name"] = blob
+			} else {
+				delete(m, "table_name")
+			}
+			if startTime != nil {
+				blob, _ := json.Marshal(startTime)
+				m["start_time"] = blob
+			} else {
+				delete(m, "start_time")
+			}
+			if endTime != nil {
+				blob, _ := json.Marshal(endTime)
+				m["end_time"] = blob
+			} else {
+				delete(m, "end_time")
 			}
 			encoded, err := json.Marshal(m)
 			if err != nil {

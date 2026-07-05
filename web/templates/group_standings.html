@@ -4,10 +4,13 @@
   {{if .Standings.FormLink}}
   <p>Форма добавления/обновления данных аккаунтов: <a href="{{.Standings.FormLink}}" target="_blank" rel="noopener noreferrer">{{.Standings.FormLink}}</a></p>
   {{end}}
+  {{if .UnfrozenView}}
+  <p class="empty-hint">🔓 Просмотр без заморозки (по токену): ученикам замороженные контесты показываются иначе.</p>
+  {{end}}
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary">Сводная таблица</a>
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary{{if .Token}}?token={{.Token}}{{end}}">Сводная таблица</a>
     {{if .Standings.Grades}}
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/grades">{{if .Standings.Grades.Title}}{{.Standings.Grades.Title}}{{else}}Оценки{{end}}</a>
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/grades{{if .Token}}?token={{.Token}}{{end}}">{{if .Standings.Grades.Title}}{{.Standings.Grades.Title}}{{else}}Оценки{{end}}</a>
     {{end}}
   </p>
 </section>

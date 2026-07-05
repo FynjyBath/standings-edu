@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -73,6 +74,41 @@ func (h *Handlers) loadGroupStandings(slug string) (domain.GeneratedGroupStandin
 		return domain.GeneratedGroupStandings{}, err
 	}
 	return empty, nil
+}
+
+// applyFreezeView решает, какую версию замороженных таблиц отдавать: с верным
+// group_secret_token (?token=…) — полную (просмотр жюри), иначе — публичную
+// замороженную, вырезая полные варианты из ответа. Возвращает true при
+// токенном просмотре.
+func (h *Handlers) applyFreezeView(standings *domain.GeneratedGroupStandings, slug string, r *http.Request) bool {
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token != "" && h.groupTokenValid(slug, token) {
+		standings.SwapInFullRows()
+		return true
+	}
+	standings.StripFullRows()
+	return false
+}
+
+// groupTokenValid сверяет токен с group_secret_token из groups/<slug>/group.json.
+func (h *Handlers) groupTokenValid(slug, token string) bool {
+	if h.dataDir == "" || !domain.IsValidSlug(slug) {
+		return false
+	}
+	var groupFile domain.GroupFile
+	path := filepath.Join(h.dataDir, "groups", slug, "group.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	if err := json.Unmarshal(body, &groupFile); err != nil {
+		return false
+	}
+	expected := strings.TrimSpace(groupFile.GroupSecretToken)
+	if expected == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 
 // hideUpcomingContestTaskURLs убирает ссылки на задачи у контестов, которые ещё
@@ -176,6 +212,7 @@ func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	h.applyFreezeView(&standings, slug, r)
 	writeJSON(w, http.StatusOK, standings)
 }
 
@@ -196,10 +233,15 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	unfrozen := h.applyFreezeView(&standings, slug, r)
 	page := GroupPageData{
-		PageTitle: standings.GroupTitle,
-		Standings: standings,
-		Footer:    h.buildFooterInfo(),
+		PageTitle:    standings.GroupTitle,
+		Standings:    standings,
+		Footer:       h.buildFooterInfo(),
+		UnfrozenView: unfrozen,
+	}
+	if unfrozen {
+		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_standings.html", page); err != nil {
 		h.logger.Printf("ERROR render group standings slug=%s err=%v", slug, err)
@@ -218,6 +260,7 @@ func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	unfrozen := h.applyFreezeView(&standings, slug, r)
 	if standings.Grades == nil {
 		http.NotFound(w, r)
 		return
@@ -228,11 +271,15 @@ func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
 		title = title + " — " + standings.Grades.Title
 	}
 	page := GroupGradesPageData{
-		PageTitle:  title,
-		Footer:     h.buildFooterInfo(),
-		GroupSlug:  standings.GroupSlug,
-		GroupTitle: standings.GroupTitle,
-		Grades:     *standings.Grades,
+		PageTitle:    title,
+		Footer:       h.buildFooterInfo(),
+		GroupSlug:    standings.GroupSlug,
+		GroupTitle:   standings.GroupTitle,
+		Grades:       *standings.Grades,
+		UnfrozenView: unfrozen,
+	}
+	if unfrozen {
+		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_grades.html", page); err != nil {
 		h.logger.Printf("ERROR render grades slug=%s err=%v", slug, err)
@@ -268,6 +315,7 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	unfrozen := h.applyFreezeView(&standings, slug, r)
 	standingsJSON, err := json.Marshal(standings)
 	if err != nil {
 		h.logger.Printf("ERROR marshal standings summary slug=%s mode=%s err=%v", slug, mode, err)
@@ -289,6 +337,10 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		Mode:          mode,
 		StandingsJSON: template.JS(string(standingsJSON)),
 		Footer:        h.buildFooterInfo(),
+		UnfrozenView:  unfrozen,
+	}
+	if unfrozen {
+		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_summary.html", page); err != nil {
 		h.logger.Printf("ERROR render group summary slug=%s mode=%s err=%v", slug, mode, err)
@@ -349,14 +401,20 @@ type GroupPageData struct {
 	PageTitle string
 	Standings domain.GeneratedGroupStandings
 	Footer    FooterInfo
+	// UnfrozenView — просмотр по токену группы: показана полная версия
+	// замороженных таблиц. Token протаскивается в ссылки страницы.
+	UnfrozenView bool
+	Token        string
 }
 
 type GroupGradesPageData struct {
-	PageTitle  string
-	Footer     FooterInfo
-	GroupSlug  string
-	GroupTitle string
-	Grades     domain.GeneratedGrades
+	PageTitle    string
+	Footer       FooterInfo
+	GroupSlug    string
+	GroupTitle   string
+	Grades       domain.GeneratedGrades
+	UnfrozenView bool
+	Token        string
 }
 
 type GroupSummaryPageData struct {
@@ -366,4 +424,6 @@ type GroupSummaryPageData struct {
 	Mode          string
 	StandingsJSON template.JS
 	Footer        FooterInfo
+	UnfrozenView  bool
+	Token         string
 }

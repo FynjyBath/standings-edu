@@ -243,6 +243,9 @@ type GroupFile struct {
 	Update     *bool         `json:"update,omitempty"`
 	StudentIDs []string      `json:"student_ids"`
 	Grades     *GradesConfig `json:"grades,omitempty"`
+	// GroupSecretToken — секрет для просмотра размороженных таблиц
+	// (?token=… на страницах группы). Пусто — токенного доступа нет.
+	GroupSecretToken string `json:"group_secret_token,omitempty"`
 }
 
 type GroupDefinition struct {
@@ -460,6 +463,9 @@ type GeneratedContestStandings struct {
 	Subcontests []GeneratedSubcontest `json:"subcontests"`
 	Tasks       []GeneratedTask       `json:"tasks"`
 	Rows        []GeneratedRow        `json:"rows"`
+	// RowsFull — полные строки замороженного контеста (для просмотра по токену
+	// группы). Сервер вырезает их из публичных ответов. nil — контест не заморожен.
+	RowsFull []GeneratedRow `json:"rows_full,omitempty"`
 }
 
 func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
@@ -477,6 +483,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Subcontests []GeneratedSubcontest `json:"subcontests"`
 		Tasks       []GeneratedTask       `json:"tasks"`
 		Rows        []GeneratedRow        `json:"rows"`
+		RowsFull    []GeneratedRow        `json:"rows_full,omitempty"`
 	}
 
 	var raw rawGeneratedContest
@@ -496,6 +503,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Subcontests: raw.Subcontests,
 		Tasks:       raw.Tasks,
 		Rows:        raw.Rows,
+		RowsFull:    raw.RowsFull,
 		ScoreSystem: ScoreSystemEdu,
 	}
 	if raw.ScoreSystem != nil {
@@ -511,7 +519,41 @@ type GeneratedGroupStandings struct {
 	SolvedSummarySites []string                         `json:"solved_summary_sites,omitempty"`
 	SolvedSummary      []GeneratedGroupSolvedSummaryRow `json:"solved_summary,omitempty"`
 	Grades             *GeneratedGrades                 `json:"grades,omitempty"`
-	Contests           []GeneratedContestStandings      `json:"contests"`
+	// GradesFull — оценки по полным (незамороженным) таблицам; есть только
+	// когда в группе есть замороженные контесты. Сервер отдаёт их вместо Grades
+	// при просмотре по токену и вырезает из публичных ответов.
+	GradesFull *GeneratedGrades            `json:"grades_full,omitempty"`
+	Contests   []GeneratedContestStandings `json:"contests"`
+}
+
+// SwapInFullRows подменяет строки замороженных контестов полными (rows_full) и
+// оценки — полными (grades_full), убирая full-варианты из структуры. FrozenAt
+// сохраняется, чтобы было видно, что публичная версия отличается. Возвращает
+// true, если была хоть одна подмена (просмотр по токену).
+func (s *GeneratedGroupStandings) SwapInFullRows() bool {
+	swapped := false
+	for i := range s.Contests {
+		if s.Contests[i].RowsFull != nil {
+			s.Contests[i].Rows = s.Contests[i].RowsFull
+			s.Contests[i].RowsFull = nil
+			swapped = true
+		}
+	}
+	if s.GradesFull != nil {
+		s.Grades = s.GradesFull
+		s.GradesFull = nil
+		swapped = true
+	}
+	return swapped
+}
+
+// StripFullRows убирает полные варианты из публичного ответа, чтобы
+// размороженные данные не утекали без токена.
+func (s *GeneratedGroupStandings) StripFullRows() {
+	for i := range s.Contests {
+		s.Contests[i].RowsFull = nil
+	}
+	s.GradesFull = nil
 }
 
 // GeneratedGrades — готовая таблица оценок (считается в generate, рендерится сервером).

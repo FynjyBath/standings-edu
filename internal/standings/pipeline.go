@@ -101,6 +101,7 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 		refreshContestMetadata(&mergedStandings, data, fullGroup)
 
 		mergedStandings.Grades = p.buildGroupGrades(fullGroup, mergedStandings, data)
+		mergedStandings.GradesFull = p.buildFullGrades(fullGroup, mergedStandings, data)
 
 		if err := p.writer.WriteGroupStandings(mergedStandings); err != nil {
 			p.logger.Printf("ERROR group=%s write standings failed: %v", group.Slug, err)
@@ -169,6 +170,18 @@ func (p *Pipeline) buildGroupGrades(group domain.GroupDefinition, standings doma
 	}
 
 	return grades.Build(group.Grades, standings, roster, manual)
+}
+
+// buildFullGrades считает оценки по полным (незамороженным) версиям таблиц.
+// Возвращает nil, если замороженных контестов нет — тогда полные оценки
+// совпадают с обычными и хранить их отдельно незачем.
+func (p *Pipeline) buildFullGrades(group domain.GroupDefinition, standings domain.GeneratedGroupStandings, data *domain.SourceData) *domain.GeneratedGrades {
+	full := standings
+	full.Contests = append([]domain.GeneratedContestStandings(nil), standings.Contests...)
+	if !full.SwapInFullRows() {
+		return nil
+	}
+	return p.buildGroupGrades(group, full, data)
 }
 
 func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, updated domain.GeneratedGroupStandings, students map[string]domain.Student) (domain.GeneratedGroupStandings, bool) {
@@ -254,13 +267,21 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 // reconcileContestRoster согласует строки перенесённого без пересчёта контеста
 // (update=false) с текущим составом группы: новые участники получают пустые
 // строки, выбывшие убираются, имена обновляются. Результаты не трогаем.
-// Легаси-таблицы, где у строк нет student_id, оставляем как есть — сопоставить
-// их с учениками не по чему.
+// У замороженных контестов согласуются обе версии строк (публичная и полная).
 func reconcileContestRoster(contest *domain.GeneratedContestStandings, group domain.GroupDefinition, students map[string]domain.Student) {
-	rowByStudent := make(map[string]domain.GeneratedRow, len(contest.Rows))
-	for _, row := range contest.Rows {
+	contest.Rows = reconcileRows(contest.Rows, len(contest.Tasks), group, students)
+	if contest.RowsFull != nil {
+		contest.RowsFull = reconcileRows(contest.RowsFull, len(contest.Tasks), group, students)
+	}
+}
+
+// reconcileRows — согласование одного набора строк с ростером. Легаси-строки
+// без student_id оставляем как есть — сопоставить их с учениками не по чему.
+func reconcileRows(current []domain.GeneratedRow, taskCount int, group domain.GroupDefinition, students map[string]domain.Student) []domain.GeneratedRow {
+	rowByStudent := make(map[string]domain.GeneratedRow, len(current))
+	for _, row := range current {
 		if strings.TrimSpace(row.StudentID) == "" {
-			return // легаси-формат без student_id
+			return current // легаси-формат без student_id
 		}
 		rowByStudent[row.StudentID] = row
 	}
@@ -272,7 +293,7 @@ func reconcileContestRoster(contest *domain.GeneratedContestStandings, group dom
 
 	// Существующие строки — в прежнем порядке (соответствует местам), без выбывших.
 	rows := make([]domain.GeneratedRow, 0, len(group.StudentIDs))
-	for _, row := range contest.Rows {
+	for _, row := range current {
 		if _, inRoster := roster[row.StudentID]; !inRoster {
 			continue
 		}
@@ -291,7 +312,7 @@ func reconcileContestRoster(contest *domain.GeneratedContestStandings, group dom
 		if student, ok := students[studentID]; ok && strings.TrimSpace(student.PublicName) != "" {
 			publicName = student.PublicName
 		}
-		statuses := make([]string, len(contest.Tasks))
+		statuses := make([]string, taskCount)
 		for i := range statuses {
 			statuses[i] = domain.TaskStatusNone
 		}
@@ -302,7 +323,7 @@ func reconcileContestRoster(contest *domain.GeneratedContestStandings, group dom
 		})
 	}
 
-	contest.Rows = rows
+	return rows
 }
 
 func mapContestsByID(contests []domain.GeneratedContestStandings) (map[string]domain.GeneratedContestStandings, error) {

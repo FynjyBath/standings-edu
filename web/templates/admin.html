@@ -46,7 +46,7 @@
 <section class="admin-block">
   <h2>Группы</h2>
   {{if .Groups}}
-  <ul class="admin-groups-list">
+  <ul class="admin-groups-grid">
     {{range .Groups}}
     <li>
       <a class="admin-btn" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>

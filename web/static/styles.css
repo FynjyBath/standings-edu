@@ -687,6 +687,46 @@ button.summary-link-btn {
   background: color-mix(in srgb, var(--surface) 88%, var(--surface-strong) 12%);
 }
 
+/* Список групп на главной админки: одна сетка на все строки, чтобы колонки
+   кнопок были выровнены между собой независимо от длины названий. */
+.admin-groups-grid {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) repeat(3, max-content);
+  gap: 0.5rem 0.9rem;
+  align-items: center;
+}
+
+.admin-groups-grid li {
+  display: contents;
+}
+
+.admin-groups-grid li span {
+  color: var(--muted);
+}
+
+.admin-groups-grid li .admin-btn {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.7rem;
+  justify-self: stretch;
+}
+
+@media (max-width: 700px) {
+  .admin-groups-grid {
+    display: block;
+  }
+
+  .admin-groups-grid li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin: 0.6rem 0;
+  }
+}
+
 .admin-groups-list li {
   display: flex;
   align-items: center;

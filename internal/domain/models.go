@@ -125,8 +125,11 @@ func NormalizeTableNames(names []string) TableNameList {
 }
 
 type Contest struct {
-	ID             string            `json:"id"`
-	Title          string            `json:"title"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// ShortName — краткое название для узких мест (колонка «только сумма» в
+	// сводной). Пусто — используется Title.
+	ShortName      string            `json:"short_name,omitempty"`
 	ScoreSystem    ScoreSystem       `json:"score_system"`
 	ContestType    string            `json:"source_type,omitempty"`
 	TableNames     TableNameList     `json:"table_name,omitempty"`
@@ -143,14 +146,18 @@ type Contest struct {
 	FreezeTime *time.Time `json:"-"`
 	// ZeroPenalty — штраф (в баллах) за каждую задачу без баллов: пустую или с
 	// нулём. Действует только при score_system=ioi; 0 — выключено.
-	ZeroPenalty int          `json:"zero_penalty,omitempty"`
-	Subcontests []Subcontest `json:"subcontests"`
+	ZeroPenalty int `json:"zero_penalty,omitempty"`
+	// SummaryTotalOnly — в сводной таблице показывать контест одной колонкой
+	// суммы (без детализации по задачам). Страница группы не меняется.
+	SummaryTotalOnly bool         `json:"summary_total_only,omitempty"`
+	Subcontests      []Subcontest `json:"subcontests"`
 }
 
 func (c *Contest) UnmarshalJSON(data []byte) error {
 	type rawContest struct {
 		ID             string            `json:"id"`
 		Title          string            `json:"title"`
+		ShortName      string            `json:"short_name,omitempty"`
 		ScoreSystem    *ScoreSystem      `json:"score_system"`
 		SourceType     *string           `json:"source_type,omitempty"`
 		ContestType    *string           `json:"contest_type,omitempty"` // legacy alias
@@ -161,6 +168,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		StartTime      *time.Time        `json:"start_time,omitempty"`
 		EndTime        *time.Time        `json:"end_time,omitempty"`
 		ZeroPenalty    int               `json:"zero_penalty,omitempty"`
+		SummaryTotal   bool              `json:"summary_total_only,omitempty"`
 		Subcontests    []Subcontest      `json:"subcontests"`
 	}
 
@@ -170,18 +178,20 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 	}
 
 	*c = Contest{
-		ID:             raw.ID,
-		Title:          raw.Title,
-		ContestType:    resolveSourceType(raw.SourceType, raw.ContestType),
-		TableNames:     raw.TableNames,
-		Provider:       raw.Provider,
-		ProviderConfig: raw.ProviderConfig,
-		Materials:      raw.Materials,
-		StartTime:      raw.StartTime,
-		EndTime:        raw.EndTime,
-		ZeroPenalty:    raw.ZeroPenalty,
-		Subcontests:    raw.Subcontests,
-		ScoreSystem:    ScoreSystemEdu,
+		ID:               raw.ID,
+		Title:            raw.Title,
+		ShortName:        raw.ShortName,
+		ContestType:      resolveSourceType(raw.SourceType, raw.ContestType),
+		TableNames:       raw.TableNames,
+		Provider:         raw.Provider,
+		ProviderConfig:   raw.ProviderConfig,
+		Materials:        raw.Materials,
+		StartTime:        raw.StartTime,
+		EndTime:          raw.EndTime,
+		ZeroPenalty:      raw.ZeroPenalty,
+		SummaryTotalOnly: raw.SummaryTotal,
+		Subcontests:      raw.Subcontests,
+		ScoreSystem:      ScoreSystemEdu,
 	}
 	if raw.ScoreSystem != nil {
 		c.ScoreSystem = raw.ScoreSystem.Normalized()
@@ -473,6 +483,10 @@ type GeneratedContestStandings struct {
 	EndTime   *time.Time `json:"end_time,omitempty"`
 	// ZeroPenalty — применённый при сборке штраф за задачу без баллов (ioi).
 	ZeroPenalty int `json:"zero_penalty,omitempty"`
+	// SummaryTotalOnly — в сводной показывать одной колонкой суммы.
+	SummaryTotalOnly bool `json:"summary_total_only,omitempty"`
+	// ShortName — краткое название (для колонки «только сумма» в сводной).
+	ShortName string `json:"short_name,omitempty"`
 	// FrozenAt — таблица заморожена: в неё вошли только посылки до этого момента.
 	// nil — таблица полная.
 	FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
@@ -486,22 +500,24 @@ type GeneratedContestStandings struct {
 
 func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 	type rawGeneratedContest struct {
-		ID          string                `json:"id"`
-		Title       string                `json:"title"`
-		ScoreSystem *ScoreSystem          `json:"score_system"`
-		SourceType  *string               `json:"source_type,omitempty"`
-		ContestType *string               `json:"contest_type,omitempty"` // legacy alias
-		TableNames  TableNameList         `json:"table_name,omitempty"`
-		Materials   []ContestMaterial     `json:"materials,omitempty"`
-		GeneratedAt *time.Time            `json:"generated_at,omitempty"`
-		StartTime   *time.Time            `json:"start_time,omitempty"`
-		EndTime     *time.Time            `json:"end_time,omitempty"`
-		ZeroPenalty int                   `json:"zero_penalty,omitempty"`
-		FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
-		Subcontests []GeneratedSubcontest `json:"subcontests"`
-		Tasks       []GeneratedTask       `json:"tasks"`
-		Rows        []GeneratedRow        `json:"rows"`
-		RowsFull    []GeneratedRow        `json:"rows_full,omitempty"`
+		ID           string                `json:"id"`
+		Title        string                `json:"title"`
+		ScoreSystem  *ScoreSystem          `json:"score_system"`
+		SourceType   *string               `json:"source_type,omitempty"`
+		ContestType  *string               `json:"contest_type,omitempty"` // legacy alias
+		TableNames   TableNameList         `json:"table_name,omitempty"`
+		Materials    []ContestMaterial     `json:"materials,omitempty"`
+		GeneratedAt  *time.Time            `json:"generated_at,omitempty"`
+		StartTime    *time.Time            `json:"start_time,omitempty"`
+		EndTime      *time.Time            `json:"end_time,omitempty"`
+		ZeroPenalty  int                   `json:"zero_penalty,omitempty"`
+		SummaryTotal bool                  `json:"summary_total_only,omitempty"`
+		ShortName    string                `json:"short_name,omitempty"`
+		FrozenAt     *time.Time            `json:"frozen_at,omitempty"`
+		Subcontests  []GeneratedSubcontest `json:"subcontests"`
+		Tasks        []GeneratedTask       `json:"tasks"`
+		Rows         []GeneratedRow        `json:"rows"`
+		RowsFull     []GeneratedRow        `json:"rows_full,omitempty"`
 	}
 
 	var raw rawGeneratedContest
@@ -510,21 +526,23 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 	}
 
 	*c = GeneratedContestStandings{
-		ID:          raw.ID,
-		Title:       raw.Title,
-		ContestType: resolveSourceType(raw.SourceType, raw.ContestType),
-		TableNames:  raw.TableNames,
-		Materials:   raw.Materials,
-		GeneratedAt: raw.GeneratedAt,
-		StartTime:   raw.StartTime,
-		EndTime:     raw.EndTime,
-		ZeroPenalty: raw.ZeroPenalty,
-		FrozenAt:    raw.FrozenAt,
-		Subcontests: raw.Subcontests,
-		Tasks:       raw.Tasks,
-		Rows:        raw.Rows,
-		RowsFull:    raw.RowsFull,
-		ScoreSystem: ScoreSystemEdu,
+		ID:               raw.ID,
+		Title:            raw.Title,
+		ContestType:      resolveSourceType(raw.SourceType, raw.ContestType),
+		TableNames:       raw.TableNames,
+		Materials:        raw.Materials,
+		GeneratedAt:      raw.GeneratedAt,
+		StartTime:        raw.StartTime,
+		EndTime:          raw.EndTime,
+		ZeroPenalty:      raw.ZeroPenalty,
+		SummaryTotalOnly: raw.SummaryTotal,
+		ShortName:        raw.ShortName,
+		FrozenAt:         raw.FrozenAt,
+		Subcontests:      raw.Subcontests,
+		Tasks:            raw.Tasks,
+		Rows:             raw.Rows,
+		RowsFull:         raw.RowsFull,
+		ScoreSystem:      ScoreSystemEdu,
 	}
 	if raw.ScoreSystem != nil {
 		c.ScoreSystem = raw.ScoreSystem.Normalized()

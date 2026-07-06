@@ -498,15 +498,22 @@ func TestAdminContestSaveAndDelete(t *testing.T) {
 		t.Fatalf("expected bad start_time rejection, got code=%d", code)
 	}
 
-	// zero_penalty сохраняется в контест; отрицательный — отказ.
+	// zero_penalty, summary_total_only и short_name сохраняются в контест;
+	// отрицательный штраф — отказ.
 	code, _ = postJSON(t, h.AdminContestSave,
-		`{"original_id":"c1","id":"c1","title":"К1","score_system":"ioi","source_type":"tasks","zero_penalty":5,"subcontests":[]}`)
+		`{"original_id":"c1","id":"c1","title":"К1","short_name":"Ол-1","score_system":"ioi","source_type":"tasks","zero_penalty":5,"summary_total_only":true,"subcontests":[]}`)
 	if code != http.StatusOK {
 		t.Fatalf("contest save with zero_penalty failed: code=%d", code)
 	}
 	contestsBody, _ := os.ReadFile(filepath.Join(dataDir, "contests.json"))
 	if !strings.Contains(string(contestsBody), `"zero_penalty": 5`) && !strings.Contains(string(contestsBody), `"zero_penalty":5`) {
 		t.Fatalf("zero_penalty not saved: %s", contestsBody)
+	}
+	if !strings.Contains(string(contestsBody), `"summary_total_only": true`) && !strings.Contains(string(contestsBody), `"summary_total_only":true`) {
+		t.Fatalf("summary_total_only not saved: %s", contestsBody)
+	}
+	if !strings.Contains(string(contestsBody), `"short_name": "Ол-1"`) && !strings.Contains(string(contestsBody), `"short_name":"Ол-1"`) {
+		t.Fatalf("short_name not saved: %s", contestsBody)
 	}
 	code, _ = postJSON(t, h.AdminContestSave,
 		`{"id":"c9","score_system":"ioi","source_type":"tasks","zero_penalty":-3,"subcontests":[]}`)

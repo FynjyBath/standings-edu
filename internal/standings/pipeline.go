@@ -144,6 +144,8 @@ func refreshContestMetadata(standings *domain.GeneratedGroupStandings, data *dom
 		// окно целиком показывается в шапке таблицы.
 		standings.Contests[i].StartTime = meta.StartTime
 		standings.Contests[i].EndTime = meta.EndTime
+		standings.Contests[i].SummaryTotalOnly = meta.SummaryTotalOnly
+		standings.Contests[i].ShortName = strings.TrimSpace(meta.ShortName)
 	}
 }
 

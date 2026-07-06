@@ -1047,16 +1047,18 @@ func (h *Handlers) AdminContestsPage(w http.ResponseWriter, _ *http.Request) {
 }
 
 type adminContestSaveRequest struct {
-	OriginalID  string `json:"original_id"`
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	ScoreSystem string `json:"score_system"`
-	SourceType  string `json:"source_type"`
-	TableName   string `json:"table_name"`
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	ZeroPenalty int    `json:"zero_penalty"`
-	Materials   []struct {
+	OriginalID       string `json:"original_id"`
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	ShortName        string `json:"short_name"`
+	ScoreSystem      string `json:"score_system"`
+	SourceType       string `json:"source_type"`
+	TableName        string `json:"table_name"`
+	StartTime        string `json:"start_time"`
+	EndTime          string `json:"end_time"`
+	ZeroPenalty      int    `json:"zero_penalty"`
+	SummaryTotalOnly bool   `json:"summary_total_only"`
+	Materials        []struct {
 		Title string `json:"title"`
 		URL   string `json:"url"`
 	} `json:"materials"`
@@ -1080,11 +1082,13 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 		return domain.Contest{}, errors.New("zero_penalty: ожидается неотрицательное число")
 	}
 	contest := domain.Contest{
-		ID:          id,
-		Title:       strings.TrimSpace(req.Title),
-		ScoreSystem: domain.ScoreSystem(req.ScoreSystem).Normalized(),
-		TableNames:  domain.NormalizeTableNames(parseTableNameField(req.TableName)),
-		ZeroPenalty: req.ZeroPenalty,
+		ID:               id,
+		Title:            strings.TrimSpace(req.Title),
+		ShortName:        strings.TrimSpace(req.ShortName),
+		ScoreSystem:      domain.ScoreSystem(req.ScoreSystem).Normalized(),
+		TableNames:       domain.NormalizeTableNames(parseTableNameField(req.TableName)),
+		ZeroPenalty:      req.ZeroPenalty,
+		SummaryTotalOnly: req.SummaryTotalOnly,
 	}
 
 	materials := make([]domain.ContestMaterial, 0, len(req.Materials))

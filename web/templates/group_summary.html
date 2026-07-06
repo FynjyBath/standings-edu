@@ -171,13 +171,33 @@
       contests.forEach(function (contest) {
         var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
         if (tasks.length === 0) return;
+        var contestTitle = contest.title || contest.id || "Контест";
+        if (contest.frozen_at) contestTitle += " ❄ (заморожено)";
+
+        // Контест «только сумма»: одна колонка на все три ряда шапки.
+        // Заголовок — краткое название, если оно задано; полное — в тултипе.
+        if (contest.summary_total_only) {
+          totalTaskCount += 1;
+          var single = document.createElement("th");
+          single.className = "subcontest-head";
+          single.rowSpan = 3;
+          if (contest.short_name) {
+            var shortTitle = contest.short_name;
+            if (contest.frozen_at) shortTitle += " ❄";
+            single.textContent = shortTitle;
+            single.title = contestTitle;
+          } else {
+            single.textContent = contestTitle;
+          }
+          trTop.appendChild(single);
+          return;
+        }
+
         totalTaskCount += tasks.length;
 
         var top = document.createElement("th");
         top.className = "subcontest-head";
         top.colSpan = tasks.length;
-        var contestTitle = contest.title || contest.id || "Контест";
-        if (contest.frozen_at) contestTitle += " ❄ (заморожено)";
         top.textContent = contestTitle;
         trTop.appendChild(top);
 
@@ -234,8 +254,25 @@
 
         contests.forEach(function (contest, contestIdx) {
           var tasks = Array.isArray(contest.tasks) ? contest.tasks : [];
+          if (tasks.length === 0) return;
           var row = contestRowMaps[contestIdx].get(student.student_id) || null;
           var isIoi = String(contest.score_system || "edu").toLowerCase() === "ioi";
+
+          // Контест «только сумма»: одна ячейка — баллы (ioi) или плюсы (edu).
+          if (contest.summary_total_only) {
+            var totalTd = document.createElement("td");
+            totalTd.className = "solved-count";
+            if (!row) {
+              totalTd.textContent = "";
+            } else if (isIoi) {
+              totalTd.textContent = (typeof row.total_score === "number") ? String(row.total_score) : "";
+            } else {
+              totalTd.textContent = (typeof row.solved_count === "number") ? String(row.solved_count) : "";
+            }
+            cells.push(totalTd);
+            return;
+          }
+
           for (var i = 0; i < tasks.length; i++) {
             var status = "none";
             if (row && Array.isArray(row.statuses) && i < row.statuses.length && row.statuses[i]) {

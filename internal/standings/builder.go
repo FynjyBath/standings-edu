@@ -591,17 +591,19 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	}
 
 	out := domain.GeneratedContestStandings{
-		ID:          contest.ID,
-		Title:       contest.Title,
-		ScoreSystem: contest.ScoreSystem.Normalized(),
-		ContestType: domain.ContestTypeTasks,
-		TableNames:  contest.TableNames,
-		Materials:   domain.NormalizeContestMaterials(contest.Materials),
-		StartTime:   contest.StartTime,
-		EndTime:     contest.EndTime,
-		Subcontests: make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
-		Tasks:       make([]domain.GeneratedTask, 0),
-		Rows:        make([]domain.GeneratedRow, 0, len(students)),
+		ID:               contest.ID,
+		Title:            contest.Title,
+		ScoreSystem:      contest.ScoreSystem.Normalized(),
+		ContestType:      domain.ContestTypeTasks,
+		TableNames:       contest.TableNames,
+		Materials:        domain.NormalizeContestMaterials(contest.Materials),
+		StartTime:        contest.StartTime,
+		EndTime:          contest.EndTime,
+		SummaryTotalOnly: contest.SummaryTotalOnly,
+		ShortName:        strings.TrimSpace(contest.ShortName),
+		Subcontests:      make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
+		Tasks:            make([]domain.GeneratedTask, 0),
+		Rows:             make([]domain.GeneratedRow, 0, len(students)),
 	}
 	if frozen {
 		out.FrozenAt = contest.FreezeTime

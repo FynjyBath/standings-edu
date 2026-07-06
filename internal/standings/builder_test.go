@@ -156,7 +156,8 @@ func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
 	score := func(v int) *int { return &v }
 	contest := domain.Contest{
 		ID: "c", Title: "К", ScoreSystem: domain.ScoreSystemIOI, ZeroPenalty: 5,
-		StartTime: &start, EndTime: &end,
+		SummaryTotalOnly: true,
+		StartTime:        &start, EndTime: &end,
 		Subcontests: []domain.Subcontest{{Title: "S", Tasks: []string{
 			"https://informatics.msk.ru/mod/statements/view.php?chapterid=1", // 100 в окне
 			"https://informatics.msk.ru/mod/statements/view.php?chapterid=2", // только дорешка 70
@@ -185,6 +186,9 @@ func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
 
 	if out.ZeroPenalty != 5 {
 		t.Fatalf("contest zero_penalty not stored: %+v", out.ZeroPenalty)
+	}
+	if !out.SummaryTotalOnly {
+		t.Fatal("summary_total_only not carried into generated contest")
 	}
 	row := out.Rows[0]
 	wantMain := []*int{score(100), nil, score(50), nil}

@@ -5,6 +5,7 @@
   <div class="admin-form-grid">
     <label><span>id *</span><input type="text" id="c-id" placeholder="contest_basics" /></label>
     <label><span>Название</span><input type="text" id="c-title" placeholder="Базовые задачи" /></label>
+    <label><span>Краткое название (для колонки «только сумма», опц.)</span><input type="text" id="c-shortname" placeholder="Ол-1" /></label>
     <label><span>score_system</span>
       <select id="c-score"><option value="edu">edu (плюсы)</option><option value="ioi">ioi (баллы)</option></select>
     </label>
@@ -13,6 +14,10 @@
     </label>
     <label><span>table_name (вкладки, через запятую)</span><input type="text" id="c-tablename" placeholder="Тематические" /></label>
     <label><span>Штраф за ноль (баллы; только ioi, опц.)</span><input type="number" id="c-zeropenalty" min="0" step="1" placeholder="0" title="Вычитается из суммы за каждую задачу без баллов (пустую или с нулём)." /></label>
+    <label style="flex-direction:row;align-items:center;gap:0.5rem;">
+      <input type="checkbox" id="c-summarytotal" style="width:auto;" />
+      <span title="В сводной таблице контест займёт одну колонку с суммой (баллы или плюсы) вместо колонок по задачам. На странице группы детализация остаётся.">В сводной — только сумма (без задач)</span>
+    </label>
   </div>
 
   <div style="margin-top:0.7rem;"><strong>Материалы</strong>
@@ -100,8 +105,8 @@
     $("c-add-sub").addEventListener("click", function () { addSub("", []); });
 
     function reset() {
-      $("c-original-id").value = ""; $("c-id").value = ""; $("c-title").value = "";
-      $("c-score").value = "edu"; $("c-source").value = "tasks"; $("c-tablename").value = ""; $("c-zeropenalty").value = "";
+      $("c-original-id").value = ""; $("c-id").value = ""; $("c-title").value = ""; $("c-shortname").value = "";
+      $("c-score").value = "edu"; $("c-source").value = "tasks"; $("c-tablename").value = ""; $("c-zeropenalty").value = ""; $("c-summarytotal").checked = false;
       $("c-start").value = ""; $("c-end").value = ""; $("c-provider").value = "codeforces_contest"; $("c-provider-config").value = "";
       $("c-materials").innerHTML = ""; $("c-subcontests").innerHTML = ""; addSub("", []);
       $("contest-form-title").textContent = "Новый контест"; toggleSections();
@@ -109,11 +114,12 @@
 
     function fill(c) {
       reset();
-      $("c-original-id").value = c.id; $("c-id").value = c.id; $("c-title").value = c.title || "";
+      $("c-original-id").value = c.id; $("c-id").value = c.id; $("c-title").value = c.title || ""; $("c-shortname").value = c.short_name || "";
       $("c-score").value = (c.score_system || "edu");
       $("c-source").value = (c.source_type === "provider") ? "provider" : "tasks";
       $("c-tablename").value = (c.table_name || []).join(", ");
       $("c-zeropenalty").value = c.zero_penalty ? String(c.zero_penalty) : "";
+      $("c-summarytotal").checked = !!c.summary_total_only;
       $("c-materials").innerHTML = ""; (c.materials || []).forEach(function (m) { addMaterial(m.title, m.url); });
       if (c.source_type === "provider") {
         $("c-provider").value = c.provider || "codeforces_contest";
@@ -137,9 +143,11 @@
       });
       var body = {
         original_id: $("c-original-id").value, id: $("c-id").value, title: $("c-title").value,
+        short_name: $("c-shortname").value,
         score_system: $("c-score").value, source_type: $("c-source").value,
         table_name: $("c-tablename").value, materials: materials,
-        zero_penalty: parseInt($("c-zeropenalty").value, 10) || 0
+        zero_penalty: parseInt($("c-zeropenalty").value, 10) || 0,
+        summary_total_only: $("c-summarytotal").checked
       };
       if ($("c-source").value === "provider") {
         body.provider = $("c-provider").value; body.provider_config = $("c-provider-config").value;

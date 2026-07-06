@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -710,5 +712,43 @@ func TestAdminGroupMemberRemove(t *testing.T) {
 	body, _ := os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
 	if strings.Contains(string(body), "s1") || !strings.Contains(string(body), "s2") {
 		t.Fatalf("unexpected group.json after removal: %s", body)
+	}
+}
+
+// SerializeDataWrite защищает от потери записи при конкурентных админ-операциях:
+// N параллельных добавлений разных учеников — все N должны оказаться в файле
+// (без мьютекса read-modify-write students.json терял бы обновления).
+func TestSerializeDataWriteNoLostUpdate(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	writeTestFile(t, filepath.Join(dataDir, "students.json"), `[]`)
+
+	handler := h.SerializeDataWrite(h.AdminStudentSave)
+	const n = 40
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			body := fmt.Sprintf(`{"full_name":"Ученик Номер %d","accounts":[]}`, i)
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+			rec := httptest.NewRecorder()
+			handler(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("save %d: code=%d", i, rec.Code)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	body, err := os.ReadFile(filepath.Join(dataDir, "students.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var students []map[string]any
+	if err := json.Unmarshal(body, &students); err != nil {
+		t.Fatalf("students.json corrupted: %v", err)
+	}
+	if len(students) != n {
+		t.Fatalf("lost updates: got %d students, want %d", len(students), n)
 	}
 }

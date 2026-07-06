@@ -611,6 +611,40 @@ func (s *GeneratedGroupStandings) StripFullRows() {
 	s.GradesFull = nil
 }
 
+// CloneForServe возвращает копию, которую безопасно отдавать из кэша: серверные
+// пер-запросные преобразования представления мутируют её, не задевая исходник.
+// Эти преобразования (StripFullRows/SwapInFullRows и скрытие ссылок до старта
+// контеста) переприсваивают срез Contests и его элементы, а также правят URL
+// внутри Tasks/Subcontests — поэтому копируются заголовок структуры, срез
+// Contests и Tasks/Subcontests каждого контеста. Тяжёлые Rows/RowsFull и Grades
+// разделяются с исходником: в этих преобразованиях их содержимое не меняется
+// (только переприсваиваются заголовки/указатели у копии).
+func (s GeneratedGroupStandings) CloneForServe() GeneratedGroupStandings {
+	out := s
+	if s.Contests == nil {
+		return out
+	}
+	out.Contests = make([]GeneratedContestStandings, len(s.Contests))
+	for i, c := range s.Contests {
+		cc := c
+		if c.Tasks != nil {
+			cc.Tasks = append([]GeneratedTask(nil), c.Tasks...)
+		}
+		if c.Subcontests != nil {
+			cc.Subcontests = make([]GeneratedSubcontest, len(c.Subcontests))
+			for j, sub := range c.Subcontests {
+				ssub := sub
+				if sub.Tasks != nil {
+					ssub.Tasks = append([]GeneratedTask(nil), sub.Tasks...)
+				}
+				cc.Subcontests[j] = ssub
+			}
+		}
+		out.Contests[i] = cc
+	}
+	return out
+}
+
 // GeneratedGrades — готовая таблица оценок (считается в generate, рендерится сервером).
 type GeneratedGrades struct {
 	Title   string                 `json:"title,omitempty"`

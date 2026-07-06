@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"standings-edu/internal/domain"
@@ -36,6 +37,20 @@ type Handlers struct {
 	admin       *adminState
 	intakeToken string
 	dataDir     string
+	// dataMu сериализует read-modify-write админ-операций над data-файлами
+	// (students.json, group.json, contests.json группы, grades_manual, intake
+	// merge), чтобы два одновременных запроса не потеряли запись друг друга.
+	dataMu sync.Mutex
+}
+
+// SerializeDataWrite оборачивает мутирующий data-файлы админ-хендлер общим
+// мьютексом. Все такие операции выполняются строго по одной.
+func (h *Handlers) SerializeDataWrite(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.dataMu.Lock()
+		defer h.dataMu.Unlock()
+		next(w, r)
+	}
 }
 
 // ConfigureIntakeToken задаёт секретный токен для POST /api/rpc. Пустой токен —

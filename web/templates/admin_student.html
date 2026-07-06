@@ -36,7 +36,7 @@
   <h2>Аккаунты и сайты</h2>
   {{if $p.Sites}}
   <div class="table-wrap">
-    <table class="standings-table">
+    <table class="standings-table data-table">
       <thead><tr><th>Сайт</th><th class="count-col">Решено</th><th class="count-col">Не решено (попытки)</th><th class="count-col">Посылок</th></tr></thead>
       <tbody>
         {{range $p.Sites}}
@@ -62,7 +62,7 @@
   <h2>Позиции в группах</h2>
   {{if $p.Groups}}
   <div class="table-wrap">
-    <table class="standings-table">
+    <table class="standings-table data-table">
       <thead><tr><th>Группа</th><th class="count-col">Решено (доска почёта)</th><th class="count-col">Место</th><th class="count-col">Оценка</th><th class="count-col">Место по оценке</th></tr></thead>
       <tbody>
         {{range $p.Groups}}
@@ -100,7 +100,7 @@
   <h2>Последние посылки</h2>
   {{if $p.Recent}}
   <div class="table-wrap">
-    <table class="standings-table">
+    <table class="standings-table data-table">
       <thead><tr><th>Время (MSK)</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
       <tbody>
         {{range $p.Recent}}

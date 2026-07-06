@@ -518,6 +518,30 @@ button.summary-link-btn {
   font-weight: 700;
 }
 
+/* data-table — списки/записи (админка, профиль участника): текст слева, числа
+   по центру, ширина по контенту (не растягивается, нет липкой первой колонки).
+   В отличие от матричных таблиц standings/сводной, где всё по центру. */
+.standings-table.data-table {
+  width: auto;
+  min-width: 0;
+}
+
+.standings-table.data-table th,
+.standings-table.data-table td {
+  text-align: left;
+}
+
+.standings-table.data-table .count-col,
+.standings-table.data-table .solved-count {
+  text-align: center;
+}
+
+.standings-table.data-table .student-col,
+.standings-table.data-table .student-name {
+  position: static;
+  min-width: 0;
+}
+
 .provider-status-cell {
   min-width: 140px;
   text-align: left !important;
@@ -753,6 +777,11 @@ button.summary-link-btn {
   margin-left: auto;
   min-height: 1.9rem;
   padding: 0.3rem 0.7rem;
+}
+
+/* Несколько кнопок в строке: вправо уходит только первая, остальные — вплотную. */
+.admin-groups-list li .admin-btn + .admin-btn {
+  margin-left: 0;
 }
 
 .admin-form-grid {

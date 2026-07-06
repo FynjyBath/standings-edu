@@ -3,7 +3,7 @@
 <section class="page-head">
   <h1>Профиль: {{if $p.PublicName}}{{$p.PublicName}}{{else}}{{.StudentID}}{{end}} <span class="grade-weight">{{.StudentID}}</span></h1>
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/admin/students">← Ученики</a>
+    <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
   </p>
   {{if .NotGenerated}}
   <p class="empty-hint">Профиль ещё не сгенерирован. Он появится после ближайшей генерации таблиц (кнопка «Сгенерировать» в админке).</p>
@@ -67,7 +67,7 @@
       <tbody>
         {{range $p.Groups}}
         <tr>
-          <td><a href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a></td>
+          <td>{{if $.TokenView}}{{.Title}}{{else}}<a href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>{{end}}</td>
           <td class="solved-count">{{.SolvedCount}}</td>
           <td class="solved-count">{{if .HonorTotal}}{{.HonorPlace}} из {{.HonorTotal}}{{else}}—{{end}}</td>
           <td class="solved-count">{{if .Grade}}{{gradeText .Grade}}{{else}}—{{end}}</td>

@@ -196,6 +196,82 @@ func AddStudentsToGroups(dataDir string, mergedStudents []domain.Student, intake
 	return nil
 }
 
+// MergePreviewGroup — привязка ученика к группе в превью merge.
+type MergePreviewGroup struct {
+	Slug          string `json:"slug"`
+	AlreadyMember bool   `json:"already_member"`
+}
+
+// MergePreviewStudent — одна анкета в превью: во что она разрешается.
+type MergePreviewStudent struct {
+	FullName string              `json:"full_name"`
+	FinalID  string              `json:"final_id"`
+	IsNew    bool                `json:"is_new"`
+	Accounts []domain.Account    `json:"accounts,omitempty"`
+	Groups   []MergePreviewGroup `json:"groups,omitempty"`
+}
+
+// MergePreview — результат пробного merge (dry-run): что и куда будет привязано,
+// без записи на диск.
+type MergePreview struct {
+	Added    int                   `json:"added"`
+	Updated  int                   `json:"updated"`
+	Students []MergePreviewStudent `json:"students"`
+}
+
+// BuildMergePreview считает пробный merge: для каждой анкеты — финальный ID,
+// новый ли это ученик, и в какие группы он попадёт (и не состоит ли уже).
+// Ничего не пишет.
+func BuildMergePreview(dataDir string, existing, intake []domain.Student) (MergePreview, error) {
+	result := domain.NormalizeStudents(existing)
+	preview := MergePreview{Students: make([]MergePreviewStudent, 0, len(intake))}
+
+	// Текущее (и накопленное в рамках превью) членство групп.
+	memberOf := make(map[string]map[string]struct{})
+	members := func(slug string) map[string]struct{} {
+		if m, ok := memberOf[slug]; ok {
+			return m
+		}
+		m := make(map[string]struct{})
+		if gf, err := readGroupFile(filepath.Join(dataDir, "groups", slug, "group.json")); err == nil {
+			for _, id := range domain.NormalizeGroups(gf.StudentIDs) {
+				m[id] = struct{}{}
+			}
+		}
+		memberOf[slug] = m
+		return m
+	}
+
+	for i, incoming := range intake {
+		var saved domain.Student
+		var updated bool
+		var err error
+		result, saved, updated, err = mergeStudent(result, incoming)
+		if err != nil {
+			return MergePreview{}, fmt.Errorf("intake item #%d: %w", i, err)
+		}
+		if updated {
+			preview.Updated++
+		} else {
+			preview.Added++
+		}
+
+		norm := domain.NormalizeStudent(incoming)
+		ps := MergePreviewStudent{FullName: saved.FullName, FinalID: saved.ID, IsNew: !updated, Accounts: norm.Accounts}
+		for _, slug := range norm.Groups {
+			if !domain.IsValidSlug(slug) {
+				return MergePreview{}, fmt.Errorf("intake item #%d (%q): invalid group slug %q", i, saved.FullName, slug)
+			}
+			set := members(slug)
+			_, already := set[saved.ID]
+			ps.Groups = append(ps.Groups, MergePreviewGroup{Slug: slug, AlreadyMember: already})
+			set[saved.ID] = struct{}{}
+		}
+		preview.Students = append(preview.Students, ps)
+	}
+	return preview, nil
+}
+
 func MergeStudents(existing []domain.Student, intake []domain.Student) ([]domain.Student, MergeStats, error) {
 	result := domain.NormalizeStudents(existing)
 	stats := MergeStats{}
@@ -230,15 +306,28 @@ func LoadIntakeFile(path string) ([]domain.Student, error) {
 	if err := fileutil.ReadJSON(path, &items); err != nil {
 		return nil, err
 	}
+	return parseIntakeItems(items)
+}
 
+// ParseIntakeBytes разбирает intake из сырого JSON (для превью merge из
+// содержимого редактора, ещё не сохранённого на диск).
+func ParseIntakeBytes(body []byte) ([]domain.Student, error) {
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(body, &items); err != nil {
+		return nil, fmt.Errorf("decode intake: %w", err)
+	}
+	return parseIntakeItems(items)
+}
+
+func parseIntakeItems(items []map[string]json.RawMessage) ([]domain.Student, error) {
 	out := make([]domain.Student, 0, len(items))
 	for i, item := range items {
 		student, decodeErr := decodeIntakeItem(item)
 		if decodeErr != nil {
-			return nil, fmt.Errorf("decode intake item #%d in %q: %w", i, path, decodeErr)
+			return nil, fmt.Errorf("decode intake item #%d: %w", i, decodeErr)
 		}
 		if student.FullName == "" {
-			return nil, fmt.Errorf("intake item #%d in %q has empty full_name", i, path)
+			return nil, fmt.Errorf("intake item #%d has empty full_name", i)
 		}
 		out = append(out, student)
 	}

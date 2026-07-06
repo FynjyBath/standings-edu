@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -249,18 +250,119 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	unfrozen := h.applyFreezeView(&standings, slug, r)
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	tokenValid := token != "" && h.groupTokenValid(slug, token)
 	page := GroupPageData{
 		PageTitle:    standings.GroupTitle,
 		Standings:    standings,
 		Footer:       h.buildFooterInfo(),
 		UnfrozenView: unfrozen,
+		TokenValid:   tokenValid,
 	}
-	if unfrozen {
-		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
+	if tokenValid {
+		page.Token = token
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_standings.html", page); err != nil {
 		h.logger.Printf("ERROR render group standings slug=%s err=%v", slug, err)
 	}
+}
+
+// GroupParticipantsPage — статистика участников группы по токену жюри.
+func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if !domain.IsValidSlug(slug) || !h.groupTokenValid(slug, token) {
+		http.NotFound(w, r)
+		return
+	}
+	gf, ok := h.readSourceGroupFile(slug)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	title := strings.TrimSpace(gf.Title)
+	if title == "" {
+		title = slug
+	}
+
+	rows := make([]ParticipantRow, 0, len(gf.StudentIDs))
+	for _, id := range domain.NormalizeGroups(gf.StudentIDs) {
+		row := ParticipantRow{StudentID: id, PublicName: id}
+		if profile, err := h.loader.LoadStudentProfile(id); err == nil {
+			row.HasProfile = true
+			if profile.PublicName != "" {
+				row.PublicName = profile.PublicName
+			}
+			row.Stats = profile.Stats
+		}
+		rows = append(rows, row)
+	}
+
+	page := GroupParticipantsPageData{
+		PageTitle:  title + " — участники",
+		Footer:     h.buildFooterInfo(),
+		GroupSlug:  slug,
+		GroupTitle: title,
+		Token:      token,
+		Rows:       rows,
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "group_participants.html", page); err != nil {
+		h.logger.Printf("ERROR render group participants slug=%s err=%v", slug, err)
+	}
+}
+
+// GroupStudentProfilePage — профиль участника по токену группы (только член группы,
+// в позициях показывается только эта группа).
+func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if !domain.IsValidSlug(slug) || !h.groupTokenValid(slug, token) || !domain.IsValidSlug(id) {
+		http.NotFound(w, r)
+		return
+	}
+	gf, ok := h.readSourceGroupFile(slug)
+	if !ok || !groupHasStudent(gf, id) {
+		http.NotFound(w, r)
+		return
+	}
+
+	page := AdminStudentProfilePageData{
+		Footer:    h.buildFooterInfo(),
+		StudentID: id,
+		BackURL:   "/standings/" + slug + "/participants?token=" + url.QueryEscape(token),
+		BackLabel: "← Участники",
+		TokenView: true,
+	}
+	h.fillStudentProfilePage(&page, id, &slug)
+	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
+		h.logger.Printf("ERROR render group student profile slug=%s id=%s err=%v", slug, id, err)
+	}
+}
+
+// readSourceGroupFile читает data/groups/<slug>/group.json (исходник, для состава).
+func (h *Handlers) readSourceGroupFile(slug string) (domain.GroupFile, bool) {
+	if h.dataDir == "" || !domain.IsValidSlug(slug) {
+		return domain.GroupFile{}, false
+	}
+	body, err := os.ReadFile(filepath.Join(h.dataDir, "groups", slug, "group.json"))
+	if err != nil {
+		return domain.GroupFile{}, false
+	}
+	var gf domain.GroupFile
+	if err := json.Unmarshal(body, &gf); err != nil {
+		return domain.GroupFile{}, false
+	}
+	return gf, true
+}
+
+func groupHasStudent(gf domain.GroupFile, id string) bool {
+	for _, sid := range gf.StudentIDs {
+		if strings.TrimSpace(sid) == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
@@ -420,6 +522,25 @@ type GroupPageData struct {
 	// замороженных таблиц. Token протаскивается в ссылки страницы.
 	UnfrozenView bool
 	Token        string
+	// TokenValid — токен группы верный: доступна статистика участников (даже
+	// если замороженных таблиц нет и UnfrozenView=false).
+	TokenValid bool
+}
+
+type ParticipantRow struct {
+	StudentID  string
+	PublicName string
+	HasProfile bool
+	Stats      domain.StudentActivityStats
+}
+
+type GroupParticipantsPageData struct {
+	PageTitle  string
+	Footer     FooterInfo
+	GroupSlug  string
+	GroupTitle string
+	Token      string
+	Rows       []ParticipantRow
 }
 
 type GroupGradesPageData struct {

@@ -75,10 +75,12 @@
     </label>
     <button type="button" id="admin-file-validate" class="admin-btn admin-btn--secondary">Проверить JSON</button>
     <button type="button" id="admin-file-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="admin-intake-dryrun" class="admin-btn admin-btn--secondary" style="display:none" aria-hidden="true">Пробный запуск (что куда)</button>
     <button type="button" id="admin-intake-merge-confirm" class="admin-btn" style="display:none" aria-hidden="true">Сохранить и сделать merge intake</button>
   </div>
   <div id="admin-editor" class="admin-editor" aria-label="JSON editor"></div>
   <p id="admin-editor-status" class="admin-editor-status">Выберите файл для редактирования.</p>
+  <div id="admin-intake-preview" style="display:none;margin-top:0.8rem;"></div>
 </section>
 
 <section class="admin-block">
@@ -203,15 +205,68 @@
       }
     }
 
+    var intakeDryRunButton = document.getElementById("admin-intake-dryrun");
+    var intakePreviewNode = document.getElementById("admin-intake-preview");
+
     function updateIntakeMergeActionVisibility() {
       var visible = (activePath === intakeStagingPath);
       intakeMergeConfirmButton.style.display = visible ? "inline-flex" : "none";
       intakeMergeConfirmButton.setAttribute("aria-hidden", visible ? "false" : "true");
+      if (intakeDryRunButton) {
+        intakeDryRunButton.style.display = visible ? "inline-flex" : "none";
+        intakeDryRunButton.setAttribute("aria-hidden", visible ? "false" : "true");
+      }
+      if (!visible && intakePreviewNode) {
+        intakePreviewNode.style.display = "none";
+        intakePreviewNode.innerHTML = "";
+      }
       if (visible) {
         ensureStagingSelectOption();
       } else {
         removeStagingSelectOption();
       }
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
+
+    function renderMergePreview(preview) {
+      if (!intakePreviewNode) return;
+      var rows = (preview.students || []).map(function (st) {
+        var groups = (st.groups || []).map(function (g) {
+          return "<code>" + escapeHtml(g.slug) + "</code>" + (g.already_member ? " <span class=\"grade-weight\">(уже в группе)</span>" : " <span style=\"color:var(--solved-text);font-weight:700;\">+ добавится</span>");
+        }).join(", ") || "<span class=\"grade-weight\">— без групп</span>";
+        var accounts = (st.accounts || []).map(function (a) {
+          return "<code>" + escapeHtml(a.site) + ":" + escapeHtml(a.account_id) + "</code>";
+        }).join(" ");
+        return "<tr><td>" + escapeHtml(st.full_name) + "</td>" +
+          "<td><code>" + escapeHtml(st.final_id) + "</code> " + (st.is_new ? "<span style=\"color:var(--solved-text);font-weight:700;\">новый</span>" : "<span class=\"grade-weight\">обновление</span>") + "</td>" +
+          "<td>" + groups + "</td>" +
+          "<td>" + accounts + "</td></tr>";
+      }).join("");
+      intakePreviewNode.innerHTML =
+        "<p class=\"empty-hint\">Пробный запуск (ничего не записано). Новых учеников: <strong>" + preview.added + "</strong>, обновлений: <strong>" + preview.updated + "</strong>.</p>" +
+        "<div class=\"table-wrap\"><table class=\"standings-table\"><thead><tr><th>Анкета (ФИО)</th><th>Итоговый ученик</th><th>Группы</th><th>Аккаунты</th></tr></thead><tbody>" +
+        (rows || "<tr><td colspan=\"4\">Пусто</td></tr>") + "</tbody></table></div>";
+      intakePreviewNode.style.display = "";
+    }
+
+    async function dryRunIntakeStaging() {
+      if (activePath !== intakeStagingPath) {
+        setStatus("Выберите intake staging через кнопку", true);
+        return;
+      }
+      setStatus("Пробный запуск…", false);
+      var payload = await fetchJSON("/api/admin/actions/intake/dry-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editor.getValue() })
+      });
+      renderMergePreview(payload.preview || {});
+      setStatus("Пробный запуск готов — проверьте таблицу ниже, затем «Сохранить и сделать merge».", false);
     }
 
     async function refreshFileList() {
@@ -324,6 +379,14 @@
         setStatus(err.message, true);
       });
     });
+
+    if (intakeDryRunButton) {
+      intakeDryRunButton.addEventListener("click", function () {
+        dryRunIntakeStaging().catch(function (err) {
+          setStatus(err.message, true);
+        });
+      });
+    }
 
     var defaultPath = {{.DefaultPath}};
     if (defaultPath && select.options.length > 0) {

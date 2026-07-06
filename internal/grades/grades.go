@@ -190,7 +190,10 @@ func contestRowValue(col domain.GradeColumn, contest domain.GeneratedContestStan
 			if i < len(row.PracticeScores) && row.PracticeScores[i] != nil {
 				practice = float64(*row.PracticeScores[i])
 			}
-			contribution = math.Max(main, practice*coef)
+			// Основной балл + доля прироста от дорешки: a + max(0, b−a)·coef.
+			// Так дорешивание всегда выгодно (в отличие от max(a, b·coef),
+			// где при большом a дорешка ничего не давала).
+			contribution = main + math.Max(0, practice-main)*coef
 		} else {
 			solved := i < len(row.Statuses) && row.Statuses[i] == domain.TaskStatusSolved
 			practiceOnly := i < len(row.Upsolved) && row.Upsolved[i]

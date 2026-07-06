@@ -884,3 +884,118 @@ func TestAdminStudentProfilePage(t *testing.T) {
 		t.Fatalf("unsafe id must 404, got %d", code)
 	}
 }
+
+// Статистика участников по токену: верный токен — 200 с профилями членов;
+// неверный токен — 404; профиль участника доступен только члену группы.
+func TestGroupParticipantsByToken(t *testing.T) {
+	out := t.TempDir()
+	dataDir := t.TempDir()
+	h := NewHandlers(
+		storage.NewGeneratedLoader(out), nil,
+		web.NewTemplateRenderer(filepath.Join("..", "..", "web", "templates")),
+		log.New(io.Discard, "", 0),
+	)
+	if err := h.ConfigureAdmin(AdminConfig{Login: "admin", Password: "pw", ProjectRoot: t.TempDir(), DataDir: dataDir}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureSourceDir(dataDir)
+
+	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"),
+		`{"title":"Группа 1","student_ids":["ivan","petr"],"group_secret_token":"secret123"}`)
+	w := storage.NewGeneratedWriter(out)
+	if err := w.WriteStudentProfile(domain.GeneratedStudentProfile{
+		StudentID: "ivan", PublicName: "Иван И.",
+		Stats:  domain.StudentActivityStats{TotalSolved: 42, TotalSubmissions: 100},
+		Groups: []domain.StudentGroupStanding{{Slug: "g1", Title: "Группа 1", SolvedCount: 42}, {Slug: "g2", Title: "Другая", SolvedCount: 5}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(path string) (int, string) {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.SetPathValue("group_name", "g1")
+		rec := httptest.NewRecorder()
+		if strings.Contains(path, "/participants") {
+			h.GroupParticipantsPage(rec, req)
+		} else {
+			h.GroupStudentProfilePage(rec, req)
+		}
+		return rec.Code, rec.Body.String()
+	}
+
+	// Обзор участников с верным токеном.
+	code, body := get("/standings/g1/participants?token=secret123")
+	if code != http.StatusOK {
+		t.Fatalf("participants code=%d", code)
+	}
+	for _, want := range []string{"Иван И.", "42", "профиль появится после генерации"} { // petr без профиля
+		if !strings.Contains(body, want) {
+			t.Fatalf("participants missing %q", want)
+		}
+	}
+	// Неверный токен — 404.
+	if code, _ = get("/standings/g1/participants?token=wrong"); code != http.StatusNotFound {
+		t.Fatalf("wrong token must 404, got %d", code)
+	}
+
+	// Профиль члена группы по токену: 200, показана только группа g1 (не g2).
+	code, body = get("/standings/g1/student?id=ivan&token=secret123")
+	if code != http.StatusOK {
+		t.Fatalf("member profile code=%d", code)
+	}
+	if !strings.Contains(body, "Иван И.") || strings.Contains(body, "Другая") {
+		t.Fatalf("token profile must show only current group: %v", strings.Contains(body, "Другая"))
+	}
+	// Не член группы — 404.
+	if code, _ = get("/standings/g1/student?id=nobody&token=secret123"); code != http.StatusNotFound {
+		t.Fatalf("non-member must 404, got %d", code)
+	}
+	// Неверный токен на профиль — 404.
+	if code, _ = get("/standings/g1/student?id=ivan&token=wrong"); code != http.StatusNotFound {
+		t.Fatalf("wrong token profile must 404, got %d", code)
+	}
+}
+
+// Dry-run merge через хендлер: возвращает превью без записи.
+func TestAdminIntakeMergeDryRun(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	writeTestFile(t, filepath.Join(dataDir, "students.json"), `[{"id":"voron-ea","full_name":"Ворон Егор Андреевич"}]`)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"), `{"title":"Г","student_ids":["voron-ea"]}`)
+
+	body := `{"content":"[{\"full_name\":\"Ворон Егор Андреевич\",\"groups\":[\"g1\"]},{\"full_name\":\"Новый Ученик\",\"groups\":[\"g1\"]}]"}`
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	h.AdminIntakeMergeDryRun(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dry-run code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		OK      bool `json:"ok"`
+		Preview struct {
+			Added    int `json:"added"`
+			Updated  int `json:"updated"`
+			Students []struct {
+				FullName string `json:"full_name"`
+				IsNew    bool   `json:"is_new"`
+				Groups   []struct {
+					Slug          string `json:"slug"`
+					AlreadyMember bool   `json:"already_member"`
+				} `json:"groups"`
+			} `json:"students"`
+		} `json:"preview"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.OK || resp.Preview.Added != 1 || resp.Preview.Updated != 1 || len(resp.Preview.Students) != 2 {
+		t.Fatalf("preview wrong: %+v", resp.Preview)
+	}
+	if !resp.Preview.Students[0].Groups[0].AlreadyMember || resp.Preview.Students[1].Groups[0].AlreadyMember {
+		t.Fatalf("membership flags wrong: %+v", resp.Preview.Students)
+	}
+	// Ничего не записано.
+	gbody, _ := os.ReadFile(filepath.Join(dataDir, "groups", "g1", "group.json"))
+	if strings.Contains(string(gbody), "Новый") || strings.Contains(string(gbody), "novyy") {
+		t.Fatalf("dry-run must not write group: %s", gbody)
+	}
+}

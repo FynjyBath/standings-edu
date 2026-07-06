@@ -65,18 +65,20 @@ func TestBuildUpsolvingCoefficient(t *testing.T) {
 	}
 	roster := []RosterStudent{{ID: "a", PublicName: "Аня"}}
 
-	// score + k=0.5: max(50,35) + max(0,35) + 100 − 5×1 = 50+35+100−5 = 180.
+	// score + k=0.5: a + max(0,b−a)·k по задачам —
+	//   A: 50 + (70−50)·0.5 = 60; B: 0 + 70·0.5 = 35; C: 100; D: 0 (штраф).
+	//   Итого 60+35+100 − 5×1 = 190.
 	cfg := &domain.GradesConfig{Columns: []domain.GradeColumn{{
 		ID: "e", Title: "Т", Weight: 1, Type: "table", TableName: "Тематические",
 		Metric: domain.GradeMetricScore, Upsolving: fptr(0.5),
 	}}}
 	got := Build(cfg, standings, roster, nil)
-	// normalize max: единственный ученик — reference = его же 180 → 10 баллов.
+	// normalize max: единственный ученик — reference = его же 190 → 10 баллов.
 	if got.Rows[0].Values[0] == nil || *got.Rows[0].Values[0] != 10 {
 		t.Fatalf("score coef grade wrong: %+v", got.Rows[0].Values)
 	}
 	raw, ref := computeTableColumn(cfg.Columns[0], standings, roster)
-	if raw["a"] != 180 || ref != 180 {
+	if raw["a"] != 190 || ref != 190 {
 		t.Fatalf("score coef raw/ref wrong: raw=%v ref=%v", raw["a"], ref)
 	}
 

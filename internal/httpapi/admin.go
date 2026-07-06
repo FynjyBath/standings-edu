@@ -20,6 +20,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
+	"standings-edu/internal/studentintake"
 )
 
 const maxAdminJSONBodyBytes = 8 << 20
@@ -104,6 +105,11 @@ type AdminStudentProfilePageData struct {
 	NotGenerated bool
 	Profile      domain.GeneratedStudentProfile
 	MaxDaily     int
+	// BackURL/BackLabel — ссылка «назад» (в админку или к участникам по токену).
+	BackURL   string
+	BackLabel string
+	// TokenView — просмотр по токену группы (не админ): без админ-ссылок на группы.
+	TokenView bool
 }
 
 // AdminStudentProfilePage — админский профиль участника: активность, аналитика
@@ -120,32 +126,48 @@ func (h *Handlers) AdminStudentProfilePage(w http.ResponseWriter, r *http.Reques
 	}
 
 	page := AdminStudentProfilePageData{
-		PageTitle: "Профиль — " + id,
 		Footer:    h.buildFooterInfo(),
 		StudentID: id,
+		BackURL:   "/standings/admin/students",
+		BackLabel: "← Ученики",
 	}
+	h.fillStudentProfilePage(&page, id, nil)
+	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
+		h.logger.Printf("ERROR render admin student profile id=%s err=%v", id, err)
+	}
+}
+
+// fillStudentProfilePage загружает профиль в данные страницы. onlyGroup!=nil —
+// оставить в «Позициях в группах» только эту группу (просмотр по токену).
+func (h *Handlers) fillStudentProfilePage(page *AdminStudentProfilePageData, id string, onlyGroup *string) {
+	page.PageTitle = "Профиль — " + id
 	profile, err := h.loader.LoadStudentProfile(id)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			page.NotGenerated = true
 		} else {
-			h.logger.Printf("ERROR admin student profile id=%s err=%v", id, err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
+			h.logger.Printf("ERROR student profile id=%s err=%v", id, err)
+			page.NotGenerated = true
 		}
-	} else {
-		page.Profile = profile
-		if profile.PublicName != "" {
-			page.PageTitle = "Профиль — " + profile.PublicName
-		}
-		for _, d := range profile.DailyActivity {
-			if d.Count > page.MaxDaily {
-				page.MaxDaily = d.Count
+		return
+	}
+	if onlyGroup != nil {
+		filtered := profile.Groups[:0:0]
+		for _, g := range profile.Groups {
+			if g.Slug == *onlyGroup {
+				filtered = append(filtered, g)
 			}
 		}
+		profile.Groups = filtered
 	}
-	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
-		h.logger.Printf("ERROR render admin student profile id=%s err=%v", id, err)
+	page.Profile = profile
+	if profile.PublicName != "" {
+		page.PageTitle = "Профиль — " + profile.PublicName
+	}
+	for _, d := range profile.DailyActivity {
+		if d.Count > page.MaxDaily {
+			page.MaxDaily = d.Count
+		}
 	}
 }
 
@@ -495,6 +517,37 @@ func (h *Handlers) AdminIntakeStagingMerge(w http.ResponseWriter, r *http.Reques
 		"ok":             true,
 		"action_success": result.Success,
 	})
+}
+
+// AdminIntakeMergeDryRun — пробный merge intake из содержимого редактора:
+// показывает, какие анкеты в кого разрешатся и в какие группы попадут, без
+// записи на диск.
+func (h *Handlers) AdminIntakeMergeDryRun(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	req, err := decodeAdminIntakeMergeRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	intake, err := studentintake.ParseIntakeBytes([]byte(req.Content))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	existing, err := studentintake.LoadStudentsFile(filepath.Join(h.admin.cfg.DataDir, "students.json"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	preview, err := studentintake.BuildMergePreview(h.admin.cfg.DataDir, existing, intake)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "preview": preview})
 }
 
 func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult) AdminActionResult {

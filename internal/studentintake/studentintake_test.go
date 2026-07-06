@@ -141,3 +141,64 @@ func TestSubmitWritesOnlyIntake(t *testing.T) {
 		t.Fatalf("duplicate intake item: %d", len(items))
 	}
 }
+
+// Пробный merge (dry-run): разрешение анкет в учеников и привязка к группам,
+// без записи на диск.
+func TestBuildMergePreview(t *testing.T) {
+	dir := t.TempDir()
+	// существующая группа: в ней уже voron-ea.
+	groupDir := filepath.Join(dir, "groups", "smip_2026_p3")
+	if err := os.MkdirAll(groupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(groupDir, "group.json"),
+		[]byte(`{"title":"П3","student_ids":["voron-ea"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	existing := []domain.Student{{ID: "voron-ea", FullName: "Ворон Егор Андреевич"}}
+	intake := []domain.Student{
+		{FullName: "Ворон Егор Андреевич", Groups: []string{"smip_2026_p3"}, Accounts: []domain.Account{{Site: "acmp", AccountID: "1"}}}, // обновление, уже в группе
+		{FullName: "Калеев Владислав Евгеньевич", Groups: []string{"smip_2026_p3"}},                                                      // новый, добавится в группу
+		{FullName: "Смирнова Елена", Groups: []string{"new_group"}},                                                                      // новый, новая группа
+	}
+
+	preview, err := BuildMergePreview(dir, existing, intake)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if preview.Added != 2 || preview.Updated != 1 {
+		t.Fatalf("stats wrong: %+v", preview)
+	}
+	if len(preview.Students) != 3 {
+		t.Fatalf("students len: %d", len(preview.Students))
+	}
+	// Ворон: обновление, уже в группе.
+	v := preview.Students[0]
+	if v.IsNew || v.FinalID != "voron-ea" || len(v.Groups) != 1 || !v.Groups[0].AlreadyMember {
+		t.Fatalf("voron preview wrong: %+v", v)
+	}
+	// Калеев: новый, добавится (не член).
+	k := preview.Students[1]
+	if !k.IsNew || k.FinalID == "" || len(k.Groups) != 1 || k.Groups[0].AlreadyMember {
+		t.Fatalf("kaleev preview wrong: %+v", k)
+	}
+	// Ничего не записалось: group.json неизменён.
+	body, _ := os.ReadFile(filepath.Join(groupDir, "group.json"))
+	if strings.Contains(string(body), "kaleev") {
+		t.Fatalf("dry-run must not write: %s", body)
+	}
+}
+
+func TestParseIntakeBytes(t *testing.T) {
+	items, err := ParseIntakeBytes([]byte(`[{"full_name":"Иван Иванов","group":"g1","acmp":"5"}]`))
+	if err != nil || len(items) != 1 {
+		t.Fatalf("parse: %v len=%d", err, len(items))
+	}
+	if _, err := ParseIntakeBytes([]byte(`{not json`)); err == nil {
+		t.Fatal("invalid json must fail")
+	}
+	if _, err := ParseIntakeBytes([]byte(`[{"group":"g1"}]`)); err == nil {
+		t.Fatal("empty full_name must fail")
+	}
+}

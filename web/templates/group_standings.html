@@ -12,6 +12,9 @@
     {{if .Standings.Grades}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/grades{{if .Token}}?token={{.Token}}{{end}}">{{if .Standings.Grades.Title}}{{.Standings.Grades.Title}}{{else}}Оценки{{end}}</a>
     {{end}}
+    {{if .TokenValid}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/participants?token={{.Token}}">Статистика участников</a>
+    {{end}}
   </p>
 </section>
 

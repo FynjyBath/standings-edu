@@ -578,6 +578,21 @@ button.summary-link-btn {
   box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+/* Ячейка «только сумма» в сводной: подсветка от красного (0) к зелёному
+   (максимум) через hue; появляется только при наличии хотя бы одной посылки
+   (--total-alpha > 0). */
+.total-cell {
+  min-width: 56px;
+  font-weight: 700;
+  --total-hue: 0;
+  --total-alpha: 0;
+  background: hsla(var(--total-hue), 65%, 45%, var(--total-alpha)) !important;
+}
+
+.standings-table tbody tr:hover td.total-cell {
+  box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .status-cell.solved {
   background: var(--solved-bg) !important;
   color: var(--solved-text);

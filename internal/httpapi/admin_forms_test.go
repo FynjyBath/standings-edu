@@ -752,3 +752,83 @@ func TestSerializeDataWriteNoLostUpdate(t *testing.T) {
 		t.Fatalf("lost updates: got %d students, want %d", len(students), n)
 	}
 }
+
+// Конструктор столбцов оценок: строит и валидирует grades в group.json,
+// не трогая остальные поля группы; пустой список — убирает оценки.
+func TestAdminGroupGradesConfigSave(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "grp", "group.json"),
+		`{"title":"Группа","form_link":"https://f","student_ids":["s1","s2"],"group_secret_token":"tok123"}`)
+
+	// Сохранение конфига: table-столбец + manual-столбец.
+	code, resp := postJSON(t, h.AdminGroupGradesConfigSave, `{
+		"slug":"grp","title":"Оценки","round":2,
+		"columns":[
+			{"id":"educational","title":"Тематические","weight":0.35,"type":"table","table_name":"Тематические","metric":"plus","normalize":"max","upsolving":0.5},
+			{"id":"olymp","title":"Соревнования","weight":0.35,"type":"table","metric":"score","normalize":25},
+			{"id":"zachet","title":"Зачет","weight":0.3,"type":"manual"}
+		]}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("config save failed: code=%d resp=%v", code, resp)
+	}
+
+	var gf domain.GroupFile
+	body, _ := os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
+	if err := json.Unmarshal(body, &gf); err != nil {
+		t.Fatalf("group.json broken: %v; %s", err, body)
+	}
+	// Прочие поля группы сохранены.
+	if gf.Title != "Группа" || gf.FormLink != "https://f" || gf.GroupSecretToken != "tok123" || len(gf.StudentIDs) != 2 {
+		t.Fatalf("group fields lost: %s", body)
+	}
+	if gf.Grades == nil || len(gf.Grades.Columns) != 3 || gf.Grades.Title != "Оценки" || gf.Grades.Round == nil || *gf.Grades.Round != 2 {
+		t.Fatalf("grades not saved: %s", body)
+	}
+	c0 := gf.Grades.Columns[0]
+	if c0.ID != "educational" || c0.Type != "table" || c0.TableName != "Тематические" || c0.Metric != "plus" ||
+		c0.Normalize.Mode != domain.NormalizeMax || c0.Upsolving == nil || *c0.Upsolving != 0.5 {
+		t.Fatalf("table column wrong: %+v", c0)
+	}
+	if gf.Grades.Columns[1].Normalize.Mode != domain.NormalizeFixed || gf.Grades.Columns[1].Normalize.Value != 25 {
+		t.Fatalf("fixed normalize wrong: %+v", gf.Grades.Columns[1])
+	}
+	if gf.Grades.Columns[2].Type != "manual" {
+		t.Fatalf("manual column wrong: %+v", gf.Grades.Columns[2])
+	}
+	// Файл читается повторно (round-trip normalize не ломается).
+	if _, ok, err := h.readGroupFile("grp"); err != nil || !ok {
+		t.Fatalf("re-read group.json failed: %v", err)
+	}
+
+	// Пустой список столбцов — секция оценок убирается.
+	code, _ = postJSON(t, h.AdminGroupGradesConfigSave, `{"slug":"grp","columns":[]}`)
+	if code != http.StatusOK {
+		t.Fatalf("empty columns save failed: code=%d", code)
+	}
+	body, _ = os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
+	var gf2 domain.GroupFile
+	if err := json.Unmarshal(body, &gf2); err != nil {
+		t.Fatal(err)
+	}
+	if gf2.Grades != nil {
+		t.Fatalf("empty columns must drop grades: %s", body)
+	}
+	if gf2.GroupSecretToken != "tok123" || len(gf2.StudentIDs) != 2 {
+		t.Fatalf("empty columns must keep other group fields: %s", body)
+	}
+
+	// Валидация: пустое название, дубль id, чужой тип, upsolving вне [0,1].
+	bad := []string{
+		`{"slug":"grp","columns":[{"title":"","type":"manual"}]}`,
+		`{"slug":"grp","columns":[{"id":"x","title":"A","type":"manual"},{"id":"x","title":"B","type":"manual"}]}`,
+		`{"slug":"grp","columns":[{"title":"A","type":"weird"}]}`,
+		`{"slug":"grp","columns":[{"title":"A","type":"table","upsolving":2}]}`,
+		`{"slug":"grp","columns":[{"title":"A","type":"table","weight":-1}]}`,
+	}
+	for i, b := range bad {
+		code, _ = postJSON(t, h.AdminGroupGradesConfigSave, b)
+		if code != http.StatusBadRequest {
+			t.Fatalf("bad case #%d must be rejected, got code=%d", i, code)
+		}
+	}
+}

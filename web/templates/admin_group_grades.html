@@ -3,15 +3,39 @@
   <h1>Оценки группы: {{.GroupTitle}}</h1>
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    <a class="summary-link-btn" href="/standings/admin/group?slug={{.GroupSlug}}">Управление группой</a>
     <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/grades" target="_blank" rel="noopener noreferrer">Страница оценок</a>
   </p>
-  <p class="empty-hint">Оценки 0–10. Пустая ячейка — оценки нет (в среднее не идёт). Изменения появятся после ближайшей генерации.</p>
 </section>
 
-{{if .Columns}}
 <section class="admin-block">
+  <h2>Настройка столбцов оценок</h2>
+  <p class="empty-hint">Итог — взвешенное среднее столбцов (0–10). Столбец «из таблицы» считается автоматически из контестов вкладки; «ручной» — оценки ставите вручную ниже. Веса относительные.</p>
+  <div class="admin-form-grid" style="max-width:32rem;">
+    <label><span>Заголовок таблицы оценок (опц.)</span><input type="text" id="gc-title" placeholder="Оценки" /></label>
+    <label><span>Знаков после запятой (round)</span><input type="number" id="gc-round" min="0" max="4" step="1" placeholder="1" /></label>
+  </div>
+
+  <div id="gc-columns" style="margin-top:0.8rem;"></div>
+  <button type="button" id="gc-add" class="admin-btn admin-btn--secondary" style="margin-top:0.6rem;">+ столбец</button>
+
+  <div class="admin-editor-tools" style="margin-top:0.9rem;">
+    <button type="button" id="gc-save" class="admin-btn">Сохранить столбцы</button>
+    <span id="gc-status" class="admin-editor-status"></span>
+  </div>
+  <p class="empty-hint">После сохранения столбцов страница перезагрузится, и сетка ручных оценок ниже обновится. Не меняйте <code>id</code> ручного столбца, если по нему уже есть оценки, — иначе они «потеряются». Изменения в таблицах появятся после генерации.</p>
+</section>
+
+<datalist id="gc-tablenames">
+  {{range .TableNames}}<option value="{{.}}"></option>{{end}}
+</datalist>
+
+<section class="admin-block">
+  <h2>Ручные оценки</h2>
+  <p class="empty-hint">Оценки 0–10. Пустая ячейка — оценки нет (в среднее не идёт). Изменения появятся после ближайшей генерации.</p>
+{{if .Columns}}
   <div class="admin-editor-tools">
-    <button type="button" id="grades-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="grades-save" class="admin-btn">Сохранить оценки</button>
     <span id="grades-status" class="admin-editor-status"></span>
   </div>
   <div class="table-wrap">
@@ -41,57 +65,173 @@
       </tbody>
     </table>
   </div>
-</section>
 {{else}}
-<p class="empty-hint">В этой группе нет ручных оценок (в <code>group.json</code> нет столбцов с <code>"type": "manual"</code>).</p>
+  <p class="empty-hint">В этой группе нет ручных столбцов — добавьте столбец типа «ручной» выше.</p>
 {{end}}
+</section>
 
+<script id="gc-config" type="application/json">{{.ConfigJSON}}</script>
 <script>
   (function () {
     var slug = {{.GroupSlug}};
-    var saveBtn = document.getElementById("grades-save");
-    var statusNode = document.getElementById("grades-status");
-    if (!saveBtn) return;
 
-    function setStatus(msg, isError) {
-      statusNode.textContent = msg;
-      statusNode.className = isError
-        ? "admin-editor-status admin-editor-status--error"
-        : "admin-editor-status admin-editor-status--ok";
+    // ---- Конструктор столбцов оценок ----
+    var box = document.getElementById("gc-columns");
+    var status = document.getElementById("gc-status");
+    function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+
+    var TRANSLIT = { а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"c",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya"," ":"_" };
+    function slugify(s) {
+      s = (s || "").toLowerCase();
+      var out = "";
+      for (var i = 0; i < s.length; i++) {
+        var ch = s[i];
+        if (TRANSLIT[ch] !== undefined) out += TRANSLIT[ch];
+        else if (/[a-z0-9_]/.test(ch)) out += ch;
+        else if (/\s/.test(ch)) out += "_";
+      }
+      out = out.replace(/_+/g, "_").replace(/^_|_$/g, "");
+      return out || "col";
     }
 
-    saveBtn.addEventListener("click", function () {
-      var grades = {};
-      document.querySelectorAll("input.grade-input").forEach(function (inp) {
-        var raw = (inp.value || "").trim().replace(",", ".");
-        if (raw === "") return;
-        var num = parseFloat(raw);
-        if (!isFinite(num)) return;
-        var col = inp.dataset.col;
-        var student = inp.dataset.student;
-        if (!grades[col]) grades[col] = {};
-        grades[col][student] = num;
-      });
+    function normalizeToControls(n) {
+      // n: "max" | "total" | число | undefined
+      if (typeof n === "number") return { mode: "fixed", value: String(n) };
+      if (n === "total") return { mode: "total", value: "" };
+      return { mode: "max", value: "" };
+    }
 
-      saveBtn.disabled = true;
-      setStatus("Сохранение…", false);
-      fetch("/api/admin/group-grades/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: slug, grades: grades })
-      }).then(function (res) {
-        return res.json().then(function (payload) {
-          if (!res.ok || !payload.ok) {
-            throw new Error((payload && payload.error) || ("HTTP " + res.status));
-          }
-          setStatus("Сохранено. Изменения появятся после генерации.", false);
-        });
-      }).catch(function (err) {
-        setStatus(err.message, true);
-      }).finally(function () {
-        saveBtn.disabled = false;
+    function addColumn(col) {
+      col = col || {};
+      var card = document.createElement("div");
+      card.className = "gc-col-card";
+      card.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:0.7rem;margin-top:0.5rem;";
+
+      var isTable = (col.type === "table");
+      var norm = normalizeToControls(col.normalize);
+
+      card.innerHTML =
+        '<div class="admin-form-grid">' +
+          '<label><span>Название *</span><input type="text" class="gc-c-title" /></label>' +
+          '<label><span>id (латиницей)</span><input type="text" class="gc-c-id" placeholder="авто из названия" /></label>' +
+          '<label><span>Вес</span><input type="number" class="gc-c-weight" min="0" step="0.05" placeholder="1" /></label>' +
+          '<label><span>Тип</span><select class="gc-c-type"><option value="manual">ручной (ставите вручную)</option><option value="table">из таблицы (авто)</option></select></label>' +
+        '</div>' +
+        '<div class="gc-table-fields admin-form-grid" style="margin-top:0.4rem;">' +
+          '<label><span>Вкладка (table_name; пусто = все контесты)</span><input type="text" class="gc-c-tablename" list="gc-tablenames" placeholder="Тематические" /></label>' +
+          '<label><span>Метрика</span><select class="gc-c-metric"><option value="plus">plus (число «+»)</option><option value="score">score (баллы)</option></select></label>' +
+          '<label><span>Нормировка</span><select class="gc-c-normmode"><option value="max">max (топ группы = 10)</option><option value="total">total (максимум задач)</option><option value="fixed">фикс. число</option></select></label>' +
+          '<label class="gc-normfixed"><span>Значение нормировки</span><input type="number" class="gc-c-normval" step="0.5" placeholder="20" /></label>' +
+          '<label><span>Учёт дорешки (0–1, опц.)</span><input type="number" class="gc-c-upsolving" min="0" max="1" step="0.1" placeholder="дорешка на полную" /></label>' +
+        '</div>' +
+        '<div style="margin-top:0.5rem;display:flex;gap:0.4rem;">' +
+          '<button type="button" class="admin-btn admin-btn--secondary gc-up">↑</button>' +
+          '<button type="button" class="admin-btn admin-btn--secondary gc-down">↓</button>' +
+          '<button type="button" class="admin-btn admin-btn--secondary gc-remove">Удалить</button>' +
+        '</div>';
+
+      var q = function (c) { return card.querySelector(c); };
+      q(".gc-c-title").value = col.title || "";
+      q(".gc-c-id").value = col.id || "";
+      q(".gc-c-weight").value = (typeof col.weight === "number" && col.weight > 0) ? String(col.weight) : "";
+      q(".gc-c-type").value = isTable ? "table" : "manual";
+      q(".gc-c-tablename").value = col.table_name || "";
+      q(".gc-c-metric").value = (col.metric === "score") ? "score" : "plus";
+      q(".gc-c-normmode").value = norm.mode;
+      q(".gc-c-normval").value = norm.value;
+      if (col.upsolving !== undefined && col.upsolving !== null) q(".gc-c-upsolving").value = String(col.upsolving);
+
+      function syncType() { q(".gc-table-fields").style.display = (q(".gc-c-type").value === "table") ? "" : "none"; }
+      function syncNorm() { q(".gc-normfixed").style.display = (q(".gc-c-normmode").value === "fixed") ? "" : "none"; }
+      q(".gc-c-type").addEventListener("change", syncType);
+      q(".gc-c-normmode").addEventListener("change", syncNorm);
+      // Автозаполнение id из названия, пока id не трогали вручную.
+      var idEdited = !!(col.id);
+      q(".gc-c-id").addEventListener("input", function () { idEdited = true; });
+      q(".gc-c-title").addEventListener("input", function () { if (!idEdited) q(".gc-c-id").value = slugify(q(".gc-c-title").value); });
+
+      q(".gc-up").addEventListener("click", function () { if (card.previousElementSibling) box.insertBefore(card, card.previousElementSibling); });
+      q(".gc-down").addEventListener("click", function () { if (card.nextElementSibling) box.insertBefore(card.nextElementSibling, card); });
+      q(".gc-remove").addEventListener("click", function () { card.remove(); });
+
+      box.appendChild(card);
+      syncType(); syncNorm();
+    }
+
+    document.getElementById("gc-add").addEventListener("click", function () { addColumn({ type: "manual" }); });
+
+    function collectColumns() {
+      var cols = [];
+      box.querySelectorAll(".gc-col-card").forEach(function (card) {
+        var q = function (c) { return card.querySelector(c); };
+        var type = q(".gc-c-type").value;
+        var col = {
+          id: (q(".gc-c-id").value || "").trim(),
+          title: (q(".gc-c-title").value || "").trim(),
+          weight: parseFloat(q(".gc-c-weight").value) || 0,
+          type: type
+        };
+        if (type === "table") {
+          col.table_name = (q(".gc-c-tablename").value || "").trim();
+          col.metric = q(".gc-c-metric").value;
+          var mode = q(".gc-c-normmode").value;
+          if (mode === "total") col.normalize = "total";
+          else if (mode === "fixed") col.normalize = parseFloat(q(".gc-c-normval").value) || 0;
+          else col.normalize = "max";
+          var up = (q(".gc-c-upsolving").value || "").trim();
+          if (up !== "") col.upsolving = parseFloat(up);
+        }
+        cols.push(col);
       });
+      return cols;
+    }
+
+    document.getElementById("gc-save").addEventListener("click", function () {
+      var round = (document.getElementById("gc-round").value || "").trim();
+      var body = {
+        slug: slug,
+        title: (document.getElementById("gc-title").value || "").trim(),
+        round: round === "" ? null : parseInt(round, 10),
+        columns: collectColumns()
+      };
+      setStatus("Сохранение…", false);
+      fetch("/api/admin/group-grades/config-save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+        .then(function () { location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
     });
+
+    // Загрузка текущего конфига.
+    try {
+      var cfg = JSON.parse(document.getElementById("gc-config").textContent || "{}") || {};
+      document.getElementById("gc-title").value = cfg.title || "";
+      if (typeof cfg.round === "number") document.getElementById("gc-round").value = String(cfg.round);
+      (cfg.columns || []).forEach(addColumn);
+    } catch (e) {}
+
+    // ---- Ручные оценки ----
+    var saveBtn = document.getElementById("grades-save");
+    var gStatus = document.getElementById("grades-status");
+    if (saveBtn) {
+      function setGStatus(m, err) { gStatus.textContent = m; gStatus.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+      saveBtn.addEventListener("click", function () {
+        var grades = {};
+        document.querySelectorAll("input.grade-input").forEach(function (inp) {
+          var raw = (inp.value || "").trim().replace(",", ".");
+          if (raw === "") return;
+          var num = parseFloat(raw);
+          if (!isFinite(num)) return;
+          if (!grades[inp.dataset.col]) grades[inp.dataset.col] = {};
+          grades[inp.dataset.col][inp.dataset.student] = num;
+        });
+        saveBtn.disabled = true;
+        setGStatus("Сохранение…", false);
+        fetch("/api/admin/group-grades/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, grades: grades }) })
+          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); setGStatus("Сохранено. Изменения появятся после генерации.", false); }); })
+          .catch(function (err) { setGStatus(err.message, true); })
+          .finally(function () { saveBtn.disabled = false; });
+      });
+    }
   })();
 </script>
 {{end}}

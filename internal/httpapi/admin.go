@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"os"
@@ -90,6 +91,10 @@ type AdminGroupGradesPageData struct {
 	GroupTitle string
 	Columns    []AdminManualGradeColumn
 	Rows       []AdminManualGradeRow
+	// ConfigJSON — текущая конфигурация оценок группы (grades из group.json)
+	// для формы-конструктора столбцов. TableNames — вкладки группы для подсказок.
+	ConfigJSON template.JS
+	TableNames []string
 }
 
 type AdminManualGradeColumn struct {
@@ -821,6 +826,18 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 		rows = append(rows, AdminManualGradeRow{StudentID: studentID, PublicName: publicName, Values: values})
 	}
 
+	// Конфиг оценок как есть (или пустой каркас) — для формы-конструктора столбцов.
+	cfg := groupFile.Grades
+	if cfg == nil {
+		cfg = &domain.GradesConfig{Columns: []domain.GradeColumn{}}
+	}
+	cfgBlob, err := json.Marshal(cfg)
+	if err != nil {
+		h.logger.Printf("ERROR admin group grades marshal config slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	page := AdminGroupGradesPageData{
 		PageTitle:  "Оценки — " + title,
 		Footer:     h.buildFooterInfo(),
@@ -828,10 +845,59 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 		GroupTitle: title,
 		Columns:    columns,
 		Rows:       rows,
+		ConfigJSON: template.JS(cfgBlob),
+		TableNames: h.groupTableNames(slug),
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group_grades.html", page); err != nil {
 		h.logger.Printf("ERROR render admin group grades slug=%s err=%v", slug, err)
 	}
+}
+
+// groupTableNames собирает различающиеся вкладки (table_name) контестов группы —
+// подсказки для поля столбца оценки типа table. Best-effort: учитывает
+// переопределения ссылок и inline-определения.
+func (h *Handlers) groupTableNames(slug string) []string {
+	entries, err := h.loadGroupContestEntries(slug)
+	if err != nil {
+		return nil
+	}
+	globals, _ := h.loadContestsList()
+	byID := make(map[string]domain.Contest, len(globals))
+	for _, c := range globals {
+		byID[strings.TrimSpace(c.ID)] = c
+	}
+
+	seen := make(map[string]struct{})
+	out := make([]string, 0)
+	add := func(names domain.TableNameList) {
+		for _, n := range names {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			if _, ok := seen[n]; ok {
+				continue
+			}
+			seen[n] = struct{}{}
+			out = append(out, n)
+		}
+	}
+	for _, e := range entries {
+		switch {
+		case e.inline:
+			var c domain.Contest
+			if json.Unmarshal(e.raw, &c) == nil {
+				add(c.TableNames)
+			}
+		case e.tableName != "":
+			add(domain.NormalizeTableNames(parseTableNameField(e.tableName)))
+		default:
+			if c, ok := byID[e.id]; ok {
+				add(c.TableNames)
+			}
+		}
+	}
+	return out
 }
 
 func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) {
@@ -892,6 +958,130 @@ func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+type adminGradesConfigColumn struct {
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Weight    float64         `json:"weight"`
+	Type      string          `json:"type"`
+	TableName string          `json:"table_name"`
+	Metric    string          `json:"metric"`
+	Normalize json.RawMessage `json:"normalize"`
+	Upsolving *float64        `json:"upsolving"`
+}
+
+type adminGradesConfigSaveRequest struct {
+	Slug    string                    `json:"slug"`
+	Title   string                    `json:"title"`
+	Round   *int                      `json:"round"`
+	Columns []adminGradesConfigColumn `json:"columns"`
+}
+
+// AdminGroupGradesConfigSave сохраняет конфигурацию столбцов оценок (grades в
+// group.json) из формы-конструктора, не трогая остальные поля группы.
+func (h *Handlers) AdminGroupGradesConfigSave(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	decoder := json.NewDecoder(io.LimitReader(r.Body, maxAdminJSONBodyBytes))
+	var req adminGradesConfigSaveRequest
+	if err := decoder.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	columns, err := buildGradeColumns(req.Columns)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if len(columns) == 0 {
+		// Нет столбцов — оценок у группы нет, убираем секцию целиком.
+		groupFile.Grades = nil
+	} else {
+		groupFile.Grades = &domain.GradesConfig{
+			Title:   strings.TrimSpace(req.Title),
+			Round:   req.Round,
+			Columns: columns,
+		}
+	}
+	if err := h.writeGroupFile(slug, groupFile); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// buildGradeColumns валидирует и собирает столбцы оценок из формы.
+func buildGradeColumns(in []adminGradesConfigColumn) ([]domain.GradeColumn, error) {
+	out := make([]domain.GradeColumn, 0, len(in))
+	seenID := make(map[string]struct{}, len(in))
+	for i, c := range in {
+		title := domain.NormalizeWhitespace(c.Title)
+		if title == "" {
+			return nil, fmt.Errorf("столбец #%d: укажите название", i+1)
+		}
+		typ := strings.ToLower(strings.TrimSpace(c.Type))
+		if typ != domain.GradeColumnTable && typ != domain.GradeColumnManual {
+			return nil, fmt.Errorf("столбец %q: тип должен быть «table» или «manual»", title)
+		}
+		id := strings.TrimSpace(c.ID)
+		if id == "" {
+			id = fmt.Sprintf("col%d", i+1)
+		}
+		if _, dup := seenID[id]; dup {
+			return nil, fmt.Errorf("столбец %q: id %q уже используется", title, id)
+		}
+		seenID[id] = struct{}{}
+		if c.Weight < 0 {
+			return nil, fmt.Errorf("столбец %q: вес не может быть отрицательным", title)
+		}
+
+		col := domain.GradeColumn{
+			ID:     id,
+			Title:  title,
+			Weight: c.Weight,
+			Type:   typ,
+		}
+		if typ == domain.GradeColumnTable {
+			col.TableName = strings.TrimSpace(c.TableName)
+			metric := strings.ToLower(strings.TrimSpace(c.Metric))
+			if metric != "" && metric != domain.GradeMetricPlus && metric != domain.GradeMetricScore {
+				return nil, fmt.Errorf("столбец %q: метрика должна быть «plus» или «score»", title)
+			}
+			col.Metric = metric
+
+			if len(c.Normalize) > 0 && string(c.Normalize) != "null" {
+				if err := json.Unmarshal(c.Normalize, &col.Normalize); err != nil {
+					return nil, fmt.Errorf("столбец %q: normalize — %v", title, err)
+				}
+			} else {
+				col.Normalize = domain.NormalizeSpec{Mode: domain.NormalizeMax}
+			}
+			if c.Upsolving != nil {
+				u := *c.Upsolving
+				if u < 0 || u > 1 {
+					return nil, fmt.Errorf("столбец %q: коэффициент дорешки должен быть от 0 до 1", title)
+				}
+				col.Upsolving = &u
+			}
+		}
+		out = append(out, col)
+	}
+	return out, nil
 }
 
 func (h *Handlers) readGroupFile(slug string) (domain.GroupFile, bool, error) {

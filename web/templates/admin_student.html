@@ -17,13 +17,13 @@
 
 <section class="admin-block">
   <h2>Сводка</h2>
-  <div class="profile-cards">
-    <div class="profile-card"><span class="profile-card-num">{{$s.TotalSolved}}</span><span class="profile-card-cap">решено задач</span></div>
-    <div class="profile-card"><span class="profile-card-num">{{$s.TotalSubmissions}}</span><span class="profile-card-cap">посылок (со временем)</span></div>
-    <div class="profile-card"><span class="profile-card-num">{{$s.Submissions7d}}</span><span class="profile-card-cap">за 7 дней</span></div>
-    <div class="profile-card"><span class="profile-card-num">{{$s.Submissions30d}}</span><span class="profile-card-cap">за 30 дней</span></div>
-    <div class="profile-card"><span class="profile-card-num">{{$s.ActiveDays}}</span><span class="profile-card-cap">активных дней</span></div>
-    <div class="profile-card"><span class="profile-card-num">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span class="profile-card-cap">последняя активность</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.6rem;">
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.TotalSolved}}</span><span style="font-size:0.82rem;color:var(--muted);">решено задач</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.TotalSubmissions}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок (со временем)</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions7d}}</span><span style="font-size:0.82rem;color:var(--muted);">за 7 дней</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions30d}}</span><span style="font-size:0.82rem;color:var(--muted);">за 30 дней</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.ActiveDays}}</span><span style="font-size:0.82rem;color:var(--muted);">активных дней</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.05rem;font-weight:700;line-height:1.2;color:var(--accent-strong);">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span style="font-size:0.82rem;color:var(--muted);">последняя активность</span></div>
   </div>
   {{if gt $s.SolvedWithTimes 0}}
   <p class="empty-hint" style="margin-top:0.7rem;">По {{$s.SolvedWithTimes}} задачам, решённым на CF/Informatics: в среднем <strong>{{numText $s.AvgAttemptsToSolve}}</strong> посылок до решения; с первой попытки решено <strong>{{$s.FirstTrySolved}}</strong>.</p>
@@ -85,9 +85,9 @@
 <section class="admin-block">
   <h2>Активность за 90 дней</h2>
   {{if $p.DailyActivity}}
-  <div class="profile-activity" title="Посылки по дням (МSK)">
+  <div style="display:flex;align-items:flex-end;gap:2px;height:70px;padding:5px;border:1px solid var(--line);border-radius:8px;background:var(--surface-strong);overflow-x:auto;" title="Посылки по дням (МSK)">
     {{range $p.DailyActivity}}
-    <span class="profile-bar" style="--h: {{if $.MaxDaily}}{{.Count}}{{else}}0{{end}}; --max: {{if $.MaxDaily}}{{$.MaxDaily}}{{else}}1{{end}};" title="{{dayLabel .Date}}: {{.Count}}"></span>
+    <span style="flex:1 0 3px;min-width:3px;height:{{barHeight .Count $.MaxDaily}}px;border-radius:2px 2px 0 0;{{if .Count}}background:var(--accent);{{else}}background:var(--line);{{end}}" title="{{dayLabel .Date}}: {{.Count}}"></span>
     {{end}}
   </div>
   <p class="empty-hint">Максимум за день: {{.MaxDaily}}.</p>
@@ -108,7 +108,7 @@
           <td>{{submissionTime .At}}</td>
           <td>{{siteName .Site}}</td>
           <td><a href="{{.TaskURL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a></td>
-          <td>{{if .Solved}}<span class="status-solved">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="grade-weight">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
+          <td>{{if .Solved}}<span style="color:var(--solved-text);font-weight:700;">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="grade-weight">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
         </tr>
         {{end}}
       </tbody>

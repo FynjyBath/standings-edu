@@ -49,6 +49,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"siteName":                siteName,
 			"dayLabel":                dayLabel,
 			"sub":                     func(a, b int) int { return a - b },
+			"barHeight":               barHeight,
 		},
 	}
 }
@@ -183,6 +184,19 @@ func siteName(site string) string {
 		return "прочее"
 	}
 	return site
+}
+
+// barHeight — высота столбика графика активности в пикселях (3..60), масштаб
+// от максимума за день. Ноль — маленький столбик-заглушка.
+func barHeight(count, max int) int {
+	if max <= 0 || count <= 0 {
+		return 3
+	}
+	h := 3 + count*57/max
+	if h > 60 {
+		h = 60
+	}
+	return h
 }
 
 // dayLabel — короткая дата «дд.мм» из строки YYYY-MM-DD для подписи графика.

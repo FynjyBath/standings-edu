@@ -673,3 +673,76 @@ type GeneratedGroupSolvedSummaryRow struct {
 	TotalSolvedCount       int    `json:"total_solved_count"`
 	SolvedCountBySite      []int  `json:"solved_count_by_site,omitempty"`
 }
+
+// GeneratedStudentProfile — профиль участника (админский вид): активность,
+// аналитика решений и позиции в группах. Пишется при генерации в
+// generated/students/<id>.json. Лента и скорость строятся по посылкам с
+// временем (Codeforces, Informatics); ACMP времени не отдаёт — по нему только
+// счётчики «решено/попыток».
+type GeneratedStudentProfile struct {
+	StudentID     string                 `json:"student_id"`
+	PublicName    string                 `json:"public_name"`
+	FullName      string                 `json:"full_name,omitempty"`
+	Accounts      []Account              `json:"accounts,omitempty"`
+	GeneratedAt   *time.Time             `json:"generated_at,omitempty"`
+	Groups        []StudentGroupStanding `json:"groups,omitempty"`
+	Sites         []StudentSiteStat      `json:"sites,omitempty"`
+	Stats         StudentActivityStats   `json:"stats"`
+	DailyActivity []StudentDayCount      `json:"daily_activity,omitempty"`
+	Recent        []StudentSubmission    `json:"recent,omitempty"`
+}
+
+// StudentSubmission — одна посылка ученика с временем (для ленты).
+type StudentSubmission struct {
+	At      time.Time `json:"at"`
+	Site    string    `json:"site"`
+	TaskURL string    `json:"task_url"`
+	Label   string    `json:"label"`
+	Solved  bool      `json:"solved"`
+	Score   *int      `json:"score,omitempty"`
+}
+
+// StudentSiteStat — счётчики по сайту. HasTimes=false у сайтов без времени
+// посылок (ACMP): по ним нет ленты и скорости.
+type StudentSiteStat struct {
+	Site        string `json:"site"`
+	Solved      int    `json:"solved"`
+	Attempted   int    `json:"attempted"`
+	Submissions int    `json:"submissions"`
+	HasTimes    bool   `json:"has_times"`
+}
+
+// StudentActivityStats — агрегаты активности. Метрики скорости считаются только
+// по задачам, решённым на сайтах с временем (SolvedWithTimes — знаменатель).
+type StudentActivityStats struct {
+	TotalSolved        int        `json:"total_solved"`
+	TotalAttempted     int        `json:"total_attempted"`
+	TotalSubmissions   int        `json:"total_submissions"`
+	Submissions7d      int        `json:"submissions_7d"`
+	Submissions30d     int        `json:"submissions_30d"`
+	ActiveDays         int        `json:"active_days"`
+	LastActivity       *time.Time `json:"last_activity,omitempty"`
+	SolvedWithTimes    int        `json:"solved_with_times"`
+	FirstTrySolved     int        `json:"first_try_solved"`
+	AvgAttemptsToSolve float64    `json:"avg_attempts_to_solve,omitempty"`
+}
+
+// StudentGroupStanding — позиция ученика в одной группе (по доске почёта и,
+// если настроены, по оценкам). Место — стандартный ранг (1 + число тех, кто
+// строго выше); ничьи делят место.
+type StudentGroupStanding struct {
+	Slug        string   `json:"slug"`
+	Title       string   `json:"title"`
+	SolvedCount int      `json:"solved_count"`
+	HonorPlace  int      `json:"honor_place,omitempty"`
+	HonorTotal  int      `json:"honor_total,omitempty"`
+	Grade       *float64 `json:"grade,omitempty"`
+	GradePlace  int      `json:"grade_place,omitempty"`
+	GradeTotal  int      `json:"grade_total,omitempty"`
+}
+
+// StudentDayCount — число посылок за один день (для графика активности).
+type StudentDayCount struct {
+	Date  string `json:"date"` // YYYY-MM-DD (МSK)
+	Count int    `json:"count"`
+}

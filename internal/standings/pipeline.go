@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/grades"
@@ -58,7 +59,7 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 		return nil
 	}
 
-	standingsByGroup, err := p.builder.BuildGroupsStandings(ctx, data, buildGroups)
+	standingsByGroup, studentProfiles, err := p.builder.BuildGroupsStandings(ctx, data, buildGroups)
 	if err != nil {
 		return fmt.Errorf("build standings: %w", err)
 	}
@@ -103,6 +104,9 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 		mergedStandings.Grades = p.buildGroupGrades(fullGroup, mergedStandings, data)
 		mergedStandings.GradesFull = p.buildFullGrades(fullGroup, mergedStandings, data)
 
+		// Позиции ученика в этой группе — в его профиль (по доске почёта и оценкам).
+		addGroupPositions(studentProfiles, fullGroup, mergedStandings)
+
 		if err := p.writer.WriteGroupStandings(mergedStandings); err != nil {
 			p.logger.Printf("ERROR group=%s write standings failed: %v", group.Slug, err)
 			continue
@@ -110,6 +114,20 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 
 		generatedCount++
 		p.logger.Printf("INFO group=%s generated", group.Slug)
+	}
+
+	// Профили участников (админский вид): активность + позиции по группам.
+	now := time.Now().UTC()
+	for id, profile := range studentProfiles {
+		if profile == nil {
+			continue
+		}
+		sort.Slice(profile.Groups, func(i, j int) bool { return profile.Groups[i].Slug < profile.Groups[j].Slug })
+		gen := now
+		profile.GeneratedAt = &gen
+		if err := p.writer.WriteStudentProfile(*profile); err != nil {
+			p.logger.Printf("WARN write student profile id=%s: %v", id, err)
+		}
 	}
 
 	if generatedCount == 0 {

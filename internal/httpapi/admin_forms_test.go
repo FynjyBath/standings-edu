@@ -832,3 +832,55 @@ func TestAdminGroupGradesConfigSave(t *testing.T) {
 		}
 	}
 }
+
+// Страница профиля участника: рендерит сгенерированный профиль, показывает
+// подсказку для несгенерированного, отвергает небезопасный id.
+func TestAdminStudentProfilePage(t *testing.T) {
+	out := t.TempDir()
+	h := NewHandlers(
+		storage.NewGeneratedLoader(out), nil,
+		web.NewTemplateRenderer(filepath.Join("..", "..", "web", "templates")),
+		log.New(io.Discard, "", 0),
+	)
+	if err := h.ConfigureAdmin(AdminConfig{Login: "admin", Password: "pw", ProjectRoot: t.TempDir(), DataDir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	w := storage.NewGeneratedWriter(out)
+	if err := w.WriteStudentProfile(domain.GeneratedStudentProfile{
+		StudentID:     "ivan",
+		PublicName:    "Иван И.",
+		Stats:         domain.StudentActivityStats{TotalSolved: 5, SolvedWithTimes: 2, AvgAttemptsToSolve: 1.5, FirstTrySolved: 1},
+		Sites:         []domain.StudentSiteStat{{Site: "codeforces", Solved: 5, Attempted: 8, Submissions: 30, HasTimes: true}},
+		DailyActivity: []domain.StudentDayCount{{Date: "2026-07-06", Count: 3}},
+		Recent:        []domain.StudentSubmission{{Site: "codeforces", TaskURL: "https://cf/1", Label: "CF 1A", Solved: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(id string) (int, string) {
+		req := httptest.NewRequest(http.MethodGet, "/standings/admin/student?id="+id, nil)
+		rec := httptest.NewRecorder()
+		h.AdminStudentProfilePage(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	code, body := get("ivan")
+	if code != http.StatusOK {
+		t.Fatalf("profile page code=%d", code)
+	}
+	for _, want := range []string{"Иван И.", "CF 1A", "решено"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("profile page missing %q", want)
+		}
+	}
+
+	code, body = get("missing")
+	if code != http.StatusOK || !strings.Contains(body, "ещё не сгенерирован") {
+		t.Fatalf("not-generated page wrong: code=%d", code)
+	}
+
+	code, _ = get("..%2Fetc")
+	if code != http.StatusNotFound {
+		t.Fatalf("unsafe id must 404, got %d", code)
+	}
+}

@@ -18,6 +18,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/group-grades/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupGradesSave)))
 	mux.HandleFunc("POST /api/admin/group-grades/config-save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupGradesConfigSave)))
 	mux.HandleFunc("GET /standings/admin/students", handlers.AdminAuth(handlers.AdminStudentsPage))
+	mux.HandleFunc("GET /standings/admin/student", handlers.AdminAuth(handlers.AdminStudentProfilePage))
 	mux.HandleFunc("POST /api/admin/students/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminStudentSave)))
 	mux.HandleFunc("POST /api/admin/students/delete", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminStudentDelete)))
 	mux.HandleFunc("GET /standings/admin/group", handlers.AdminAuth(handlers.AdminGroupManagePage))

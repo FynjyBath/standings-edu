@@ -57,32 +57,34 @@ func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int)
 	}
 }
 
-func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, error) {
+func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, map[string]*domain.GeneratedStudentProfile, error) {
 	if data == nil {
-		return nil, fmt.Errorf("source data is nil")
+		return nil, nil, fmt.Errorf("source data is nil")
 	}
 
 	prepared := b.prepareGroups(data, groups)
 	if len(prepared) == 0 {
-		return map[string]domain.GeneratedGroupStandings{}, nil
+		return map[string]domain.GeneratedGroupStandings{}, map[string]*domain.GeneratedStudentProfile{}, nil
 	}
 
 	requiredSites := b.collectRequiredTaskSites(prepared)
 	students := uniqueStudents(prepared)
 	statusByStudent, err := b.collectStudentsTaskStatuses(ctx, students, requiredSites)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
 	for _, pg := range prepared {
 		standings, buildErr := b.buildGroupStandings(ctx, data, pg, statusByStudent)
 		if buildErr != nil {
-			return nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
+			return nil, nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
 		}
 		result[pg.group.Slug] = standings
 	}
-	return result, nil
+
+	profiles := b.buildStudentProfiles(students, statusByStudent, time.Now().UTC())
+	return result, profiles, nil
 }
 
 func (b *Builder) prepareGroups(data *domain.SourceData, groups []domain.GroupDefinition) []preparedGroup {

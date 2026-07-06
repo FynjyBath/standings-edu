@@ -41,3 +41,19 @@ func (w *GeneratedWriter) WriteGroupStandings(standings domain.GeneratedGroupSta
 	}
 	return nil
 }
+
+// WriteStudentProfile пишет профиль участника в generated/students/<id>.json.
+func (w *GeneratedWriter) WriteStudentProfile(profile domain.GeneratedStudentProfile) error {
+	if !domain.IsValidSlug(profile.StudentID) {
+		return fmt.Errorf("invalid student id %q", profile.StudentID)
+	}
+	dir := filepath.Join(w.OutDir, "students")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir students dir: %w", err)
+	}
+	path := filepath.Join(dir, profile.StudentID+".json")
+	if err := fileutil.WriteJSON(path, profile, 0o644); err != nil {
+		return fmt.Errorf("write student profile %q: %w", path, err)
+	}
+	return nil
+}

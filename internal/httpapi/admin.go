@@ -97,6 +97,58 @@ type AdminGroupGradesPageData struct {
 	TableNames []string
 }
 
+type AdminStudentProfilePageData struct {
+	PageTitle    string
+	Footer       FooterInfo
+	StudentID    string
+	NotGenerated bool
+	Profile      domain.GeneratedStudentProfile
+	MaxDaily     int
+}
+
+// AdminStudentProfilePage — админский профиль участника: активность, аналитика
+// решений, позиции в группах (из generated/students/<id>.json).
+func (h *Handlers) AdminStudentProfilePage(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		http.Error(w, "admin is not configured", http.StatusInternalServerError)
+		return
+	}
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if !domain.IsValidSlug(id) {
+		http.NotFound(w, r)
+		return
+	}
+
+	page := AdminStudentProfilePageData{
+		PageTitle: "Профиль — " + id,
+		Footer:    h.buildFooterInfo(),
+		StudentID: id,
+	}
+	profile, err := h.loader.LoadStudentProfile(id)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			page.NotGenerated = true
+		} else {
+			h.logger.Printf("ERROR admin student profile id=%s err=%v", id, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		page.Profile = profile
+		if profile.PublicName != "" {
+			page.PageTitle = "Профиль — " + profile.PublicName
+		}
+		for _, d := range profile.DailyActivity {
+			if d.Count > page.MaxDaily {
+				page.MaxDaily = d.Count
+			}
+		}
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
+		h.logger.Printf("ERROR render admin student profile id=%s err=%v", id, err)
+	}
+}
+
 type AdminManualGradeColumn struct {
 	ID    string
 	Title string

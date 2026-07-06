@@ -17,6 +17,7 @@
     {{range .Members}}
     <li>
       <span>{{.PublicName}}</span> <code>{{.StudentID}}</code>
+      <a class="admin-btn admin-btn--secondary" href="/standings/admin/student?id={{.StudentID}}">Профиль</a>
       <button type="button" class="admin-btn admin-btn--secondary member-remove" data-id="{{.StudentID}}" data-name="{{.PublicName}}">Убрать</button>
     </li>
     {{end}}

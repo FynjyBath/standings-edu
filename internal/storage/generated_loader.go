@@ -87,6 +87,20 @@ func (l *GeneratedLoader) LoadGroupStandings(slug string) (domain.GeneratedGroup
 	return standings.CloneForServe(), nil
 }
 
+// LoadStudentProfile читает профиль участника (админский вид). Без кэша —
+// страница админская, трафик низкий.
+func (l *GeneratedLoader) LoadStudentProfile(id string) (domain.GeneratedStudentProfile, error) {
+	if !domain.IsValidSlug(id) {
+		return domain.GeneratedStudentProfile{}, ErrInvalidGroupSlug
+	}
+	path := filepath.Join(l.OutDir, "students", id+".json")
+	var profile domain.GeneratedStudentProfile
+	if err := fileutil.ReadJSON(path, &profile); err != nil {
+		return domain.GeneratedStudentProfile{}, err
+	}
+	return profile, nil
+}
+
 func (l *GeneratedLoader) LoadLastUpdatedAt() (time.Time, error) {
 	candidates := []string{
 		filepath.Join(l.OutDir, "groups.json"),

@@ -45,6 +45,7 @@
           <td>{{range .Accounts}}<span class="grade-weight">{{.Site}}:</span>{{.AccountID}} {{end}}</td>
           <td>{{range .Groups}}<code>{{.}}</code> {{end}}</td>
           <td style="white-space:nowrap;">
+            <a class="admin-btn admin-btn--secondary" href="/standings/admin/student?id={{.ID}}">Профиль</a>
             <button type="button" class="admin-btn admin-btn--secondary student-edit" data-id="{{.ID}}">Изм.</button>
             <button type="button" class="admin-btn admin-btn--secondary student-delete" data-id="{{.ID}}" data-name="{{.PublicName}}">Удал.</button>
           </td>

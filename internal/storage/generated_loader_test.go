@@ -138,3 +138,36 @@ func TestLoadGroupStandingsConcurrent(t *testing.T) {
 		<-done
 	}
 }
+
+// Round-trip профиля участника + отказ на небезопасный id.
+func TestStudentProfileWriteRead(t *testing.T) {
+	out := t.TempDir()
+	w := NewGeneratedWriter(out)
+	l := NewGeneratedLoader(out)
+
+	p := domain.GeneratedStudentProfile{
+		StudentID:  "ivanov-ii",
+		PublicName: "Иванов И.",
+		Stats:      domain.StudentActivityStats{TotalSolved: 7, TotalSubmissions: 20},
+		Recent:     []domain.StudentSubmission{{Site: "codeforces", TaskURL: "u", Label: "CF 1A", Solved: true}},
+	}
+	if err := w.WriteStudentProfile(p); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, err := l.LoadStudentProfile("ivanov-ii")
+	if err != nil || got.PublicName != "Иванов И." || got.Stats.TotalSolved != 7 || len(got.Recent) != 1 {
+		t.Fatalf("read mismatch: %+v %v", got, err)
+	}
+
+	// Небезопасный id — отказ и в записи, и в чтении.
+	if err := w.WriteStudentProfile(domain.GeneratedStudentProfile{StudentID: "../etc"}); err == nil {
+		t.Fatal("write must reject unsafe id")
+	}
+	if _, err := l.LoadStudentProfile("../etc"); err == nil {
+		t.Fatal("load must reject unsafe id")
+	}
+	// Отсутствующий профиль — os.ErrNotExist.
+	if _, err := l.LoadStudentProfile("nobody"); err == nil {
+		t.Fatal("missing profile must error")
+	}
+}

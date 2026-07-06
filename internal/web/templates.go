@@ -45,6 +45,10 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"contestWindowText":       contestWindowText,
 			"gradeText":               gradeText,
 			"numText":                 numText,
+			"submissionTime":          submissionTime,
+			"siteName":                siteName,
+			"dayLabel":                dayLabel,
+			"sub":                     func(a, b int) int { return a - b },
 		},
 	}
 }
@@ -156,6 +160,38 @@ func contestWindowText(start, end *time.Time) string {
 		return s.Format("02.01.2006 15:04") + "–" + e.Format("15:04") + " MSK"
 	}
 	return s.Format("02.01.2006 15:04") + " — " + e.Format("02.01.2006 15:04") + " MSK"
+}
+
+// submissionTime форматирует время посылки в MSK для ленты профиля.
+func submissionTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.In(moscowLocation).Format("02.01.2006 15:04")
+}
+
+// siteName — человекочитаемое имя сайта для профиля участника.
+func siteName(site string) string {
+	switch site {
+	case "codeforces":
+		return "Codeforces"
+	case "informatics":
+		return "Informatics"
+	case "acmp":
+		return "ACMP"
+	case "", "other":
+		return "прочее"
+	}
+	return site
+}
+
+// dayLabel — короткая дата «дд.мм» из строки YYYY-MM-DD для подписи графика.
+func dayLabel(date string) string {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return date
+	}
+	return t.Format("02.01")
 }
 
 func contestGeneratedAt(generatedAt *time.Time) string {

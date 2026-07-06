@@ -228,3 +228,52 @@ func intPtrEq(a, b *int) bool {
 	}
 	return a == nil || *a == *b
 }
+
+// Наследование параметров: значение из записи группы переопределяет
+// определение контеста; отсутствие — наследует; спецзначения выключают.
+func TestResolveGroupContestDefInheritance(t *testing.T) {
+	start := time.Date(2026, 9, 1, 15, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 9, 1, 19, 0, 0, 0, time.UTC)
+	data := &domain.SourceData{Contests: map[string]domain.Contest{
+		"c1": {ID: "c1", StartTime: &start, EndTime: &end,
+			Freeze: "1h", ZeroPenalty: 5, SummaryTotalOnly: true,
+			TableNames: domain.TableNameList{"Глоб"}},
+	}}
+
+	// Без переопределений — всё из определения (глобальная заморозка активна).
+	got, _ := resolveGroupContestDef(data, domain.GroupContestRef{ID: "c1"})
+	if got.FreezeTime == nil || !got.FreezeTime.Equal(end.Add(-time.Hour)) {
+		t.Fatalf("global freeze must apply: %+v", got.FreezeTime)
+	}
+	if got.ZeroPenalty != 5 || !got.SummaryTotalOnly || got.TableNames[0] != "Глоб" {
+		t.Fatalf("global params must apply: %+v", got)
+	}
+
+	// Локальные переопределения побеждают; freeze "none" выключает глобальную.
+	zp := 0
+	sum := false
+	freezeNone, _ := domain.ParseFreezeSpec("none")
+	got, _ = resolveGroupContestDef(data, domain.GroupContestRef{
+		ID: "c1", Freeze: freezeNone, ZeroPenalty: &zp, SummaryTotalOnly: &sum,
+	})
+	if got.FreezeTime != nil {
+		t.Fatalf("freeze none must disable global: %+v", got.FreezeTime)
+	}
+	if got.ZeroPenalty != 0 || got.SummaryTotalOnly {
+		t.Fatalf("local disable must win: %+v", got)
+	}
+
+	// Локальная заморозка с другой длительностью.
+	freeze30, _ := domain.ParseFreezeSpec("30m")
+	got, _ = resolveGroupContestDef(data, domain.GroupContestRef{ID: "c1", Freeze: freeze30})
+	if got.FreezeTime == nil || !got.FreezeTime.Equal(end.Add(-30*time.Minute)) {
+		t.Fatalf("local freeze must override: %+v", got.FreezeTime)
+	}
+
+	// Локальный штраф больше глобального.
+	zp9 := 9
+	got, _ = resolveGroupContestDef(data, domain.GroupContestRef{ID: "c1", ZeroPenalty: &zp9})
+	if got.ZeroPenalty != 9 {
+		t.Fatalf("local penalty must override: %+v", got.ZeroPenalty)
+	}
+}

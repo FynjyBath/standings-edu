@@ -226,6 +226,33 @@ func TestAdminGroupContestSetOptionsRef(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Fatalf("expected bad freeze rejection, got code=%d", code)
 	}
+
+	// Переопределения zero_penalty / summary_total_only: заданы явно.
+	code, resp = postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"zero_penalty":0,"summary_total_only":false}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("set overrides failed: code=%d resp=%v", code, resp)
+	}
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if v, ok := items[0]["zero_penalty"].(float64); !ok || v != 0 {
+		t.Fatalf("zero_penalty=0 must be written explicitly: %v", items)
+	}
+	if v, ok := items[0]["summary_total_only"].(bool); !ok || v != false {
+		t.Fatalf("summary_total_only=false must be written explicitly: %v", items)
+	}
+	// Отсутствие полей (null) — наследование: ключи убираются.
+	postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true}`)
+	items = readGroupContestsRaw(t, dataDir, "grp")
+	if _, has := items[0]["zero_penalty"]; has {
+		t.Fatalf("null zero_penalty must clear the field: %v", items)
+	}
+	if _, has := items[0]["summary_total_only"]; has {
+		t.Fatalf("null summary_total_only must clear the field: %v", items)
+	}
+	// Отрицательный штраф — отказ.
+	code, _ = postJSON(t, h.AdminGroupContestSetOptions, `{"slug":"grp","id":"a","update":true,"zero_penalty":-1}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("negative zero_penalty override must be rejected, got code=%d", code)
+	}
 }
 
 // Заморозка у inline-контеста: ставится через set-options (entry-поле) и
@@ -244,15 +271,16 @@ func TestAdminGroupContestFreezeInline(t *testing.T) {
 		t.Fatalf("inline freeze not saved or body damaged: %v", items)
 	}
 
-	// Редактирование тела не должно стирать заморозку.
+	// Заморозка inline живёт в теле контеста: форма присылает её вместе с
+	// остальными полями (пустая — убрать).
 	code, _ = postJSON(t, h.AdminGroupContestInlineSave,
-		`{"slug":"grp","original_id":"inl","id":"inl","title":"Инлайн v2","score_system":"edu","source_type":"tasks","subcontests":[]}`)
+		`{"slug":"grp","original_id":"inl","id":"inl","title":"Инлайн v2","score_system":"edu","source_type":"tasks","freeze":"all","subcontests":[]}`)
 	if code != http.StatusOK {
 		t.Fatalf("inline edit failed: code=%d", code)
 	}
 	items = readGroupContestsRaw(t, dataDir, "grp")
 	if items[0]["title"] != "Инлайн v2" || items[0]["freeze"] != "all" {
-		t.Fatalf("freeze lost on inline edit: %v", items)
+		t.Fatalf("freeze from form body lost: %v", items)
 	}
 
 	// Снятие заморозки с inline.
@@ -519,6 +547,22 @@ func TestAdminContestSaveAndDelete(t *testing.T) {
 		`{"id":"c9","score_system":"ioi","source_type":"tasks","zero_penalty":-3,"subcontests":[]}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("negative zero_penalty must be rejected, got code=%d", code)
+	}
+
+	// Глобальная заморозка в определении контеста: сохраняется; невалидная — отказ.
+	code, _ = postJSON(t, h.AdminContestSave,
+		`{"original_id":"c1","id":"c1","title":"К1","score_system":"ioi","source_type":"tasks","freeze":"1h","subcontests":[]}`)
+	if code != http.StatusOK {
+		t.Fatalf("contest save with freeze failed: code=%d", code)
+	}
+	contestsBody, _ = os.ReadFile(filepath.Join(dataDir, "contests.json"))
+	if !strings.Contains(string(contestsBody), `"freeze": "1h"`) && !strings.Contains(string(contestsBody), `"freeze":"1h"`) {
+		t.Fatalf("contest freeze not saved: %s", contestsBody)
+	}
+	code, _ = postJSON(t, h.AdminContestSave,
+		`{"id":"c8","score_system":"ioi","source_type":"tasks","freeze":"скоро","subcontests":[]}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("invalid contest freeze must be rejected, got code=%d", code)
 	}
 
 	code, _ = postJSON(t, h.AdminContestDelete, `{"id":"c1"}`)

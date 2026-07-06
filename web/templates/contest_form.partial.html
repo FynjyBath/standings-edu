@@ -29,6 +29,21 @@
     <div id="c-times" class="admin-form-grid">
       <label><span>Начало (опц., <span class="c-tz">местное время</span>)</span><input type="datetime-local" id="c-start" step="60" /></label>
       <label><span>Конец (опц., <span class="c-tz">местное время</span>)</span><input type="datetime-local" id="c-end" step="60" /></label>
+      <label><span>Заморозка (опц., от конца окна)</span>
+        <span style="display:flex;gap:0.4rem;">
+          <select id="c-freeze-sel">
+            <option value="">нет</option>
+            <option value="30m">последние 30 мин</option>
+            <option value="1h">последний час</option>
+            <option value="1h30m">последние 1,5 ч</option>
+            <option value="2h">последние 2 ч</option>
+            <option value="3h">последние 3 ч</option>
+            <option value="all">всё соревнование</option>
+            <option value="custom">другое…</option>
+          </select>
+          <input type="text" id="c-freeze-custom" placeholder="45m / 2h15m" style="max-width:6rem;display:none;" />
+        </span>
+      </label>
     </div>
     <div style="margin-top:0.5rem;"><strong>Подконтесты</strong> <span class="empty-hint">(задачи — по одной в строке; можно ссылку на контест CF целиком)</span>
       <div id="c-subcontests"></div>
@@ -107,7 +122,7 @@
     function reset() {
       $("c-original-id").value = ""; $("c-id").value = ""; $("c-title").value = ""; $("c-shortname").value = "";
       $("c-score").value = "edu"; $("c-source").value = "tasks"; $("c-tablename").value = ""; $("c-zeropenalty").value = ""; $("c-summarytotal").checked = false;
-      $("c-start").value = ""; $("c-end").value = ""; $("c-provider").value = "codeforces_contest"; $("c-provider-config").value = "";
+      $("c-start").value = ""; $("c-end").value = ""; setFreezeControls(""); $("c-provider").value = "codeforces_contest"; $("c-provider-config").value = "";
       $("c-materials").innerHTML = ""; $("c-subcontests").innerHTML = ""; addSub("", []);
       $("contest-form-title").textContent = "Новый контест"; toggleSections();
     }
@@ -126,6 +141,7 @@
         $("c-provider-config").value = c.provider_config ? JSON.stringify(c.provider_config, null, 2) : "";
       } else {
         $("c-start").value = timeFromISO(c.start_time); $("c-end").value = timeFromISO(c.end_time);
+        setFreezeControls(c.freeze || "");
         $("c-subcontests").innerHTML = "";
         var subs = c.subcontests || [];
         if (!subs.length) addSub("", []);
@@ -153,6 +169,7 @@
         body.provider = $("c-provider").value; body.provider_config = $("c-provider-config").value;
       } else {
         body.start_time = timeToISO($("c-start").value); body.end_time = timeToISO($("c-end").value);
+        body.freeze = freezeControlsValue();
         var subs = [];
         $("c-subcontests").querySelectorAll(".sub-block").forEach(function (box) {
           var tasks = (box.querySelector(".sub-tasks").value || "").split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
@@ -166,9 +183,28 @@
     function show() { root.style.display = ""; }
     function hide() { root.style.display = "none"; }
 
-    // Окно контеста задаётся на стороне группы; редактор глобальных контестов
-    // скрывает эти поля, но fill/collect продолжают переносить существующие
-    // значения, чтобы редактирование не стирало их.
+    // Селект заморозки: пресеты + «другое…» со свободным вводом длительности.
+    function syncFreezeCustom() {
+      $("c-freeze-custom").style.display = ($("c-freeze-sel").value === "custom") ? "" : "none";
+    }
+    $("c-freeze-sel").addEventListener("change", syncFreezeCustom);
+    function setFreezeControls(value) {
+      value = (value || "").trim();
+      var hasPreset = [].slice.call($("c-freeze-sel").options).some(function (o) { return o.value === value; });
+      if (value && !hasPreset) {
+        $("c-freeze-sel").value = "custom";
+        $("c-freeze-custom").value = value;
+      } else {
+        $("c-freeze-sel").value = value;
+        $("c-freeze-custom").value = "";
+      }
+      syncFreezeCustom();
+    }
+    function freezeControlsValue() {
+      if ($("c-freeze-sel").value === "custom") return ($("c-freeze-custom").value || "").trim();
+      return $("c-freeze-sel").value;
+    }
+
     function setTimesVisible(visible) { $("c-times").style.display = visible ? "" : "none"; }
 
     // Подписываем все метки часового пояса фактическим поясом браузера —

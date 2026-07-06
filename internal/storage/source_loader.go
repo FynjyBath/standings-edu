@@ -84,6 +84,9 @@ func (l *SourceLoader) loadContests() (map[string]domain.Contest, error) {
 		c.ScoreSystem = c.ScoreSystem.Normalized()
 		c.Provider = strings.TrimSpace(c.Provider)
 		c.Materials = domain.NormalizeContestMaterials(c.Materials)
+		if _, err := domain.ParseFreezeSpec(c.Freeze); err != nil {
+			return nil, fmt.Errorf("contest %q: %w", c.ID, err)
+		}
 		out[c.ID] = c
 	}
 	return out, nil
@@ -212,12 +215,14 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 	}
 
 	var meta struct {
-		ID         string               `json:"id"`
-		Update     *bool                `json:"update"`
-		TableNames domain.TableNameList `json:"table_name"`
-		StartTime  *time.Time           `json:"start_time"`
-		EndTime    *time.Time           `json:"end_time"`
-		Freeze     string               `json:"freeze"`
+		ID               string               `json:"id"`
+		Update           *bool                `json:"update"`
+		TableNames       domain.TableNameList `json:"table_name"`
+		StartTime        *time.Time           `json:"start_time"`
+		EndTime          *time.Time           `json:"end_time"`
+		Freeze           string               `json:"freeze"`
+		ZeroPenalty      *int                 `json:"zero_penalty"`
+		SummaryTotalOnly *bool                `json:"summary_total_only"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return domain.GroupContestRef{}, err
@@ -227,14 +232,19 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 	if err != nil {
 		return domain.GroupContestRef{}, err
 	}
+	if meta.ZeroPenalty != nil && *meta.ZeroPenalty < 0 {
+		return domain.GroupContestRef{}, fmt.Errorf("zero_penalty: ожидается неотрицательное число")
+	}
 
 	ref := domain.GroupContestRef{
-		ID:         strings.TrimSpace(meta.ID),
-		Update:     true,
-		TableNames: meta.TableNames,
-		StartTime:  meta.StartTime,
-		EndTime:    meta.EndTime,
-		Freeze:     freeze,
+		ID:               strings.TrimSpace(meta.ID),
+		Update:           true,
+		TableNames:       meta.TableNames,
+		StartTime:        meta.StartTime,
+		EndTime:          meta.EndTime,
+		Freeze:           freeze,
+		ZeroPenalty:      meta.ZeroPenalty,
+		SummaryTotalOnly: meta.SummaryTotalOnly,
 	}
 	if meta.Update != nil {
 		ref.Update = *meta.Update

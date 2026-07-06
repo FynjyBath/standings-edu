@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -314,11 +315,23 @@ type AdminGroupContestEntry struct {
 	Title     string
 	Update    bool
 	TableName string
-	StartTime string // окно контеста на стороне группы (ISO); пусто — не задано
+	StartTime string // локальное переопределение окна (ISO); пусто — как у контеста
 	EndTime   string
-	Freeze    string // заморозка: "all" или длительность от конца ("1h"); пусто — нет
-	Inline    bool
-	Missing   bool // ссылка на контест, которого нет в глобальном contests.json
+	Freeze    string // локальное переопределение заморозки; пусто — как у контеста
+	// ZeroPenalty/SummaryTotal — локальные переопределения; пусто — как у
+	// контеста. SummaryTotal: "1"/"0" для селекта.
+	ZeroPenalty  string
+	SummaryTotal string
+	// Inh* — эффективные значения из определения контеста (для подсказок
+	// «как у контеста (…)» в UI). У inline пустые: их определение и есть запись.
+	InhTableName    string
+	InhStart        string
+	InhEnd          string
+	InhFreeze       string
+	InhZeroPenalty  string
+	InhSummaryTotal string // "да"/"нет"
+	Inline          bool
+	Missing         bool // ссылка на контест, которого нет в глобальном contests.json
 }
 
 type AdminGroupContestOption struct {
@@ -335,7 +348,10 @@ type groupContestEntry struct {
 	tableName string
 	startTime string // ISO-представление окна из записи; пусто — не задано
 	endTime   string
-	freeze    string // поле "freeze" записи как есть; пусто — нет заморозки
+	freeze    string // поле "freeze" записи как есть; пусто — не задано
+	// Локальные переопределения (nil — не заданы, наследуются).
+	zeroPenalty      *int
+	summaryTotalOnly *bool
 }
 
 func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, error) {
@@ -357,23 +373,27 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			continue
 		}
 		var meta struct {
-			ID         string               `json:"id"`
-			Update     *bool                `json:"update"`
-			TableNames domain.TableNameList `json:"table_name"`
-			StartTime  string               `json:"start_time"`
-			EndTime    string               `json:"end_time"`
-			Freeze     string               `json:"freeze"`
+			ID               string               `json:"id"`
+			Update           *bool                `json:"update"`
+			TableNames       domain.TableNameList `json:"table_name"`
+			StartTime        string               `json:"start_time"`
+			EndTime          string               `json:"end_time"`
+			Freeze           string               `json:"freeze"`
+			ZeroPenalty      *int                 `json:"zero_penalty"`
+			SummaryTotalOnly *bool                `json:"summary_total_only"`
 		}
 		_ = json.Unmarshal(item, &meta)
 
 		entry := groupContestEntry{
-			raw:       item,
-			id:        strings.TrimSpace(meta.ID),
-			update:    true,
-			tableName: strings.Join(meta.TableNames, ", "),
-			startTime: strings.TrimSpace(meta.StartTime),
-			endTime:   strings.TrimSpace(meta.EndTime),
-			freeze:    strings.TrimSpace(meta.Freeze),
+			raw:              item,
+			id:               strings.TrimSpace(meta.ID),
+			update:           true,
+			tableName:        strings.Join(meta.TableNames, ", "),
+			startTime:        strings.TrimSpace(meta.StartTime),
+			endTime:          strings.TrimSpace(meta.EndTime),
+			freeze:           strings.TrimSpace(meta.Freeze),
+			zeroPenalty:      meta.ZeroPenalty,
+			summaryTotalOnly: meta.SummaryTotalOnly,
 		}
 		if meta.Update != nil {
 			entry.update = *meta.Update
@@ -436,10 +456,10 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	titleByID := make(map[string]string, len(globalContests))
+	globalByID := make(map[string]domain.Contest, len(globalContests))
 	for _, c := range globalContests {
 		if id := strings.TrimSpace(c.ID); id != "" {
-			titleByID[id] = strings.TrimSpace(c.Title)
+			globalByID[id] = c
 		}
 	}
 
@@ -453,6 +473,15 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		}
 		inGroup[e.id] = struct{}{}
 		row := AdminGroupContestEntry{ID: e.id, Update: e.update, TableName: e.tableName, StartTime: e.startTime, EndTime: e.endTime, Freeze: e.freeze, Inline: e.inline}
+		if e.zeroPenalty != nil {
+			row.ZeroPenalty = strconv.Itoa(*e.zeroPenalty)
+		}
+		if e.summaryTotalOnly != nil {
+			row.SummaryTotal = "0"
+			if *e.summaryTotalOnly {
+				row.SummaryTotal = "1"
+			}
+		}
 		if e.inline {
 			var inlineContest domain.Contest
 			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
@@ -463,12 +492,28 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 				row.Title = e.id
 			}
 		} else {
-			ctitle, ok := titleByID[e.id]
+			def, ok := globalByID[e.id]
 			row.Missing = !ok
-			if ctitle == "" {
-				ctitle = e.id
+			row.Title = strings.TrimSpace(def.Title)
+			if row.Title == "" {
+				row.Title = e.id
 			}
-			row.Title = ctitle
+			// Наследуемые значения из определения — для подсказок «как у контеста».
+			row.InhTableName = strings.Join(def.TableNames, ", ")
+			if def.StartTime != nil {
+				row.InhStart = def.StartTime.Format(time.RFC3339)
+			}
+			if def.EndTime != nil {
+				row.InhEnd = def.EndTime.Format(time.RFC3339)
+			}
+			row.InhFreeze = strings.TrimSpace(def.Freeze)
+			if def.ZeroPenalty > 0 {
+				row.InhZeroPenalty = strconv.Itoa(def.ZeroPenalty)
+			}
+			row.InhSummaryTotal = "нет"
+			if def.SummaryTotalOnly {
+				row.InhSummaryTotal = "да"
+			}
 		}
 		rows = append(rows, row)
 	}
@@ -738,7 +783,11 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		TableName string `json:"table_name"`
 		StartTime string `json:"start_time"`
 		EndTime   string `json:"end_time"`
-		Freeze    string `json:"freeze"`
+		// Переопределения с наследованием: пустая строка / null — «как у
+		// контеста» (ключ убирается из записи).
+		Freeze           string `json:"freeze"`
+		ZeroPenalty      *int   `json:"zero_penalty"`
+		SummaryTotalOnly *bool  `json:"summary_total_only"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
@@ -763,6 +812,10 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 	freeze := strings.TrimSpace(req.Freeze)
 	if _, err := domain.ParseFreezeSpec(freeze); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	if req.ZeroPenalty != nil && *req.ZeroPenalty < 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "zero_penalty: ожидается неотрицательное число"})
 		return
 	}
 	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
@@ -822,6 +875,18 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			} else {
 				delete(m, "end_time")
 			}
+			if req.ZeroPenalty != nil {
+				blob, _ := json.Marshal(*req.ZeroPenalty)
+				m["zero_penalty"] = blob
+			} else {
+				delete(m, "zero_penalty")
+			}
+			if req.SummaryTotalOnly != nil {
+				blob, _ := json.Marshal(*req.SummaryTotalOnly)
+				m["summary_total_only"] = blob
+			} else {
+				delete(m, "summary_total_only")
+			}
 			encoded, err := json.Marshal(m)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -843,6 +908,12 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			}
 			if freeze != "" {
 				entry["freeze"] = freeze
+			}
+			if req.ZeroPenalty != nil {
+				entry["zero_penalty"] = *req.ZeroPenalty
+			}
+			if req.SummaryTotalOnly != nil {
+				entry["summary_total_only"] = *req.SummaryTotalOnly
 			}
 			encoded, err := json.Marshal(entry)
 			if err != nil {
@@ -910,16 +981,14 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	// Entry-поля update/freeze форма контеста не редактирует: при редактировании
-	// сохраняем прежние значения записи, для нового контеста — update=true без
-	// заморозки. Явный update из запроса имеет приоритет.
+	// Entry-поле update форма контеста не редактирует: при редактировании
+	// сохраняем прежнее значение записи, для нового контеста — true. Заморозка
+	// и остальные параметры для inline живут в теле контеста и приходят из формы.
 	update := true
-	freeze := ""
 	if originalID != "" {
 		for _, e := range entries {
 			if e.id == originalID {
 				update = e.update
-				freeze = e.freeze
 				break
 			}
 		}
@@ -941,10 +1010,6 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 	}
 	updBlob, _ := json.Marshal(update)
 	m["update"] = updBlob
-	if freeze != "" {
-		fzBlob, _ := json.Marshal(freeze)
-		m["freeze"] = fzBlob
-	}
 	encoded, err := json.Marshal(m)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -1058,6 +1123,7 @@ type adminContestSaveRequest struct {
 	EndTime          string `json:"end_time"`
 	ZeroPenalty      int    `json:"zero_penalty"`
 	SummaryTotalOnly bool   `json:"summary_total_only"`
+	Freeze           string `json:"freeze"`
 	Materials        []struct {
 		Title string `json:"title"`
 		URL   string `json:"url"`
@@ -1081,6 +1147,10 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 	if req.ZeroPenalty < 0 {
 		return domain.Contest{}, errors.New("zero_penalty: ожидается неотрицательное число")
 	}
+	freeze := strings.TrimSpace(req.Freeze)
+	if _, err := domain.ParseFreezeSpec(freeze); err != nil {
+		return domain.Contest{}, err
+	}
 	contest := domain.Contest{
 		ID:               id,
 		Title:            strings.TrimSpace(req.Title),
@@ -1089,6 +1159,7 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 		TableNames:       domain.NormalizeTableNames(parseTableNameField(req.TableName)),
 		ZeroPenalty:      req.ZeroPenalty,
 		SummaryTotalOnly: req.SummaryTotalOnly,
+		Freeze:           freeze,
 	}
 
 	materials := make([]domain.ContestMaterial, 0, len(req.Materials))

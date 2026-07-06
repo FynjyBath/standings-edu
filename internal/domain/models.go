@@ -149,8 +149,12 @@ type Contest struct {
 	ZeroPenalty int `json:"zero_penalty,omitempty"`
 	// SummaryTotalOnly — в сводной таблице показывать контест одной колонкой
 	// суммы (без детализации по задачам). Страница группы не меняется.
-	SummaryTotalOnly bool         `json:"summary_total_only,omitempty"`
-	Subcontests      []Subcontest `json:"subcontests"`
+	SummaryTotalOnly bool `json:"summary_total_only,omitempty"`
+	// Freeze — заморозка по умолчанию для всех групп, подключивших контест
+	// по ссылке ("1h"/"all"). Запись группы может переопределить (в т.ч.
+	// "none" — выключить). Работает при заданном окне.
+	Freeze      string       `json:"freeze,omitempty"`
+	Subcontests []Subcontest `json:"subcontests"`
 }
 
 func (c *Contest) UnmarshalJSON(data []byte) error {
@@ -169,6 +173,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		EndTime        *time.Time        `json:"end_time,omitempty"`
 		ZeroPenalty    int               `json:"zero_penalty,omitempty"`
 		SummaryTotal   bool              `json:"summary_total_only,omitempty"`
+		Freeze         string            `json:"freeze,omitempty"`
 		Subcontests    []Subcontest      `json:"subcontests"`
 	}
 
@@ -190,6 +195,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		EndTime:          raw.EndTime,
 		ZeroPenalty:      raw.ZeroPenalty,
 		SummaryTotalOnly: raw.SummaryTotal,
+		Freeze:           raw.Freeze,
 		Subcontests:      raw.Subcontests,
 		ScoreSystem:      ScoreSystemEdu,
 	}
@@ -371,15 +377,23 @@ type GroupContestRef struct {
 	// определения контеста. nil — оставить как в определении.
 	StartTime *time.Time
 	EndTime   *time.Time
-	// Freeze — заморозка результатов (поле "freeze" записи группы): в публичную
-	// таблицу попадают только посылки до момента заморозки. nil — заморозки нет.
+	// Freeze — переопределение заморозки на уровне группы: nil — как в
+	// определении контеста; None — выключить; иначе — своя длительность/all.
 	Freeze *FreezeSpec
+	// ZeroPenalty — переопределение штрафа за нули: nil — как в определении,
+	// 0 — выключить, N — своё значение.
+	ZeroPenalty *int
+	// SummaryTotalOnly — переопределение «в сводной только сумма»:
+	// nil — как в определении.
+	SummaryTotalOnly *bool
 }
 
-// FreezeSpec — параметр заморозки: либо всё соревнование ("all"), либо
-// длительность от конца окна (напр. "1h" → последний час скрыт).
+// FreezeSpec — параметр заморозки: всё соревнование ("all"), длительность от
+// конца окна ("1h" → последний час скрыт) или явное выключение ("none" — в
+// записи группы отменяет заморозку из определения контеста).
 type FreezeSpec struct {
 	All      bool
+	None     bool
 	Duration time.Duration
 }
 
@@ -393,6 +407,9 @@ func ParseFreezeSpec(raw string) (*FreezeSpec, error) {
 	if strings.EqualFold(raw, "all") {
 		return &FreezeSpec{All: true}, nil
 	}
+	if strings.EqualFold(raw, "none") {
+		return &FreezeSpec{None: true}, nil
+	}
 	dur, err := time.ParseDuration(raw)
 	if err != nil || dur <= 0 {
 		return nil, fmt.Errorf(`freeze: ожидается "all" или длительность > 0 (напр. "1h", "30m", "1h30m")`)
@@ -404,7 +421,7 @@ func ParseFreezeSpec(raw string) (*FreezeSpec, error) {
 // начало окна, иначе end−Duration (не раньше начала). Без полного окна — nil,
 // заморозке не от чего отсчитываться.
 func (f *FreezeSpec) FreezeMoment(start, end *time.Time) *time.Time {
-	if f == nil || start == nil || end == nil || end.Before(*start) {
+	if f == nil || f.None || start == nil || end == nil || end.Before(*start) {
 		return nil
 	}
 	moment := *start

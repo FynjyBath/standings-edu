@@ -148,18 +148,31 @@ func resolveGroupContestDef(data *domain.SourceData, contestRef domain.GroupCont
 		}
 		contest = resolved
 	}
+	// Правило для всех поведенческих параметров: значение из записи группы
+	// (если задано) переопределяет значение из определения контеста.
 	if contestRef.TableNames != nil {
 		contest.TableNames = contestRef.TableNames
 	}
-	// Окно контеста, заданное на стороне группы, приоритетнее окна из определения.
 	if contestRef.StartTime != nil {
 		contest.StartTime = contestRef.StartTime
 	}
 	if contestRef.EndTime != nil {
 		contest.EndTime = contestRef.EndTime
 	}
-	// Заморозка отсчитывается от итогового окна (после переопределений).
-	contest.FreezeTime = contestRef.Freeze.FreezeMoment(contest.StartTime, contest.EndTime)
+	if contestRef.ZeroPenalty != nil {
+		contest.ZeroPenalty = *contestRef.ZeroPenalty
+	}
+	if contestRef.SummaryTotalOnly != nil {
+		contest.SummaryTotalOnly = *contestRef.SummaryTotalOnly
+	}
+	// Заморозка: переопределение группы (в т.ч. "none" — выключить), иначе
+	// из определения; момент считается от итогового окна.
+	freeze := contestRef.Freeze
+	if freeze == nil {
+		// Валидность строки проверена при загрузке contests.json.
+		freeze, _ = domain.ParseFreezeSpec(contest.Freeze)
+	}
+	contest.FreezeTime = freeze.FreezeMoment(contest.StartTime, contest.EndTime)
 	return contest, true
 }
 

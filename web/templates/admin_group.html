@@ -48,21 +48,29 @@
   {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table">
-      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th></th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th>Σ в сводной</th><th>Штраф за ноль</th><th></th></tr></thead>
       <tbody>
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
           <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
           <td>{{if .Inline}}inline{{else}}ссылка{{end}}</td>
           <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
-          <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="через запятую" style="min-width:11rem;" /></td>
+          <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="{{if .Inline}}через запятую{{else if .InhTableName}}как у контеста: {{.InhTableName}}{{else}}как у контеста{{end}}" style="min-width:11rem;" /></td>
           <td>
             <input type="datetime-local" class="c-start" step="60" data-iso="{{.StartTime}}" />
             <input type="datetime-local" class="c-end" step="60" data-iso="{{.EndTime}}" />
+            {{if and (not .Inline) .InhStart}}
+            <div class="grade-weight c-inh-window" data-start="{{.InhStart}}" data-end="{{.InhEnd}}">насл.: …</div>
+            {{end}}
           </td>
           <td>
-            <select class="c-freeze-sel" data-freeze="{{.Freeze}}" title="Заморозка: скрыть результаты последней части соревнования (или всего). Для разморозки выберите «нет» и перегенерируйте.">
+            <select class="c-freeze-sel" data-freeze="{{.Freeze}}" title="Заморозка: скрыть результаты последней части соревнования (или всего). Пусто — как задано у контеста. Для применения перегенерируйте.">
+              {{if .Inline}}
               <option value="">нет</option>
+              {{else}}
+              <option value="">как у контеста{{if .InhFreeze}} ({{.InhFreeze}}){{end}}</option>
+              <option value="none">выключена</option>
+              {{end}}
               <option value="30m">последние 30 мин</option>
               <option value="1h">последний час</option>
               <option value="1h30m">последние 1,5 ч</option>
@@ -73,6 +81,18 @@
             </select>
             <input type="text" class="c-freeze" value="" placeholder="45m / 2h15m" style="max-width:6rem;display:none;" title="Go-длительность: 45m, 2h15m…" />
           </td>
+          <td>
+            <select class="c-summarytotal" data-value="{{.SummaryTotal}}" title="В сводной — только колонка суммы, без задач.">
+              {{if .Inline}}
+              <option value="">нет</option>
+              {{else}}
+              <option value="">как у контеста ({{.InhSummaryTotal}})</option>
+              {{end}}
+              <option value="1">да</option>
+              <option value="0">нет</option>
+            </select>
+          </td>
+          <td><input type="number" class="c-zeropenalty" min="0" step="1" value="{{.ZeroPenalty}}" placeholder="{{if .Inline}}0{{else if .InhZeroPenalty}}насл.: {{.InhZeroPenalty}}{{else}}как у контеста{{end}}" style="max-width:6.5rem;" title="Штраф за задачу без баллов (только ioi). Пусто — как у контеста, 0 — выключить." /></td>
           <td style="white-space:nowrap;">
             <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
             {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
@@ -156,6 +176,18 @@
       if (st) st.value = ContestForm.timeFromISO(st.dataset.iso || "");
       if (en) en.value = ContestForm.timeFromISO(en.dataset.iso || "");
 
+      // Подпись наследуемого окна («как у контеста») в локальном времени.
+      var inhWindow = row.querySelector(".c-inh-window");
+      if (inhWindow) {
+        var inhText = ContestForm.timeFromISO(inhWindow.dataset.start || "").replace("T", " ");
+        var inhEndText = ContestForm.timeFromISO(inhWindow.dataset.end || "").replace("T", " ");
+        inhWindow.textContent = "как у контеста: " + inhText + (inhEndText ? " — " + inhEndText : "");
+      }
+
+      // «Σ в сводной»: селект-переопределение ("" — как у контеста).
+      var sumSel = row.querySelector(".c-summarytotal");
+      if (sumSel) sumSel.value = sumSel.dataset.value || "";
+
       // Заморозка: селект с пресетами; «другое…» открывает свободный ввод.
       var fzSel = row.querySelector(".c-freeze-sel");
       var fzCustom = row.querySelector(".c-freeze");
@@ -183,6 +215,9 @@
       var apply = row.querySelector(".c-apply");
       if (apply) apply.addEventListener("click", function () {
         var tn = row.querySelector(".c-tablename");
+        var zp = row.querySelector(".c-zeropenalty");
+        var zpRaw = zp ? (zp.value || "").trim() : "";
+        var sumRaw = sumSel ? sumSel.value : "";
         setStatus("Сохранение…", false);
         post("/api/admin/group/contests/set-options", {
           slug: slug, id: id,
@@ -190,7 +225,9 @@
           table_name: tn ? (tn.value || "").trim() : "",
           start_time: st ? ContestForm.timeToISO(st.value) : "",
           end_time: en ? ContestForm.timeToISO(en.value) : "",
-          freeze: freezeValue()
+          freeze: freezeValue(),
+          zero_penalty: zpRaw === "" ? null : parseInt(zpRaw, 10),
+          summary_total_only: sumRaw === "" ? null : sumRaw === "1"
         }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
           .catch(function (err) { setStatus(err.message, true); });
       });

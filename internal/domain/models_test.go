@@ -46,6 +46,15 @@ func TestParseFreezeSpecAndMoment(t *testing.T) {
 		t.Fatalf("all freeze must equal start: %v", m)
 	}
 
+	// "none" — явное выключение: момент всегда nil.
+	spec, err = ParseFreezeSpec("none")
+	if err != nil || !spec.None {
+		t.Fatalf("none must parse: %+v %v", spec, err)
+	}
+	if spec.FreezeMoment(&start, &end) != nil {
+		t.Fatal("none must give nil moment")
+	}
+
 	// Без полного окна заморозке не от чего отсчитываться.
 	if spec.FreezeMoment(&start, nil) != nil || spec.FreezeMoment(nil, &end) != nil {
 		t.Fatal("freeze without full window must be nil")

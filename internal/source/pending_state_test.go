@@ -142,13 +142,17 @@ func TestFoldNewInformaticsRunsPending(t *testing.T) {
 }
 
 func TestIsInformaticsPendingStatus(t *testing.T) {
-	pending := []int{11, 95, 96, 97, 98, 99, 100}
+	pending := []int{11, 96, 97, 98, 99}
 	for _, s := range pending {
 		if !isInformaticsPendingStatus(s) {
 			t.Errorf("status %d must be pending", s)
 		}
 	}
-	terminal := []int{0, 1, 2, 3, 5, 7, 8, 9, 10, 13, 16}
+	// В т.ч. финальные статусы с большими кодами (520 реально встречается у
+	// informatics) — их нельзя считать незавершёнными, иначе целые аккаунты
+	// теряются: один старый run в таком статусе опускает порог и вырезает всё
+	// новее него.
+	terminal := []int{0, 1, 2, 3, 5, 7, 8, 9, 10, 13, 16, 95, 100, 101, 520}
 	for _, s := range terminal {
 		if isInformaticsPendingStatus(s) {
 			t.Errorf("status %d must be terminal", s)

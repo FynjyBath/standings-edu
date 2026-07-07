@@ -381,14 +381,14 @@ func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTask
 }
 
 // isInformaticsPendingStatus сообщает, что посылка ещё судится и её вердикт
-// может измениться (в т.ч. стать OK). Такие посылки не запоминаем. Коды ejudge:
-// 11 — RUN_PENDING («ожидает проверки»/в очереди); транзиентные состояния идут
-// с 95 (RUN_RUNNING=96, RUN_COMPILED=97, RUN_COMPILING=98, RUN_AVAILABLE=99, …).
+// может измениться (в т.ч. стать OK). Такие посылки не запоминаем. Это узкий
+// набор транзиентных кодов ejudge — 11 (RUN_PENDING, «ожидает проверки»/в
+// очереди) и 96..99 (RUN_RUNNING/RUN_COMPILED/RUN_COMPILING/RUN_AVAILABLE:
+// выполняется/компилируется). Всё остальное — финальные вердикты. Диапазон
+// намеренно узкий: «всё, что >= 95» ошибочно, у informatics встречаются
+// финальные статусы с большими кодами (напр. 520), и их нельзя терять.
 func isInformaticsPendingStatus(ejudgeStatus int) bool {
-	if ejudgeStatus == 11 {
-		return true
-	}
-	return ejudgeStatus >= 95
+	return ejudgeStatus == 11 || (ejudgeStatus >= 96 && ejudgeStatus <= 99)
 }
 
 // parseInformaticsTime разбирает create_time посылки. Сейчас API отдаёт

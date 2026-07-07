@@ -20,9 +20,33 @@ func TestNormalizeTaskURLInformaticsMirrors(t *testing.T) {
 		}
 	}
 
-	// Чужие домены не трогаем.
-	other := NormalizeTaskURL("https://acmp.ru/?main=task&id_task=29")
-	if other != "https://acmp.ru/?main=task&id_task=29" {
-		t.Fatalf("foreign domain must stay intact: %q", other)
+	// acmp канонизируется отдельным тестом ниже.
+}
+
+// Ссылки на задачу acmp.ru сводятся к одному normalized_url по id_task, как бы
+// их ни записали: /index.asp против /, порядок query, регистр main, схема, www,
+// фрагмент. Иначе задача, добавленная в контест «браузерной» ссылкой
+// (…/index.asp?main=task&id_task=N), не совпадёт с решёнными задачами, которые
+// клиент отдаёт как https://acmp.ru/?main=task&id_task=N.
+func TestNormalizeTaskURLACMP(t *testing.T) {
+	want := "https://acmp.ru/?main=task&id_task=1157"
+	forms := []string{
+		"https://acmp.ru/?main=task&id_task=1157",
+		"https://acmp.ru/index.asp?main=task&id_task=1157",
+		"http://acmp.ru/index.asp?main=Task&id_task=1157",
+		"https://acmp.ru/index.asp?id_task=1157&main=task",
+		"https://www.acmp.ru/index.asp?main=task&id_task=1157",
+		"https://acmp.ru/index.asp?main=task&id_task=1157#top",
+	}
+	for _, raw := range forms {
+		if got := NormalizeTaskURL(raw); got != want {
+			t.Fatalf("acmp form %q normalized to %q, want %q", raw, got, want)
+		}
+	}
+
+	// Страница пользователя (нет id_task) задачей не считается.
+	user := "https://acmp.ru/index.asp?main=user&id=501370"
+	if got := NormalizeTaskURL(user); got != user {
+		t.Fatalf("acmp user page must stay intact: %q", got)
 	}
 }

@@ -35,6 +35,10 @@ func NormalizeTaskURL(raw string) string {
 		return canonical
 	}
 
+	if canonical, ok := canonicalACMPTaskURL(u); ok {
+		return canonical
+	}
+
 	if u.Path != "/" {
 		u.Path = strings.TrimRight(u.Path, "/")
 		if u.Path == "" {
@@ -94,6 +98,30 @@ func canonicalCodeforcesTaskURL(u *url.URL) (string, bool) {
 		return fmt.Sprintf("https://codeforces.com/gym/%d/problem/%s", id, index), true
 	}
 	return fmt.Sprintf("https://codeforces.com/problemset/problem/%d/%s", id, index), true
+}
+
+// canonicalACMPTaskURL приводит разные формы ссылок на задачу acmp.ru к единому
+// виду по числовому id_task, чтобы ссылка из контеста совпадала с URL, которые
+// строит клиент из решённых задач (он отдаёт "https://acmp.ru/?main=task&id_task=N").
+// Отличаются обычно путь (/index.asp против /), порядок query, регистр main,
+// схема (http/https) и префикс www — всё это к матчингу отношения не имеет.
+// Канонизация касается только normalized_url; видимая ссылка остаётся исходной.
+func canonicalACMPTaskURL(u *url.URL) (string, bool) {
+	host := strings.ToLower(u.Hostname())
+	if host != "acmp.ru" && host != "www.acmp.ru" {
+		return "", false
+	}
+
+	rawID := strings.TrimSpace(u.Query().Get("id_task"))
+	if rawID == "" {
+		return "", false
+	}
+	id, err := strconv.Atoi(rawID)
+	if err != nil || id <= 0 {
+		return "", false
+	}
+
+	return fmt.Sprintf("https://acmp.ru/?main=task&id_task=%d", id), true
 }
 
 func splitPathSegments(path string) []string {

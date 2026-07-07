@@ -693,8 +693,12 @@ type GeneratedGradeRow struct {
 	PublicName string `json:"public_name"`
 	// Values — по одному значению на столбец; nil = нет оценки (в среднее не идёт).
 	Values []*float64 `json:"values"`
-	// Final — итоговое взвешенное среднее; nil, если ни одной оценки нет.
+	// Final — итоговое взвешенное среднее, округлённое до Round знаков; nil, если
+	// ни одной оценки нет.
 	Final *float64 `json:"final,omitempty"`
+	// FinalRaw — то же взвешенное среднее без округления (для колонки «точного»
+	// итога, которая всегда показывается с двумя знаками). nil — как у Final.
+	FinalRaw *float64 `json:"final_raw,omitempty"`
 }
 
 type GeneratedGroupSolvedSummaryRow struct {

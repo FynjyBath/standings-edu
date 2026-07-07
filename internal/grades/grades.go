@@ -83,16 +83,19 @@ func Build(cfg *domain.GradesConfig, standings domain.GeneratedGroupStandings, r
 			weightedSum += value * weights[i]
 			weightTotal += weights[i]
 		}
-		var final *float64
+		var final, finalRaw *float64
 		if weightTotal > 0 {
-			f := roundTo(weightedSum/weightTotal, decimals)
+			raw := weightedSum / weightTotal
+			f := roundTo(raw, decimals)
 			final = &f
+			finalRaw = &raw
 		}
 		rows = append(rows, domain.GeneratedGradeRow{
 			StudentID:  student.ID,
 			PublicName: student.PublicName,
 			Values:     values,
 			Final:      final,
+			FinalRaw:   finalRaw,
 		})
 	}
 

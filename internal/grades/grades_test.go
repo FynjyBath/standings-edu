@@ -43,6 +43,32 @@ func TestBuildSortsByFinalDesc(t *testing.T) {
 func iptr(v int) *int         { return &v }
 func fptr(v float64) *float64 { return &v }
 
+// Final округляется до Round знаков, FinalRaw хранит то же среднее без округления.
+func TestBuildFinalRawUnrounded(t *testing.T) {
+	cfg := &domain.GradesConfig{
+		Columns: []domain.GradeColumn{
+			{ID: "x", Title: "X", Weight: 1, Type: domain.GradeColumnManual},
+			{ID: "y", Title: "Y", Weight: 1, Type: domain.GradeColumnManual},
+			{ID: "z", Title: "Z", Weight: 1, Type: domain.GradeColumnManual},
+		},
+	}
+	roster := []RosterStudent{{ID: "a", PublicName: "Аня"}}
+	manual := map[string]map[string]float64{"x": {"a": 10}, "y": {"a": 0}, "z": {"a": 0}}
+
+	got := Build(cfg, domain.GeneratedGroupStandings{}, roster, manual)
+	if got == nil || len(got.Rows) != 1 {
+		t.Fatalf("unexpected: %+v", got)
+	}
+	row := got.Rows[0]
+	// Среднее = 10/3 = 3.3333…; Round по умолчанию = 1 → Final 3.3.
+	if row.Final == nil || *row.Final != 3.3 {
+		t.Fatalf("Final must be rounded to 3.3: %v", row.Final)
+	}
+	if row.FinalRaw == nil || *row.FinalRaw < 3.3333 || *row.FinalRaw > 3.3334 {
+		t.Fatalf("FinalRaw must be unrounded ~3.3333: %v", row.FinalRaw)
+	}
+}
+
 // Коэффициент дорешки: вклад задачи = max(основной, дорешка×k); штраф за нули
 // контеста применяется и в оценке; plus-метрика даёт k за дорешанную задачу.
 func TestBuildUpsolvingCoefficient(t *testing.T) {

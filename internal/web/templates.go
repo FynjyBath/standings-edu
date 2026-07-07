@@ -44,6 +44,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"contestNotStarted":       contestNotStarted,
 			"contestWindowText":       contestWindowText,
 			"gradeText":               gradeText,
+			"grade2Text":              grade2Text,
 			"numText":                 numText,
 			"submissionTime":          submissionTime,
 			"siteName":                siteName,
@@ -137,6 +138,15 @@ func gradeText(v *float64) string {
 		return ""
 	}
 	return numText(*v)
+}
+
+// grade2Text — оценка всегда с двумя знаками после запятой (для колонки точного
+// итога). Пусто, если оценки нет.
+func grade2Text(v *float64) string {
+	if v == nil {
+		return ""
+	}
+	return strconv.FormatFloat(*v, 'f', 2, 64)
 }
 
 // contestNotStarted — контест ещё не начался (StartTime в будущем): сервер уже

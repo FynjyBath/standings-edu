@@ -19,6 +19,7 @@
           {{range .Grades.Columns}}
           <th class="count-col">{{.Title}} <span class="grade-weight">×{{numText .Weight}}</span></th>
           {{end}}
+          <th class="count-col">Итог <span class="grade-weight">точно</span></th>
           <th class="count-col">Итог</th>
         </tr>
       </thead>
@@ -29,6 +30,7 @@
           {{range .Values}}
           <td class="solved-count">{{gradeText .}}</td>
           {{end}}
+          <td class="solved-count"><span class="grade-weight">{{grade2Text .FinalRaw}}</span></td>
           <td class="solved-count"><strong>{{gradeText .Final}}</strong></td>
         </tr>
         {{end}}

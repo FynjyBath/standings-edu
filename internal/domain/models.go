@@ -150,6 +150,10 @@ type Contest struct {
 	// SummaryTotalOnly — в сводной таблице показывать контест одной колонкой
 	// суммы (без детализации по задачам). Страница группы не меняется.
 	SummaryTotalOnly bool `json:"summary_total_only,omitempty"`
+	// Hidden — скрыть контест на страницах для школьников (список и сводная).
+	// Он по-прежнему считается (в т.ч. в оценках) и виден жюри по токену.
+	// false (по умолчанию, поле опущено) — контест виден.
+	Hidden bool `json:"hidden,omitempty"`
 	// Freeze — заморозка по умолчанию для всех групп, подключивших контест
 	// по ссылке ("1h"/"all"). Запись группы может переопределить (в т.ч.
 	// "none" — выключить). Работает при заданном окне.
@@ -173,6 +177,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		EndTime        *time.Time        `json:"end_time,omitempty"`
 		ZeroPenalty    int               `json:"zero_penalty,omitempty"`
 		SummaryTotal   bool              `json:"summary_total_only,omitempty"`
+		Hidden         bool              `json:"hidden,omitempty"`
 		Freeze         string            `json:"freeze,omitempty"`
 		Subcontests    []Subcontest      `json:"subcontests"`
 	}
@@ -195,6 +200,7 @@ func (c *Contest) UnmarshalJSON(data []byte) error {
 		EndTime:          raw.EndTime,
 		ZeroPenalty:      raw.ZeroPenalty,
 		SummaryTotalOnly: raw.SummaryTotal,
+		Hidden:           raw.Hidden,
 		Freeze:           raw.Freeze,
 		Subcontests:      raw.Subcontests,
 		ScoreSystem:      ScoreSystemEdu,
@@ -386,6 +392,9 @@ type GroupContestRef struct {
 	// SummaryTotalOnly — переопределение «в сводной только сумма»:
 	// nil — как в определении.
 	SummaryTotalOnly *bool
+	// Hidden — переопределение «скрыт на страницах школьников»:
+	// nil — как в определении.
+	Hidden *bool
 }
 
 // FreezeSpec — параметр заморозки: всё соревнование ("all"), длительность от
@@ -502,6 +511,9 @@ type GeneratedContestStandings struct {
 	ZeroPenalty int `json:"zero_penalty,omitempty"`
 	// SummaryTotalOnly — в сводной показывать одной колонкой суммы.
 	SummaryTotalOnly bool `json:"summary_total_only,omitempty"`
+	// Hidden — контест скрыт на страницах школьников; сервер вырезает его из
+	// публичных ответов, но отдаёт при просмотре по токену жюри.
+	Hidden bool `json:"hidden,omitempty"`
 	// ShortName — краткое название (для колонки «только сумма» в сводной).
 	ShortName string `json:"short_name,omitempty"`
 	// FrozenAt — таблица заморожена: в неё вошли только посылки до этого момента.
@@ -529,6 +541,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		EndTime      *time.Time            `json:"end_time,omitempty"`
 		ZeroPenalty  int                   `json:"zero_penalty,omitempty"`
 		SummaryTotal bool                  `json:"summary_total_only,omitempty"`
+		Hidden       bool                  `json:"hidden,omitempty"`
 		ShortName    string                `json:"short_name,omitempty"`
 		FrozenAt     *time.Time            `json:"frozen_at,omitempty"`
 		Subcontests  []GeneratedSubcontest `json:"subcontests"`
@@ -553,6 +566,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		EndTime:          raw.EndTime,
 		ZeroPenalty:      raw.ZeroPenalty,
 		SummaryTotalOnly: raw.SummaryTotal,
+		Hidden:           raw.Hidden,
 		ShortName:        raw.ShortName,
 		FrozenAt:         raw.FrozenAt,
 		Subcontests:      raw.Subcontests,
@@ -609,6 +623,23 @@ func (s *GeneratedGroupStandings) StripFullRows() {
 		s.Contests[i].RowsFull = nil
 	}
 	s.GradesFull = nil
+}
+
+// StripHiddenContests убирает из публичного ответа контесты с флагом Hidden.
+// Оценки уже посчитаны при генерации по всем контестам, поэтому удаление здесь
+// на них не влияет — прячется только отображение. Работает на клоне (CloneForServe
+// переприсваивает срез Contests), поэтому кэш не задевается.
+func (s *GeneratedGroupStandings) StripHiddenContests() {
+	if s.Contests == nil {
+		return
+	}
+	kept := make([]GeneratedContestStandings, 0, len(s.Contests))
+	for _, c := range s.Contests {
+		if !c.Hidden {
+			kept = append(kept, c)
+		}
+	}
+	s.Contests = kept
 }
 
 // CloneForServe возвращает копию, которую безопасно отдавать из кэша: серверные

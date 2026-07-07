@@ -49,7 +49,7 @@
   {{if .Entries}}
   <div class="table-wrap">
     <table class="standings-table data-table">
-      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th>Σ в сводной</th><th>Штраф за ноль</th><th></th></tr></thead>
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th>Σ в сводной</th><th>Показывать</th><th>Штраф за ноль</th><th></th></tr></thead>
       <tbody>
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
@@ -91,6 +91,17 @@
               {{end}}
               <option value="1">да</option>
               <option value="0">нет</option>
+            </select>
+          </td>
+          <td>
+            <select class="c-hidden" data-value="{{.Hidden}}" title="Показывать ли контест на страницах школьников. По токену жюри виден всегда; в оценках учитывается независимо.">
+              {{if .Inline}}
+              <option value="">показывать</option>
+              {{else}}
+              <option value="">как у контеста ({{.InhHidden}})</option>
+              {{end}}
+              <option value="0">показывать</option>
+              <option value="1">скрыть</option>
             </select>
           </td>
           <td><input type="number" class="c-zeropenalty" min="0" step="1" value="{{.ZeroPenalty}}" placeholder="{{if .Inline}}0{{else if .InhZeroPenalty}}насл.: {{.InhZeroPenalty}}{{else}}как у контеста{{end}}" style="max-width:6.5rem;" title="Штраф за задачу без баллов (только ioi). Пусто — как у контеста, 0 — выключить." /></td>
@@ -189,6 +200,10 @@
       var sumSel = row.querySelector(".c-summarytotal");
       if (sumSel) sumSel.value = sumSel.dataset.value || "";
 
+      // «Показывать»: селект-переопределение hidden ("" — как у контеста).
+      var hidSel = row.querySelector(".c-hidden");
+      if (hidSel) hidSel.value = hidSel.dataset.value || "";
+
       // Заморозка: селект с пресетами; «другое…» открывает свободный ввод.
       var fzSel = row.querySelector(".c-freeze-sel");
       var fzCustom = row.querySelector(".c-freeze");
@@ -219,6 +234,7 @@
         var zp = row.querySelector(".c-zeropenalty");
         var zpRaw = zp ? (zp.value || "").trim() : "";
         var sumRaw = sumSel ? sumSel.value : "";
+        var hidRaw = hidSel ? hidSel.value : "";
         setStatus("Сохранение…", false);
         post("/api/admin/group/contests/set-options", {
           slug: slug, id: id,
@@ -228,7 +244,8 @@
           end_time: en ? ContestForm.timeToISO(en.value) : "",
           freeze: freezeValue(),
           zero_penalty: zpRaw === "" ? null : parseInt(zpRaw, 10),
-          summary_total_only: sumRaw === "" ? null : sumRaw === "1"
+          summary_total_only: sumRaw === "" ? null : sumRaw === "1",
+          hidden: hidRaw === "" ? null : hidRaw === "1"
         }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
           .catch(function (err) { setStatus(err.message, true); });
       });

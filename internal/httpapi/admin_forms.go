@@ -318,10 +318,11 @@ type AdminGroupContestEntry struct {
 	StartTime string // локальное переопределение окна (ISO); пусто — как у контеста
 	EndTime   string
 	Freeze    string // локальное переопределение заморозки; пусто — как у контеста
-	// ZeroPenalty/SummaryTotal — локальные переопределения; пусто — как у
-	// контеста. SummaryTotal: "1"/"0" для селекта.
+	// ZeroPenalty/SummaryTotal/Hidden — локальные переопределения; пусто — как у
+	// контеста. SummaryTotal/Hidden: "1"/"0" для селекта.
 	ZeroPenalty  string
 	SummaryTotal string
+	Hidden       string
 	// Inh* — эффективные значения из определения контеста (для подсказок
 	// «как у контеста (…)» в UI). У inline пустые: их определение и есть запись.
 	InhTableName    string
@@ -330,6 +331,7 @@ type AdminGroupContestEntry struct {
 	InhFreeze       string
 	InhZeroPenalty  string
 	InhSummaryTotal string // "да"/"нет"
+	InhHidden       string // "да"/"нет"
 	Inline          bool
 	Missing         bool // ссылка на контест, которого нет в глобальном contests.json
 }
@@ -352,6 +354,7 @@ type groupContestEntry struct {
 	// Локальные переопределения (nil — не заданы, наследуются).
 	zeroPenalty      *int
 	summaryTotalOnly *bool
+	hidden           *bool
 }
 
 func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, error) {
@@ -381,6 +384,7 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			Freeze           string               `json:"freeze"`
 			ZeroPenalty      *int                 `json:"zero_penalty"`
 			SummaryTotalOnly *bool                `json:"summary_total_only"`
+			Hidden           *bool                `json:"hidden"`
 		}
 		_ = json.Unmarshal(item, &meta)
 
@@ -394,6 +398,7 @@ func (h *Handlers) loadGroupContestEntries(slug string) ([]groupContestEntry, er
 			freeze:           strings.TrimSpace(meta.Freeze),
 			zeroPenalty:      meta.ZeroPenalty,
 			summaryTotalOnly: meta.SummaryTotalOnly,
+			hidden:           meta.Hidden,
 		}
 		if meta.Update != nil {
 			entry.update = *meta.Update
@@ -482,6 +487,12 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 				row.SummaryTotal = "1"
 			}
 		}
+		if e.hidden != nil {
+			row.Hidden = "0"
+			if *e.hidden {
+				row.Hidden = "1"
+			}
+		}
 		if e.inline {
 			var inlineContest domain.Contest
 			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
@@ -513,6 +524,10 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 			row.InhSummaryTotal = "нет"
 			if def.SummaryTotalOnly {
 				row.InhSummaryTotal = "да"
+			}
+			row.InhHidden = "показан"
+			if def.Hidden {
+				row.InhHidden = "скрыт"
 			}
 		}
 		rows = append(rows, row)
@@ -788,6 +803,7 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		Freeze           string `json:"freeze"`
 		ZeroPenalty      *int   `json:"zero_penalty"`
 		SummaryTotalOnly *bool  `json:"summary_total_only"`
+		Hidden           *bool  `json:"hidden"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
@@ -887,6 +903,12 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			} else {
 				delete(m, "summary_total_only")
 			}
+			if req.Hidden != nil {
+				blob, _ := json.Marshal(*req.Hidden)
+				m["hidden"] = blob
+			} else {
+				delete(m, "hidden")
+			}
 			encoded, err := json.Marshal(m)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -914,6 +936,9 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			}
 			if req.SummaryTotalOnly != nil {
 				entry["summary_total_only"] = *req.SummaryTotalOnly
+			}
+			if req.Hidden != nil {
+				entry["hidden"] = *req.Hidden
 			}
 			encoded, err := json.Marshal(entry)
 			if err != nil {
@@ -1123,6 +1148,7 @@ type adminContestSaveRequest struct {
 	EndTime          string `json:"end_time"`
 	ZeroPenalty      int    `json:"zero_penalty"`
 	SummaryTotalOnly bool   `json:"summary_total_only"`
+	Hidden           bool   `json:"hidden"`
 	Freeze           string `json:"freeze"`
 	Materials        []struct {
 		Title string `json:"title"`
@@ -1159,6 +1185,7 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 		TableNames:       domain.NormalizeTableNames(parseTableNameField(req.TableName)),
 		ZeroPenalty:      req.ZeroPenalty,
 		SummaryTotalOnly: req.SummaryTotalOnly,
+		Hidden:           req.Hidden,
 		Freeze:           freeze,
 	}
 

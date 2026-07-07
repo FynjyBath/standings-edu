@@ -236,7 +236,7 @@ func TestResolveGroupContestDefInheritance(t *testing.T) {
 	end := time.Date(2026, 9, 1, 19, 0, 0, 0, time.UTC)
 	data := &domain.SourceData{Contests: map[string]domain.Contest{
 		"c1": {ID: "c1", StartTime: &start, EndTime: &end,
-			Freeze: "1h", ZeroPenalty: 5, SummaryTotalOnly: true,
+			Freeze: "1h", ZeroPenalty: 5, SummaryTotalOnly: true, Hidden: true,
 			TableNames: domain.TableNameList{"Глоб"}},
 	}}
 
@@ -245,21 +245,22 @@ func TestResolveGroupContestDefInheritance(t *testing.T) {
 	if got.FreezeTime == nil || !got.FreezeTime.Equal(end.Add(-time.Hour)) {
 		t.Fatalf("global freeze must apply: %+v", got.FreezeTime)
 	}
-	if got.ZeroPenalty != 5 || !got.SummaryTotalOnly || got.TableNames[0] != "Глоб" {
+	if got.ZeroPenalty != 5 || !got.SummaryTotalOnly || !got.Hidden || got.TableNames[0] != "Глоб" {
 		t.Fatalf("global params must apply: %+v", got)
 	}
 
 	// Локальные переопределения побеждают; freeze "none" выключает глобальную.
 	zp := 0
 	sum := false
+	hid := false
 	freezeNone, _ := domain.ParseFreezeSpec("none")
 	got, _ = resolveGroupContestDef(data, domain.GroupContestRef{
-		ID: "c1", Freeze: freezeNone, ZeroPenalty: &zp, SummaryTotalOnly: &sum,
+		ID: "c1", Freeze: freezeNone, ZeroPenalty: &zp, SummaryTotalOnly: &sum, Hidden: &hid,
 	})
 	if got.FreezeTime != nil {
 		t.Fatalf("freeze none must disable global: %+v", got.FreezeTime)
 	}
-	if got.ZeroPenalty != 0 || got.SummaryTotalOnly {
+	if got.ZeroPenalty != 0 || got.SummaryTotalOnly || got.Hidden {
 		t.Fatalf("local disable must win: %+v", got)
 	}
 

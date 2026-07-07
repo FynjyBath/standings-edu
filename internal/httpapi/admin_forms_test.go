@@ -654,6 +654,9 @@ func TestGroupSecretTokenFlow(t *testing.T) {
 				ID: "c", FrozenAt: &frozenAt,
 				Rows:     []domain.GeneratedRow{{StudentID: "s1", SolvedCount: 1}},
 				RowsFull: []domain.GeneratedRow{{StudentID: "s1", SolvedCount: 5}},
+			}, {
+				ID: "secret", Hidden: true,
+				Rows: []domain.GeneratedRow{{StudentID: "s1", SolvedCount: 3}},
 			}},
 		}
 	}
@@ -665,6 +668,9 @@ func TestGroupSecretTokenFlow(t *testing.T) {
 	}
 	if s.Contests[0].RowsFull != nil || s.GradesFull != nil || s.Contests[0].Rows[0].SolvedCount != 1 {
 		t.Fatalf("full variants must be stripped: %+v", s)
+	}
+	if len(s.Contests) != 1 || s.Contests[0].ID != "c" {
+		t.Fatalf("hidden contest must be stripped without token: %+v", s.Contests)
 	}
 
 	// Неверный токен — тоже публичная версия.
@@ -685,6 +691,9 @@ func TestGroupSecretTokenFlow(t *testing.T) {
 	}
 	if s.Contests[0].RowsFull != nil || s.GradesFull != nil {
 		t.Fatalf("swapped response must not carry full duplicates: %+v", s)
+	}
+	if len(s.Contests) != 2 || s.Contests[1].ID != "secret" {
+		t.Fatalf("hidden contest must remain for token (jury) view: %+v", s.Contests)
 	}
 
 	// Удаление токена — доступ закрыт сразу.

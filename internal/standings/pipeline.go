@@ -163,6 +163,7 @@ func refreshContestMetadata(standings *domain.GeneratedGroupStandings, data *dom
 		standings.Contests[i].StartTime = meta.StartTime
 		standings.Contests[i].EndTime = meta.EndTime
 		standings.Contests[i].SummaryTotalOnly = meta.SummaryTotalOnly
+		standings.Contests[i].Hidden = meta.Hidden
 		standings.Contests[i].ShortName = strings.TrimSpace(meta.ShortName)
 	}
 }

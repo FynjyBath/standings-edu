@@ -167,6 +167,9 @@ func resolveGroupContestDef(data *domain.SourceData, contestRef domain.GroupCont
 	if contestRef.SummaryTotalOnly != nil {
 		contest.SummaryTotalOnly = *contestRef.SummaryTotalOnly
 	}
+	if contestRef.Hidden != nil {
+		contest.Hidden = *contestRef.Hidden
+	}
 	// Заморозка: переопределение группы (в т.ч. "none" — выключить), иначе
 	// из определения; момент считается от итогового окна.
 	freeze := contestRef.Freeze
@@ -615,6 +618,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		StartTime:        contest.StartTime,
 		EndTime:          contest.EndTime,
 		SummaryTotalOnly: contest.SummaryTotalOnly,
+		Hidden:           contest.Hidden,
 		ShortName:        strings.TrimSpace(contest.ShortName),
 		Subcontests:      make([]domain.GeneratedSubcontest, 0, len(contest.Subcontests)),
 		Tasks:            make([]domain.GeneratedTask, 0),

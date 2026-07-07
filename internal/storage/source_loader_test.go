@@ -115,7 +115,7 @@ func TestParseGroupContestItemAdminFormats(t *testing.T) {
 // Переопределения в записи группы: zero_penalty/summary_total_only/freeze
 // парсятся как опциональные; невалидные значения — ошибка.
 func TestParseGroupContestItemOverrides(t *testing.T) {
-	ref, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","zero_penalty":0,"summary_total_only":false,"freeze":"none"}`))
+	ref, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","zero_penalty":0,"summary_total_only":false,"hidden":true,"freeze":"none"}`))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -125,12 +125,15 @@ func TestParseGroupContestItemOverrides(t *testing.T) {
 	if ref.SummaryTotalOnly == nil || *ref.SummaryTotalOnly {
 		t.Fatalf("summary_total_only=false must be explicit: %+v", ref.SummaryTotalOnly)
 	}
+	if ref.Hidden == nil || !*ref.Hidden {
+		t.Fatalf("hidden=true must be explicit: %+v", ref.Hidden)
+	}
 	if ref.Freeze == nil || !ref.Freeze.None {
 		t.Fatalf("freeze none must parse: %+v", ref.Freeze)
 	}
 
 	ref, err = parseGroupContestItem(json.RawMessage(`{"id":"c1"}`))
-	if err != nil || ref.ZeroPenalty != nil || ref.SummaryTotalOnly != nil || ref.Freeze != nil {
+	if err != nil || ref.ZeroPenalty != nil || ref.SummaryTotalOnly != nil || ref.Hidden != nil || ref.Freeze != nil {
 		t.Fatalf("absent overrides must be nil: %+v %v", ref, err)
 	}
 

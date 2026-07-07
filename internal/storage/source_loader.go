@@ -223,6 +223,7 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 		Freeze           string               `json:"freeze"`
 		ZeroPenalty      *int                 `json:"zero_penalty"`
 		SummaryTotalOnly *bool                `json:"summary_total_only"`
+		Hidden           *bool                `json:"hidden"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return domain.GroupContestRef{}, err
@@ -245,6 +246,7 @@ func parseGroupContestItem(raw json.RawMessage) (domain.GroupContestRef, error) 
 		Freeze:           freeze,
 		ZeroPenalty:      meta.ZeroPenalty,
 		SummaryTotalOnly: meta.SummaryTotalOnly,
+		Hidden:           meta.Hidden,
 	}
 	if meta.Update != nil {
 		ref.Update = *meta.Update

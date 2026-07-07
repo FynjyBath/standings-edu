@@ -390,29 +390,19 @@ func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID st
 	if hasState {
 		lastKnownSubmissionID = state.MaxSubmissionID
 	}
-	maxSubmissionID := lastKnownSubmissionID
-	hasNewSubmissions := false
 
-	const maxPages = 30
-	from := 1
-
-	for page := 0; page < maxPages; page++ {
-		resp, err := c.fetchPage(ctx, handle, from, codeforcesPageSize)
-		if err != nil {
-			return nil, err
-		}
-
-		if mergeCodeforcesSubmissionsIntoAggregatesSinceID(resp.Result, lastKnownSubmissionID, lastKnownSubmissionID > 0, aggByTask, &maxSubmissionID, &hasNewSubmissions) {
-			break
-		}
-
-		if len(resp.Result) < codeforcesPageSize {
-			break
-		}
-		from += codeforcesPageSize
+	newSubmissions, err := c.collectNewCodeforcesSubmissions(ctx, handle, lastKnownSubmissionID)
+	if err != nil {
+		return nil, err
 	}
 
-	if hasState && !hasNewSubmissions {
+	if hasState && len(newSubmissions) == 0 {
+		return cloneTaskResults(state.Results), nil
+	}
+
+	maxSubmissionID, foldedNew := foldNewCodeforcesSubmissions(newSubmissions, lastKnownSubmissionID, aggByTask)
+
+	if hasState && !foldedNew {
 		return cloneTaskResults(state.Results), nil
 	}
 
@@ -686,50 +676,109 @@ func codeforcesSubmissionHasAnyTargetHandle(submission codeforcesContestStatusSu
 	return false
 }
 
-func mergeCodeforcesSubmissionsIntoAggregatesSinceID(submissions []codeforcesSubmission, lastKnownSubmissionID int, stopOnKnownSubmissionID bool, aggByTask map[string]codeforcesTaskAggregate, maxSubmissionID *int, hasNewSubmissions *bool) (staleReached bool) {
-	for _, submission := range submissions {
-		if submission.ID > *maxSubmissionID {
-			*maxSubmissionID = submission.ID
+// collectNewCodeforcesSubmissions собирает посылки новее lastKnownSubmissionID
+// (при отсутствии состояния — все), не сворачивая их: решение, что запоминать,
+// принимается выше, после того как известен порог незавершённых посылок.
+// user.status отдаёт посылки от свежих к старым, поэтому на первой известной
+// посылке (id <= lastKnown) дальнейшие страницы не запрашиваются.
+func (c *CodeforcesAPIClient) collectNewCodeforcesSubmissions(ctx context.Context, handle string, lastKnownSubmissionID int) ([]codeforcesSubmission, error) {
+	const maxPages = 30
+	from := 1
+
+	out := make([]codeforcesSubmission, 0, codeforcesPageSize)
+	for page := 0; page < maxPages; page++ {
+		resp, err := c.fetchPage(ctx, handle, from, codeforcesPageSize)
+		if err != nil {
+			return nil, err
 		}
 
-		if lastKnownSubmissionID > 0 && submission.ID > 0 && submission.ID <= lastKnownSubmissionID {
-			if stopOnKnownSubmissionID {
-				return true
+		reachedKnown := false
+		for _, submission := range resp.Result {
+			if submission.ID <= 0 {
+				continue
 			}
-			continue
+			if lastKnownSubmissionID > 0 && submission.ID <= lastKnownSubmissionID {
+				reachedKnown = true
+				break
+			}
+			out = append(out, submission)
 		}
 
-		if submission.ID > lastKnownSubmissionID {
-			*hasNewSubmissions = true
+		if reachedKnown || len(resp.Result) < codeforcesPageSize {
+			break
 		}
-
-		taskURL := buildCodeforcesProblemURL(submission.Problem)
-		if taskURL == "" {
-			continue
-		}
-
-		agg := aggByTask[taskURL]
-		agg.attempted = true
-		solved := submission.Verdict == "OK"
-		if solved {
-			agg.solved = true
-		}
-		score := codeforcesSubmissionScore(submission)
-		if !agg.hasScore || score > agg.score {
-			agg.score = score
-			agg.hasScore = true
-		}
-		if submission.CreationTimeSeconds > 0 {
-			submissionScore := score
-			agg.timed = append(agg.timed, TimedSubmission{
-				At:     time.Unix(submission.CreationTimeSeconds, 0).UTC(),
-				Solved: solved,
-				Score:  &submissionScore,
-			})
-		}
-		aggByTask[taskURL] = agg
+		from += codeforcesPageSize
 	}
-	return false
+
+	return out, nil
+}
+
+// foldNewCodeforcesSubmissions сворачивает завершённые новые посылки в агрегаты и
+// возвращает новый водяной знак (maxSubmissionID) и признак, что хоть что-то было
+// зачтено. Незавершённые посылки и всё не старше самой ранней из них пропускаются
+// и в состояние не попадают — так их повторно подхватят в следующий сбор, когда
+// вердикт станет финальным.
+func foldNewCodeforcesSubmissions(newSubmissions []codeforcesSubmission, lastKnownSubmissionID int, aggByTask map[string]codeforcesTaskAggregate) (maxSubmissionID int, foldedNew bool) {
+	pendingFloor := 0
+	for _, submission := range newSubmissions {
+		if submission.ID > 0 && !isCodeforcesTerminalVerdict(submission.Verdict) {
+			if pendingFloor == 0 || submission.ID < pendingFloor {
+				pendingFloor = submission.ID
+			}
+		}
+	}
+
+	maxSubmissionID = lastKnownSubmissionID
+	for _, submission := range newSubmissions {
+		if submission.ID <= 0 {
+			continue
+		}
+		if pendingFloor > 0 && submission.ID >= pendingFloor {
+			continue
+		}
+		foldCodeforcesSubmission(submission, aggByTask)
+		if submission.ID > maxSubmissionID {
+			maxSubmissionID = submission.ID
+		}
+		foldedNew = true
+	}
+	return maxSubmissionID, foldedNew
+}
+
+func foldCodeforcesSubmission(submission codeforcesSubmission, aggByTask map[string]codeforcesTaskAggregate) {
+	taskURL := buildCodeforcesProblemURL(submission.Problem)
+	if taskURL == "" {
+		return
+	}
+
+	agg := aggByTask[taskURL]
+	agg.attempted = true
+	solved := submission.Verdict == "OK"
+	if solved {
+		agg.solved = true
+	}
+	score := codeforcesSubmissionScore(submission)
+	if !agg.hasScore || score > agg.score {
+		agg.score = score
+		agg.hasScore = true
+	}
+	if submission.CreationTimeSeconds > 0 {
+		submissionScore := score
+		agg.timed = append(agg.timed, TimedSubmission{
+			At:     time.Unix(submission.CreationTimeSeconds, 0).UTC(),
+			Solved: solved,
+			Score:  &submissionScore,
+		})
+	}
+	aggByTask[taskURL] = agg
+}
+
+// isCodeforcesTerminalVerdict — вердикт финальный (не поменяется). Пустой вердикт
+// (посылка в очереди, поле отсутствует) и "TESTING" — незавершённые: их не
+// запоминаем, иначе, став OK, они будут пропущены при следующем сборе.
+func isCodeforcesTerminalVerdict(verdict string) bool {
+	verdict = strings.TrimSpace(verdict)
+	return verdict != "" && !strings.EqualFold(verdict, "TESTING")
 }
 
 func mergeCodeforcesStateIntoAggregates(aggByTask map[string]codeforcesTaskAggregate, results []TaskResult) {

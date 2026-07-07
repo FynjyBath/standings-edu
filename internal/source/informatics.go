@@ -137,37 +137,13 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 	if hasState {
 		lastKnownRunID = state.MaxRunID
 	}
-	maxRunID := lastKnownRunID
 
-	firstPage, err := c.fetchRunsPageWithRelogin(ctx, accountID, 1)
+	newRuns, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
 	if err != nil {
 		return nil, err
 	}
-	stopOnKnownRunID := lastKnownRunID > 0
-	staleReached := mergeRunsIntoAggregatesSinceRunID(firstPage.Data, lastKnownRunID, stopOnKnownRunID, aggByTask, c.buildTaskURL, &maxRunID)
 
-	pageCount := firstPage.Metadata.PageCount
-	if pageCount > 1 && len(firstPage.Data) > 0 && !staleReached {
-		if stopOnKnownRunID {
-			for page := 2; page <= pageCount; page++ {
-				resp, pageErr := c.fetchRunsPageWithRelogin(ctx, accountID, page)
-				if pageErr != nil {
-					return nil, pageErr
-				}
-				if mergeRunsIntoAggregatesSinceRunID(resp.Data, lastKnownRunID, true, aggByTask, c.buildTaskURL, &maxRunID) {
-					break
-				}
-			}
-		} else {
-			otherPages, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
-			if pageErr != nil {
-				return nil, pageErr
-			}
-			for _, page := range otherPages {
-				mergeRunsIntoAggregatesSinceRunID(page.Data, 0, false, aggByTask, c.buildTaskURL, &maxRunID)
-			}
-		}
-	}
+	maxRunID := foldNewInformaticsRuns(newRuns, lastKnownRunID, aggByTask, c.buildTaskURL)
 
 	results := aggregatesToTaskResults(aggByTask)
 
@@ -289,49 +265,130 @@ func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, acco
 	return out, nil
 }
 
-func mergeRunsIntoAggregatesSinceRunID(runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string, maxRunID *int) (staleReached bool) {
+// collectNewInformaticsRuns собирает посылки новее lastKnownRunID (при отсутствии
+// состояния — все), не сворачивая их: решение, что запоминать, принимается выше,
+// после того как известен порог незавершённых посылок. Пейджинг с ранним выходом
+// сохранён: список новостей идёт от свежих к старым, поэтому на первой известной
+// посылке дальнейшие страницы не запрашиваются.
+func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, accountID string, lastKnownRunID int) ([]informaticsRun, error) {
+	firstPage, err := c.fetchRunsPageWithRelogin(ctx, accountID, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	stopOnKnownRunID := lastKnownRunID > 0
+	out := make([]informaticsRun, 0, len(firstPage.Data))
+	staleReached := appendNewInformaticsRuns(&out, firstPage.Data, lastKnownRunID, stopOnKnownRunID)
+
+	pageCount := firstPage.Metadata.PageCount
+	if pageCount > 1 && len(firstPage.Data) > 0 && !staleReached {
+		if stopOnKnownRunID {
+			for page := 2; page <= pageCount; page++ {
+				resp, pageErr := c.fetchRunsPageWithRelogin(ctx, accountID, page)
+				if pageErr != nil {
+					return nil, pageErr
+				}
+				if appendNewInformaticsRuns(&out, resp.Data, lastKnownRunID, true) {
+					break
+				}
+			}
+		} else {
+			otherPages, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
+			if pageErr != nil {
+				return nil, pageErr
+			}
+			for _, page := range otherPages {
+				appendNewInformaticsRuns(&out, page.Data, 0, false)
+			}
+		}
+	}
+
+	return out, nil
+}
+
+func appendNewInformaticsRuns(out *[]informaticsRun, runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool) (staleReached bool) {
 	for _, run := range runs {
 		if run.ID <= 0 {
 			continue
 		}
-
-		if run.ID > *maxRunID {
-			*maxRunID = run.ID
-		}
-
 		if lastKnownRunID > 0 && run.ID <= lastKnownRunID {
 			if stopOnKnownRunID {
 				return true
 			}
 			continue
 		}
-
-		taskURL := buildTaskURL(run.Problem.ID)
-		if taskURL == "" {
-			continue
-		}
-
-		agg := aggByTask[taskURL]
-		agg.attempted = true
-		solved := isInformaticsSolvedStatus(run.EjudgeStatus)
-		if solved {
-			agg.solved = true
-		}
-
-		score := inferInformaticsScore(run)
-		if !agg.hasScore || score > agg.score {
-			agg.score = score
-			agg.hasScore = true
-		}
-
-		if at, ok := parseInformaticsTime(run.CreateTime); ok {
-			submissionScore := score
-			agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore})
-		}
-
-		aggByTask[taskURL] = agg
+		*out = append(*out, run)
 	}
 	return false
+}
+
+// foldNewInformaticsRuns сворачивает завершённые новые посылки в агрегаты и
+// возвращает новый водяной знак (maxRunID). Незавершённые посылки (идёт проверка/
+// в очереди) и всё не старше самой ранней из них пропускаются и в состояние не
+// попадают — их повторно подхватят в следующий сбор, когда вердикт станет
+// финальным (иначе, став OK, они были бы пропущены как «уже известные»).
+func foldNewInformaticsRuns(newRuns []informaticsRun, lastKnownRunID int, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string) (maxRunID int) {
+	pendingFloor := 0
+	for _, run := range newRuns {
+		if run.ID > 0 && isInformaticsPendingStatus(run.EjudgeStatus) {
+			if pendingFloor == 0 || run.ID < pendingFloor {
+				pendingFloor = run.ID
+			}
+		}
+	}
+
+	maxRunID = lastKnownRunID
+	for _, run := range newRuns {
+		if run.ID <= 0 {
+			continue
+		}
+		if pendingFloor > 0 && run.ID >= pendingFloor {
+			continue
+		}
+		foldInformaticsRun(run, aggByTask, buildTaskURL)
+		if run.ID > maxRunID {
+			maxRunID = run.ID
+		}
+	}
+	return maxRunID
+}
+
+func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string) {
+	taskURL := buildTaskURL(run.Problem.ID)
+	if taskURL == "" {
+		return
+	}
+
+	agg := aggByTask[taskURL]
+	agg.attempted = true
+	solved := isInformaticsSolvedStatus(run.EjudgeStatus)
+	if solved {
+		agg.solved = true
+	}
+
+	score := inferInformaticsScore(run)
+	if !agg.hasScore || score > agg.score {
+		agg.score = score
+		agg.hasScore = true
+	}
+
+	if at, ok := parseInformaticsTime(run.CreateTime); ok {
+		submissionScore := score
+		agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore})
+	}
+
+	aggByTask[taskURL] = agg
+}
+
+// isInformaticsPendingStatus сообщает, что посылка ещё судится и её вердикт
+// может измениться (в т.ч. стать OK). Такие посылки не запоминаем. Коды ejudge:
+// 11 — RUN_PENDING («ожидает проверки»/в очереди); транзиентные состояния идут
+// с 95 (RUN_RUNNING=96, RUN_COMPILED=97, RUN_COMPILING=98, RUN_AVAILABLE=99, …).
+func isInformaticsPendingStatus(ejudgeStatus int) bool {
+	if ejudgeStatus == 11 {
+		return true
+	}
+	return ejudgeStatus >= 95
 }
 
 // parseInformaticsTime разбирает create_time посылки. Сейчас API отдаёт

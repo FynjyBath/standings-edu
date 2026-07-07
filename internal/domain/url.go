@@ -39,6 +39,10 @@ func NormalizeTaskURL(raw string) string {
 		return canonical
 	}
 
+	if canonical, ok := canonicalInformaticsTaskURL(u); ok {
+		return canonical
+	}
+
 	if u.Path != "/" {
 		u.Path = strings.TrimRight(u.Path, "/")
 		if u.Path == "" {
@@ -122,6 +126,35 @@ func canonicalACMPTaskURL(u *url.URL) (string, bool) {
 	}
 
 	return fmt.Sprintf("https://acmp.ru/?main=task&id_task=%d", id), true
+}
+
+// canonicalInformaticsTaskURL приводит ссылки на задачу informatics к единому
+// виду по chapterid. Задача на informatics адресуется chapterid (это же id
+// задачи в посылках), а параметр id — это сборник/страница-контейнер, который у
+// одной и той же задачи может отличаться (та же задача попадает в разные
+// сборники/курсы). Ссылка из «браузерной» формы …view.php?id=2296&chapterid=2937
+// иначе не совпала бы с посылками, которые строятся как …view.php?chapterid=2937.
+// Ссылки-сборники (id без chapterid) не трогаем — это не задача, а страница
+// контеста (её разворачивает билд в отдельные задачи).
+func canonicalInformaticsTaskURL(u *url.URL) (string, bool) {
+	host := strings.ToLower(u.Hostname())
+	if host != "informatics.msk.ru" {
+		return "", false
+	}
+	if !strings.EqualFold(strings.TrimSpace(u.Path), "/mod/statements/view.php") {
+		return "", false
+	}
+
+	rawID := strings.TrimSpace(u.Query().Get("chapterid"))
+	if rawID == "" {
+		return "", false
+	}
+	id, err := strconv.Atoi(rawID)
+	if err != nil || id <= 0 {
+		return "", false
+	}
+
+	return fmt.Sprintf("https://informatics.msk.ru/mod/statements/view.php?chapterid=%d", id), true
 }
 
 func splitPathSegments(path string) []string {

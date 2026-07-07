@@ -768,6 +768,139 @@ func (c *InformaticsAPIClient) buildTaskURL(problemID int) string {
 	return fmt.Sprintf("%s/mod/statements/view.php?chapterid=%d#1", c.baseURL, problemID)
 }
 
+// InformaticsStatementProblem — задача сборника informatics: chapterid (он же id
+// задачи в посылках) и заголовок из оглавления страницы.
+type InformaticsStatementProblem struct {
+	ChapterID int
+	Title     string
+}
+
+// ParseInformaticsStatementID распознаёт ссылку на СБОРНИК informatics —
+// mod/statements/view.php?id=<N> без chapterid (страница-контейнер с оглавлением
+// задач). Возвращает (id, true). Ссылка с chapterid — это конкретная задача, а
+// не сборник, поэтому (0, false).
+func ParseInformaticsStatementID(rawURL string) (int, bool) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return 0, false
+	}
+	host := strings.ToLower(u.Hostname())
+	switch host {
+	case "informatics.msk.ru", "www.informatics.msk.ru",
+		"informatics.mccme.ru", "www.informatics.mccme.ru":
+	default:
+		return 0, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(u.Path), "/mod/statements/view.php") {
+		return 0, false
+	}
+	q := u.Query()
+	if strings.TrimSpace(q.Get("chapterid")) != "" {
+		return 0, false
+	}
+	id, err := strconv.Atoi(strings.TrimSpace(q.Get("id")))
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+var (
+	// Оглавление сборника: блок statements_toc → его <ul>…</ul>.
+	informaticsTocRe = regexp.MustCompile(`(?is)statements_toc.*?<ul>(.*?)</ul>`)
+	informaticsLiRe  = regexp.MustCompile(`(?is)<li>(.*?)</li>`)
+	// chapterid из ссылки пункта оглавления.
+	informaticsChapterHrefRe = regexp.MustCompile(`chapterid=(\d+)`)
+	// id активной (открытой) задачи — у неё в оглавлении нет ссылки, chapterid
+	// берём из скрытого блока problem_data.
+	informaticsActiveProblemRe = regexp.MustCompile(`(?is)problem_data[^>]*problem_id=['"](\d+)['"]`)
+	informaticsTagRe           = regexp.MustCompile(`(?is)<[^>]+>`)
+	informaticsWSRe            = regexp.MustCompile(`\s+`)
+)
+
+// FetchStatementProblems разворачивает сборник informatics (id) в упорядоченный
+// список задач: читает страницу сборника и разбирает оглавление. Активная
+// (первая) задача показана без ссылки — её chapterid берётся из problem_data.
+func (c *InformaticsAPIClient) FetchStatementProblems(ctx context.Context, statementID int) ([]InformaticsStatementProblem, error) {
+	if statementID <= 0 {
+		return nil, fmt.Errorf("informatics statement id must be > 0")
+	}
+	if err := c.ensureLoggedIn(ctx, false); err != nil {
+		return nil, err
+	}
+
+	body, err := c.fetchStatementPage(ctx, statementID)
+	if err != nil {
+		return nil, err
+	}
+	problems, err := parseInformaticsStatementProblems(body)
+	if err != nil {
+		return nil, err
+	}
+	if len(problems) == 0 {
+		return nil, fmt.Errorf("informatics statement id=%d: no problems parsed", statementID)
+	}
+	return problems, nil
+}
+
+func (c *InformaticsAPIClient) fetchStatementPage(ctx context.Context, statementID int) ([]byte, error) {
+	pageURL := fmt.Sprintf("%s/mod/statements/view.php?id=%d", c.baseURL, statementID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 1024))
+		return nil, fmt.Errorf("informatics statement status=%d body=%q", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return io.ReadAll(res.Body)
+}
+
+func parseInformaticsStatementProblems(body []byte) ([]InformaticsStatementProblem, error) {
+	toc := informaticsTocRe.FindSubmatch(body)
+	if toc == nil {
+		return nil, fmt.Errorf("informatics statement: оглавление (statements_toc) не найдено")
+	}
+
+	activeID := 0
+	if m := informaticsActiveProblemRe.FindSubmatch(body); m != nil {
+		activeID, _ = strconv.Atoi(string(m[1]))
+	}
+
+	items := informaticsLiRe.FindAllSubmatch(toc[1], -1)
+	out := make([]InformaticsStatementProblem, 0, len(items))
+	seen := make(map[int]struct{}, len(items))
+	for _, item := range items {
+		li := item[1]
+		chapterID := 0
+		if m := informaticsChapterHrefRe.FindSubmatch(li); m != nil {
+			chapterID, _ = strconv.Atoi(string(m[1]))
+		} else {
+			// Пункт без ссылки — открытая (активная) задача сборника.
+			chapterID = activeID
+		}
+		if chapterID <= 0 {
+			continue
+		}
+		if _, dup := seen[chapterID]; dup {
+			continue
+		}
+		seen[chapterID] = struct{}{}
+
+		title := informaticsWSRe.ReplaceAllString(string(informaticsTagRe.ReplaceAll(li, []byte(" "))), " ")
+		out = append(out, InformaticsStatementProblem{
+			ChapterID: chapterID,
+			Title:     strings.TrimSpace(title),
+		})
+	}
+	return out, nil
+}
+
 type informaticsRunsResponse struct {
 	Result   string           `json:"result"`
 	Message  string           `json:"message"`

@@ -48,6 +48,14 @@ type SiteClient interface {
 	MatchTaskURL(taskURL string) bool
 }
 
+// StatementExpander реализуют сайт-клиенты, умеющие разворачивать ссылку на
+// сборник задач в список отдельных задач (informatics). Билд обнаруживает
+// возможность через type-assert клиента сайта — расширять базовый SiteClient не
+// нужно.
+type StatementExpander interface {
+	FetchStatementProblems(ctx context.Context, statementID int) ([]InformaticsStatementProblem, error)
+}
+
 type ContestProviderInput struct {
 	Source   *domain.SourceData
 	Group    domain.GroupDefinition

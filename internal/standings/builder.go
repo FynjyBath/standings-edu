@@ -380,7 +380,8 @@ func (b *Builder) buildGroupStandings(
 		switch contest.TypeOrDefault() {
 		case domain.ContestTypeTasks:
 			expanded := b.expandCodeforcesContestRefs(ctx, data, pg.group, contest, pg.students)
-			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded)
+			statementRefs := b.expandInformaticsStatementRefs(ctx, pg.group, contest)
+			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs)
 			generated.GeneratedAt = &now
 			out.Contests = append(out.Contests, generated)
 		case domain.ContestTypeProvider:
@@ -571,6 +572,59 @@ func (b *Builder) expandCodeforcesContestRefs(ctx context.Context, data *domain.
 	return out
 }
 
+// expandInformaticsStatementRefs для каждой ссылки на сборник informatics
+// (mod/statements/view.php?id=… без chapterid) в списке задач tasks-контеста
+// читает страницу сборника и возвращает по statement_id упорядоченный список
+// ссылок на отдельные задачи (в форме …?chapterid=<N>#1 — ссылка на саму задачу,
+// без сборника). nil в значении — развернуть не удалось (задачи пропускаются).
+// В отличие от Codeforces отдельная таблица не строится: результаты берутся из
+// уже собранных посылок ученика по обычному сопоставлению URL.
+func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[int][]string {
+	ids := make([]int, 0)
+	rawByID := make(map[int]string)
+	seen := make(map[int]struct{})
+	for _, subcontest := range contest.Subcontests {
+		for _, rawTaskURL := range subcontest.Tasks {
+			if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
+				if _, dup := seen[sid]; !dup {
+					seen[sid] = struct{}{}
+					ids = append(ids, sid)
+					rawByID[sid] = rawTaskURL
+				}
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	out := make(map[int][]string, len(ids))
+	for _, sid := range ids {
+		_, client, ok := b.sources.ResolveSiteByTaskURL(rawByID[sid])
+		expander, canExpand := client.(source.StatementExpander)
+		if !ok || !canExpand {
+			b.logger.Printf("WARN group=%s contest=%s: informatics statement expander unavailable; statement id=%d skipped", group.Slug, contest.ID, sid)
+			out[sid] = nil
+			continue
+		}
+		problems, err := expander.FetchStatementProblems(ctx, sid)
+		if err != nil {
+			b.logger.Printf("WARN group=%s contest=%s expand informatics statement %d failed: %v", group.Slug, contest.ID, sid, err)
+			out[sid] = nil
+			continue
+		}
+		urls := make([]string, 0, len(problems))
+		for _, problem := range problems {
+			if problem.ChapterID <= 0 {
+				continue
+			}
+			urls = append(urls, fmt.Sprintf("https://informatics.msk.ru/mod/statements/view.php?chapterid=%d#1", problem.ChapterID))
+		}
+		out[sid] = urls
+	}
+	return out
+}
+
 // expandedContestProblemURL строит ссылку на задачу из исходной ссылки на
 // контест Codeforces, сохраняя её форму (group/contest/gym): <contestURL>/problem/<idx>.
 func expandedContestProblemURL(contestURL, problemIndex string) string {
@@ -589,7 +643,7 @@ type taskColumn struct {
 	useRealScores bool   // для обычной IOI-задачи
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]string) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	var windowStart, windowEnd time.Time
@@ -640,6 +694,27 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			Title: subcontest.Title,
 			Tasks: make([]domain.GeneratedTask, 0, len(subcontest.Tasks)),
 		}
+		// addNormalTask добавляет обычную задачу-колонку по её ссылке (результат
+		// берётся из посылок ученика по сопоставлению normalized_url).
+		addNormalTask := func(rawURL string) {
+			normalized := domain.NormalizeTaskURL(rawURL)
+			task := domain.GeneratedTask{
+				Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
+				URL:           strings.TrimSpace(rawURL),
+				NormalizedURL: normalized,
+			}
+			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
+			out.Tasks = append(out.Tasks, task)
+
+			useRealScores := false
+			if isIOI {
+				_, client, ok := b.sources.ResolveSiteByTaskURL(normalized)
+				if ok && client != nil && client.SupportsTaskScores() {
+					useRealScores = true
+				}
+			}
+			columns = append(columns, taskColumn{normalizedURL: normalized, useRealScores: useRealScores})
+		}
 		for _, rawTaskURL := range subcontest.Tasks {
 			if cid, ok := source.ParseCodeforcesContestID(rawTaskURL); ok {
 				contestStandings := expanded[cid]
@@ -663,23 +738,16 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 				continue
 			}
 
-			normalized := domain.NormalizeTaskURL(rawTaskURL)
-			task := domain.GeneratedTask{
-				Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
-				URL:           strings.TrimSpace(rawTaskURL),
-				NormalizedURL: normalized,
-			}
-			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
-			out.Tasks = append(out.Tasks, task)
-
-			useRealScores := false
-			if isIOI {
-				_, client, ok := b.sources.ResolveSiteByTaskURL(normalized)
-				if ok && client != nil && client.SupportsTaskScores() {
-					useRealScores = true
+			// Сборник informatics: разворачиваем в отдельные задачи-колонки
+			// (ссылка на саму задачу, без сборника). Каждая — обычная задача.
+			if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
+				for _, problemURL := range statementRefs[sid] {
+					addNormalTask(problemURL)
 				}
+				continue
 			}
-			columns = append(columns, taskColumn{normalizedURL: normalized, useRealScores: useRealScores})
+
+			addNormalTask(rawTaskURL)
 		}
 		generatedSubcontest.TaskCount = len(generatedSubcontest.Tasks)
 		out.Subcontests = append(out.Subcontests, generatedSubcontest)
@@ -846,7 +914,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	if frozen {
 		fullContest := contest
 		fullContest.FreezeTime = nil
-		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded)
+		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs)
 		out.RowsFull = full.Rows
 	}
 

@@ -69,16 +69,20 @@
   <p class="empty-hint">Общая страница нескольких групп: контесты с одной и той же ссылкой сливаются в одну табличку (с учениками всех групп), разные — идут отдельными. Оценок у объединённой группы нет. Изменения видны сразу, перегенерация не нужна.</p>
 
   {{if .CombinedGroups}}
-  <ul class="admin-groups-list" id="combined-list">
+  <ul class="combined-list" id="combined-list">
     {{range .CombinedGroups}}
-    <li data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}">
-      <a class="admin-btn" href="/standings/admin/combined?slug={{.Slug}}">{{.Title}}</a>
-      <span>({{.Slug}})</span>
-      <span class="grade-weight">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</span>
-      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
-      <a class="admin-btn admin-btn--secondary" href="/standings/admin/combined?slug={{.Slug}}">Настроить{{if .Token}} 🔑{{end}}</a>
-      <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить состав</button>
-      <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>
+    <li class="combined-item" data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}">
+      <div class="combined-item-head">
+        <a class="admin-btn combined-item-title" href="/standings/admin/combined?slug={{.Slug}}">{{.Title}}</a>
+        <span class="grade-weight">({{.Slug}})</span>
+        <span class="combined-item-actions">
+          <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+          <a class="admin-btn admin-btn--secondary" href="/standings/admin/combined?slug={{.Slug}}">Настроить{{if .Token}} 🔑{{end}}</a>
+          <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить состав</button>
+          <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>
+        </span>
+      </div>
+      <div class="combined-item-members">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</div>
     </li>
     {{end}}
   </ul>

@@ -297,6 +297,7 @@ type AdminGroupManagePageData struct {
 	Footer          FooterInfo
 	GroupSlug       string
 	GroupTitle      string
+	ShortName       string
 	Members         []AdminGroupMember
 	Entries         []AdminGroupContestEntry
 	AddableContests []AdminGroupContestOption
@@ -562,6 +563,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		Footer:          h.buildFooterInfo(),
 		GroupSlug:       slug,
 		GroupTitle:      title,
+		ShortName:       strings.TrimSpace(groupFile.ShortName),
 		Members:         members,
 		Entries:         rows,
 		AddableContests: addable,
@@ -655,6 +657,38 @@ func (h *Handlers) AdminGroupTokenSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": token})
+}
+
+// AdminGroupSetShortName сохраняет короткое название группы (пусто — убрать).
+func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug      string `json:"slug"`
+		ShortName string `json:"short_name"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+	groupFile.ShortName = strings.TrimSpace(req.ShortName)
+	if err := h.writeGroupFile(slug, groupFile); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "short_name": groupFile.ShortName})
 }
 
 // writeGroupContestRaw атомарно перезаписывает groups/<slug>/contests.json

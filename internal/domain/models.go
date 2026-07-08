@@ -265,7 +265,10 @@ func NormalizeContestMaterials(materials []ContestMaterial) []ContestMaterial {
 }
 
 type GroupFile struct {
-	Title      string        `json:"title"`
+	Title string `json:"title"`
+	// ShortName — короткое название группы (для тесных мест). В объединённой
+	// группе им подписываются участники: «Имя (короткое)».
+	ShortName  string        `json:"short_name,omitempty"`
 	FormLink   string        `json:"form_link,omitempty"`
 	Update     *bool         `json:"update,omitempty"`
 	StudentIDs []string      `json:"student_ids"`
@@ -596,6 +599,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 type GeneratedGroupStandings struct {
 	GroupSlug          string                           `json:"group_slug"`
 	GroupTitle         string                           `json:"group_title"`
+	GroupShortName     string                           `json:"group_short_name,omitempty"`
 	FormLink           string                           `json:"form_link,omitempty"`
 	SolvedSummarySites []string                         `json:"solved_summary_sites,omitempty"`
 	SolvedSummary      []GeneratedGroupSolvedSummaryRow `json:"solved_summary,omitempty"`

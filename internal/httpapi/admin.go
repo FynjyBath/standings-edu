@@ -320,9 +320,10 @@ func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimSpace(r.FormValue("slug"))
 	name := strings.TrimSpace(r.FormValue("name"))
 	formLink := strings.TrimSpace(r.FormValue("form_link"))
+	shortName := strings.TrimSpace(r.FormValue("short_name"))
 
 	result := h.runAdminAction("create_group", func() AdminActionResult {
-		return h.executeCreateGroupAction(slug, name, formLink)
+		return h.executeCreateGroupAction(slug, name, formLink, shortName)
 	})
 	h.setAdminResult(result)
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
@@ -585,19 +586,18 @@ func (h *Handlers) executeGenerateAction() AdminActionResult {
 	return h.runCommandSequence("generate", commands)
 }
 
-func (h *Handlers) executeCreateGroupAction(slug, name, formLink string) AdminActionResult {
+func (h *Handlers) executeCreateGroupAction(slug, name, formLink, shortName string) AdminActionResult {
 	createGroupBinary := filepath.Join(h.admin.cfg.ProjectRoot, "bin", "create_group")
-	commands := []adminCommand{
-		{
-			Path: createGroupBinary,
-			Args: []string{
-				"-data-dir", h.admin.cfg.DataDir,
-				"-slug", slug,
-				"-name", name,
-				"-form-link", formLink,
-			},
-		},
+	args := []string{
+		"-data-dir", h.admin.cfg.DataDir,
+		"-slug", slug,
+		"-name", name,
+		"-form-link", formLink,
 	}
+	if shortName != "" {
+		args = append(args, "-short-name", shortName)
+	}
+	commands := []adminCommand{{Path: createGroupBinary, Args: args}}
 	return h.runCommandSequence("create_group", commands)
 }
 

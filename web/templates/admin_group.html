@@ -10,6 +10,16 @@
 </section>
 
 <section class="admin-block">
+  <h2>Короткое название</h2>
+  <p class="empty-hint">Короткая подпись группы для тесных мест. В объединённой группе им подписываются участники: «Имя ({{if .ShortName}}{{.ShortName}}{{else}}кратко{{end}})».</p>
+  <div class="admin-editor-tools">
+    <input type="text" id="short-name" value="{{.ShortName}}" placeholder="напр. П4" style="max-width:12rem;" />
+    <button type="button" id="short-name-save" class="admin-btn">Сохранить</button>
+    <span id="short-name-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
   <h2>Участники ({{len .Members}})</h2>
   <p class="empty-hint">Добавление — через форму/обработчик. Здесь можно только удалить.</p>
   {{if .Members}}
@@ -169,6 +179,18 @@
     document.getElementById("token-generate").addEventListener("click", function () { tokenAction(false); });
     var tokenClear = document.getElementById("token-clear");
     if (tokenClear) tokenClear.addEventListener("click", function () { tokenAction(true); });
+
+    // Короткое название группы.
+    var shortNameSave = document.getElementById("short-name-save");
+    if (shortNameSave) shortNameSave.addEventListener("click", function () {
+      var input = document.getElementById("short-name");
+      var st = document.getElementById("short-name-status");
+      st.textContent = "Сохранение…";
+      st.className = "admin-editor-status";
+      post("/api/admin/group/short-name/set", { slug: slug, short_name: input.value })
+        .then(function () { st.textContent = "Сохранено"; st.className = "admin-editor-status admin-editor-status--ok"; })
+        .catch(function (err) { st.textContent = err.message; st.className = "admin-editor-status admin-editor-status--error"; });
+    });
 
     document.querySelectorAll(".member-remove").forEach(function (btn) {
       btn.addEventListener("click", function () {

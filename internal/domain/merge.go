@@ -65,13 +65,14 @@ func MergeGroupStandings(slug, title string, members []GeneratedGroupStandings) 
 	}
 
 	order := make([]string, 0)
-	contribs := make(map[string][]GeneratedContestStandings)
+	contribs := make(map[string][]contestContrib)
 	for _, member := range members {
+		tag := strings.TrimSpace(member.GroupShortName)
 		for _, contest := range member.Contests {
 			if _, ok := contribs[contest.ID]; !ok {
 				order = append(order, contest.ID)
 			}
-			contribs[contest.ID] = append(contribs[contest.ID], contest)
+			contribs[contest.ID] = append(contribs[contest.ID], contestContrib{standings: contest, tag: tag})
 		}
 	}
 
@@ -84,13 +85,28 @@ func MergeGroupStandings(slug, title string, members []GeneratedGroupStandings) 
 	return out
 }
 
+// contestContrib — вклад одного контеста от одной группы-участницы вместе с её
+// коротким названием (tag), которым подписываются участники в объединении.
+type contestContrib struct {
+	standings GeneratedContestStandings
+	tag       string
+}
+
+// tagName приписывает короткое название группы в скобках: «Имя (короткое)».
+func tagName(name, tag string) string {
+	if tag == "" {
+		return name
+	}
+	return name + " (" + tag + ")"
+}
+
 // mergeContestContribs сливает вклады одного контеста из разных групп. Метаданные
 // берутся из первого вклада; строки объединяются по ученику (дубликат — первый
 // вклад побеждает). Если хоть один вклад заморожен, итог считается замороженным:
 // публичные строки — из frozen-версий, а полные (rows_full, просмотр по токену) —
 // из полных (у незамороженных вкладов полными считаются их же обычные строки).
-func mergeContestContribs(contribs []GeneratedContestStandings) GeneratedContestStandings {
-	merged := contribs[0]
+func mergeContestContribs(contribs []contestContrib) GeneratedContestStandings {
+	merged := contribs[0].standings
 	merged.Rows = nil
 	merged.RowsFull = nil
 
@@ -104,7 +120,8 @@ func mergeContestContribs(contribs []GeneratedContestStandings) GeneratedContest
 	publicRows := make([]GeneratedRow, 0)
 	fullRows := make([]GeneratedRow, 0)
 
-	for _, contest := range contribs {
+	for _, contrib := range contribs {
+		contest := contrib.standings
 		if !contest.Hidden {
 			allHidden = false
 		}
@@ -128,8 +145,11 @@ func mergeContestContribs(contribs []GeneratedContestStandings) GeneratedContest
 				continue
 			}
 			seen[row.StudentID] = struct{}{}
+			// row/full — копии из range/map: подписываем безопасно, не трогая кэш.
+			row.PublicName = tagName(row.PublicName, contrib.tag)
 			publicRows = append(publicRows, row)
 			if full, ok := fullByStudent[row.StudentID]; ok {
+				full.PublicName = tagName(full.PublicName, contrib.tag)
 				fullRows = append(fullRows, full)
 			} else {
 				fullRows = append(fullRows, row)
@@ -189,6 +209,7 @@ func mergeSolvedSummaries(members []GeneratedGroupStandings) ([]string, []Genera
 	seen := make(map[string]struct{})
 	rows := make([]GeneratedGroupSolvedSummaryRow, 0)
 	for _, member := range members {
+		tag := strings.TrimSpace(member.GroupShortName)
 		for _, row := range member.SolvedSummary {
 			if _, dup := seen[row.StudentID]; dup {
 				continue
@@ -197,7 +218,7 @@ func mergeSolvedSummaries(members []GeneratedGroupStandings) ([]string, []Genera
 
 			merged := GeneratedGroupSolvedSummaryRow{
 				StudentID:         row.StudentID,
-				PublicName:        row.PublicName,
+				PublicName:        tagName(row.PublicName, tag),
 				TotalSolvedCount:  row.TotalSolvedCount,
 				SolvedCountBySite: make([]int, len(sites)),
 			}

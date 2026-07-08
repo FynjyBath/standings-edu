@@ -65,6 +65,48 @@ func TestMergeGroupStandingsContests(t *testing.T) {
 	}
 }
 
+// Короткое название группы подписывается в скобках у участников и в контестных
+// строках; у группы без короткого названия имя остаётся как есть; при дубликате
+// побеждает первая группа (её подпись).
+func TestMergeTagsShortName(t *testing.T) {
+	a := GeneratedGroupStandings{
+		GroupShortName:     "П4",
+		Contests:           []GeneratedContestStandings{edu("c1", row("s1", "Аня", 3))},
+		SolvedSummarySites: []string{"acmp"},
+		SolvedSummary: []GeneratedGroupSolvedSummaryRow{
+			{StudentID: "s1", PublicName: "Аня", TotalSolvedCount: 3, SolvedCountBySite: []int{3}},
+		},
+	}
+	b := GeneratedGroupStandings{
+		// без короткого названия
+		Contests:           []GeneratedContestStandings{edu("c1", row("s1", "Аня", 3), row("s2", "Боря", 5))},
+		SolvedSummarySites: []string{"acmp"},
+		SolvedSummary: []GeneratedGroupSolvedSummaryRow{
+			{StudentID: "s2", PublicName: "Боря", TotalSolvedCount: 5, SolvedCountBySite: []int{5}},
+		},
+	}
+	m := MergeGroupStandings("s", "S", []GeneratedGroupStandings{a, b})
+
+	byID := map[string]string{}
+	for _, r := range m.Contests[0].Rows {
+		byID[r.StudentID] = r.PublicName
+	}
+	if byID["s1"] != "Аня (П4)" {
+		t.Fatalf("s1 must be tagged with first group short name, got %q", byID["s1"])
+	}
+	if byID["s2"] != "Боря" {
+		t.Fatalf("s2 from group without short name must be untagged, got %q", byID["s2"])
+	}
+
+	sum := map[string]string{}
+	for _, r := range m.SolvedSummary {
+		sum[r.StudentID] = r.PublicName
+	}
+	if sum["s1"] != "Аня (П4)" || sum["s2"] != "Боря" {
+		t.Fatalf("summary tagging wrong: %v", sum)
+	}
+}
+
 // Дубликат ученика (в двух группах) в общем контесте не задваивается.
 func TestMergeDedupStudent(t *testing.T) {
 	a := GeneratedGroupStandings{Contests: []GeneratedContestStandings{edu("c1", row("s1", "Аня", 3))}}

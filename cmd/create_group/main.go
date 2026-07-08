@@ -14,29 +14,31 @@ import (
 
 func main() {
 	var (
-		dataDir  = flag.String("data-dir", "./data", "path to source data directory")
-		slug     = flag.String("slug", "", "group slug (directory name)")
-		slag     = flag.String("slag", "", "deprecated alias for -slug")
-		name     = flag.String("name", "", "group title")
-		formLink = flag.String("form-link", "", "URL for the account intake form")
+		dataDir   = flag.String("data-dir", "./data", "path to source data directory")
+		slug      = flag.String("slug", "", "group slug (directory name)")
+		slag      = flag.String("slag", "", "deprecated alias for -slug")
+		name      = flag.String("name", "", "group title")
+		shortName = flag.String("short-name", "", "optional short group title")
+		formLink  = flag.String("form-link", "", "URL for the account intake form")
 	)
 	flag.Parse()
 	if *slug == "" && *slag != "" {
 		*slug = *slag
 	}
 
-	if err := createEmptyGroup(*dataDir, *slug, *name, *formLink); err != nil {
+	if err := createEmptyGroup(*dataDir, *slug, *name, *formLink, *shortName); err != nil {
 		log.Fatalf("create group failed: %v", err)
 	}
 
 	log.Printf("group created: slug=%s", strings.TrimSpace(*slug))
 }
 
-func createEmptyGroup(dataDir, slug, name, formLink string) error {
+func createEmptyGroup(dataDir, slug, name, formLink, shortName string) error {
 	dataDir = strings.TrimSpace(dataDir)
 	slug = strings.TrimSpace(slug)
 	name = strings.TrimSpace(name)
 	formLink = strings.TrimSpace(formLink)
+	shortName = strings.TrimSpace(shortName)
 
 	if !domain.IsValidSlug(slug) {
 		return fmt.Errorf("invalid slug %q", slug)
@@ -62,6 +64,7 @@ func createEmptyGroup(dataDir, slug, name, formLink string) error {
 
 	groupFile := domain.GroupFile{
 		Title:      name,
+		ShortName:  shortName,
 		FormLink:   formLink,
 		Update:     pointerTo(true),
 		StudentIDs: []string{},

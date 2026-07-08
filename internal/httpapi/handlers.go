@@ -161,6 +161,11 @@ func (h *Handlers) mergeCombinedMembers(slug string, gf domain.GroupFile, visiti
 			}
 			continue
 		}
+		// Подпись участников коротким названием группы-источника. Только для
+		// обычных групп: вложенное объединение уже подписано своими группами.
+		if mf, ok := h.readSourceGroupFile(memberSlug); ok && len(mf.MemberGroups) == 0 {
+			member.GroupShortName = strings.TrimSpace(mf.ShortName)
+		}
 		members = append(members, member)
 	}
 

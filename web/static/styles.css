@@ -711,6 +711,16 @@ button.summary-link-btn {
   margin: 0.5rem 0 0;
 }
 
+/* «Живой» суффикс у меток последнего обновления: «N назад · следующее через …».
+   Моноширинные цифры — чтобы обратный отсчёт не «дёргал» ширину. */
+.update-extra {
+  color: color-mix(in srgb, var(--accent-strong) 75%, var(--muted) 25%);
+  font-variant-numeric: tabular-nums;
+}
+.server-clock {
+  font-variant-numeric: tabular-nums;
+}
+
 .empty-hint {
   color: var(--muted);
   margin: 0.8rem 0 0;

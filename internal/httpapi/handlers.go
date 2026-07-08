@@ -38,6 +38,9 @@ type Handlers struct {
 	admin       *adminState
 	intakeToken string
 	dataDir     string
+	// generateInterval — ожидаемый период автогенерации (для показа «следующее
+	// обновление»). 0 — расписание не задано, «следующее» не показываем.
+	generateInterval time.Duration
 	// dataMu сериализует read-modify-write админ-операций над data-файлами
 	// (students.json, group.json, contests.json группы, grades_manual, intake
 	// merge), чтобы два одновременных запроса не потеряли запись друг друга.
@@ -587,8 +590,10 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
 func (h *Handlers) buildFooterInfo() FooterInfo {
 	now := time.Now()
 	footer := FooterInfo{
-		ServerTime:     now.Format("02.01.2006 15:04:05 MST"),
-		LastUpdatedMSK: "—",
+		ServerTime:      now.Format("02.01.2006 15:04:05 MST"),
+		ServerTimeISO:   now.Format(time.RFC3339),
+		LastUpdatedMSK:  "—",
+		IntervalSeconds: int(h.generateInterval / time.Second),
 	}
 
 	updatedAt, err := h.loader.LoadLastUpdatedAt()
@@ -600,6 +605,7 @@ func (h *Handlers) buildFooterInfo() FooterInfo {
 	}
 
 	footer.LastUpdatedMSK = updatedAt.In(moscowLocation).Format("02.01.2006 15:04:05 MST")
+	footer.LastUpdatedISO = updatedAt.Format(time.RFC3339)
 	return footer
 }
 
@@ -614,9 +620,22 @@ func writeJSON(w http.ResponseWriter, statusCode int, v any) {
 	_, _ = w.Write(append(b, '\n'))
 }
 
+// ConfigureGenerateInterval задаёт ожидаемый период автогенерации.
+func (h *Handlers) ConfigureGenerateInterval(d time.Duration) {
+	if d > 0 {
+		h.generateInterval = d
+	}
+}
+
 type FooterInfo struct {
 	LastUpdatedMSK string
 	ServerTime     string
+	// Машиночитаемые значения для «живого» футера (JS): ISO-время последней
+	// генерации и серверное «сейчас» (для синхронизации часов клиента), и период
+	// автогенерации в секундах (0 — расписание не задано).
+	LastUpdatedISO  string
+	ServerTimeISO   string
+	IntervalSeconds int
 }
 
 type IndexPageData struct {

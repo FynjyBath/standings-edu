@@ -40,13 +40,70 @@
     <main class="container">
       {{template "content" .}}
     </main>
-    <footer class="site-footer">
+    <footer class="site-footer" data-server-now="{{.Footer.ServerTimeISO}}" data-generate-interval="{{.Footer.IntervalSeconds}}">
       <div class="container footer-inner">
         <div class="footer-line">Anton Nyikin · <a href="https://github.com/FynjyBath/standings-edu" target="_blank" rel="noopener noreferrer">standings-edu на GitHub</a></div>
-        <div class="footer-line">Последнее обновление: {{.Footer.LastUpdatedMSK}}</div>
-        <div class="footer-line">Время на сервере: {{.Footer.ServerTime}}</div>
+        <div class="footer-line" data-updated="{{.Footer.LastUpdatedISO}}">Последнее обновление: {{.Footer.LastUpdatedMSK}}</div>
+        <div class="footer-line">Время на сервере: <span class="server-clock">{{.Footer.ServerTime}}</span></div>
       </div>
     </footer>
+    <script>
+      // «Живой» футер и метки «последнее обновление»: серверные часы идут, рядом
+      // с каждой меткой показываем «N назад» и (если задан период автогенерации)
+      // обратный отсчёт до следующего обновления. Часы клиента синхронизируем по
+      // серверному «сейчас», чтобы не зависеть от неверных часов у зрителя.
+      (function () {
+        var cfg = document.querySelector("[data-server-now]");
+        if (!cfg) return;
+        var serverNowMs = Date.parse(cfg.getAttribute("data-server-now") || "");
+        var intervalSec = parseInt(cfg.getAttribute("data-generate-interval") || "0", 10) || 0;
+        var skew = isNaN(serverNowMs) ? 0 : (serverNowMs - Date.now());
+
+        function pad2(n) { return String(n).padStart(2, "0"); }
+        function nowMs() { return Date.now() + skew; }
+
+        function ago(sec) {
+          sec = Math.max(0, Math.floor(sec));
+          if (sec < 10) return "только что";
+          if (sec < 60) return sec + " сек назад";
+          var m = Math.floor(sec / 60);
+          if (m < 60) return m + " мин назад";
+          var h = Math.floor(m / 60);
+          if (h < 24) return h + " ч " + (m % 60) + " мин назад";
+          return Math.floor(h / 24) + " дн назад";
+        }
+        function countdown(sec) {
+          sec = Math.floor(sec);
+          if (sec <= 0) return "следующее обновление ожидается…";
+          var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+          return "следующее через " + (h > 0 ? h + ":" + pad2(m) + ":" + pad2(s) : m + ":" + pad2(s));
+        }
+
+        var clocks = [].slice.call(document.querySelectorAll(".server-clock"));
+        var marks = [].slice.call(document.querySelectorAll("[data-updated]")).map(function (el) {
+          var span = document.createElement("span");
+          span.className = "update-extra";
+          el.appendChild(span);
+          return { el: el, extra: span, ms: Date.parse(el.getAttribute("data-updated") || "") };
+        });
+
+        function tick() {
+          var n = new Date(nowMs());
+          var clock = pad2(n.getHours()) + ":" + pad2(n.getMinutes()) + ":" + pad2(n.getSeconds());
+          clocks.forEach(function (c) { c.textContent = clock; });
+          marks.forEach(function (m) {
+            if (isNaN(m.ms)) { m.extra.textContent = ""; return; }
+            var text = " · " + ago((n.getTime() - m.ms) / 1000);
+            if (intervalSec > 0) {
+              text += " · " + countdown((m.ms + intervalSec * 1000 - n.getTime()) / 1000);
+            }
+            m.extra.textContent = text;
+          });
+        }
+        tick();
+        setInterval(tick, 1000);
+      })();
+    </script>
     <script>
       (function () {
         var storageKey = "nemalo-theme";

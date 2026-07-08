@@ -148,7 +148,7 @@
     <p class="empty-hint">В контесте нет задач.</p>
     {{end}}
     {{if contestGeneratedAt .GeneratedAt}}
-    <p class="contest-generated-at">Последнее обновление: {{contestGeneratedAt .GeneratedAt}}</p>
+    <p class="contest-generated-at" data-updated="{{contestGeneratedAtISO .GeneratedAt}}">Последнее обновление: {{contestGeneratedAt .GeneratedAt}}</p>
     {{end}}
   </section>
   {{end}}

@@ -23,14 +23,15 @@ import (
 
 func main() {
 	var (
-		addr         = flag.String("addr", ":8080", "HTTP listen address")
-		generatedDir = flag.String("generated-dir", "./generated", "path to generated files")
-		dataDir      = flag.String("data-dir", "./data", "path to source data directory")
-		intakePath   = flag.String("intake-file", "", "path to intake json file (default: <data>/student_intake.json)")
-		adminCreds   = flag.String("admin-creds-file", "./data/credentials/admin_credentials.json", "path to admin credentials JSON with login/password")
-		intakeCreds  = flag.String("intake-creds-file", "./data/credentials/intake_credentials.json", "path to optional intake token JSON ({\"token\":\"...\"}) protecting POST /api/rpc")
-		templatesDir = flag.String("templates", "./web/templates", "path to templates")
-		staticDir    = flag.String("static", "./web/static", "path to static files")
+		addr             = flag.String("addr", ":8080", "HTTP listen address")
+		generatedDir     = flag.String("generated-dir", "./generated", "path to generated files")
+		dataDir          = flag.String("data-dir", "./data", "path to source data directory")
+		intakePath       = flag.String("intake-file", "", "path to intake json file (default: <data>/student_intake.json)")
+		adminCreds       = flag.String("admin-creds-file", "./data/credentials/admin_credentials.json", "path to admin credentials JSON with login/password")
+		intakeCreds      = flag.String("intake-creds-file", "./data/credentials/intake_credentials.json", "path to optional intake token JSON ({\"token\":\"...\"}) protecting POST /api/rpc")
+		templatesDir     = flag.String("templates", "./web/templates", "path to templates")
+		staticDir        = flag.String("static", "./web/static", "path to static files")
+		generateInterval = flag.Duration("generate-interval", 5*time.Minute, "expected auto-generation period (e.g. 5m, 30m, 1h); shows the next-update countdown in the footer. 0 = не показывать")
 	)
 	flag.Parse()
 
@@ -86,6 +87,7 @@ func main() {
 	}
 	handlers.ConfigureSourceDir(*dataDir)
 	handlers.ConfigureIntakeToken(intakeToken)
+	handlers.ConfigureGenerateInterval(*generateInterval)
 	if intakeToken == "" {
 		logger.Printf("WARN intake token is not configured (%s); POST /api/rpc принимает анкеты без токена", *intakeCreds)
 	} else {

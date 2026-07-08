@@ -42,6 +42,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"taskCells":               taskCells,
 			"contestGeneratedAt":      contestGeneratedAt,
 			"contestNotStarted":       contestNotStarted,
+			"contestGeneratedAtISO":   contestGeneratedAtISO,
 			"contestWindowText":       contestWindowText,
 			"gradeText":               gradeText,
 			"grade2Text":              grade2Text,
@@ -225,6 +226,15 @@ func contestGeneratedAt(generatedAt *time.Time) string {
 		return ""
 	}
 	return generatedAt.In(moscowLocation).Format("02.01.2006 15:04:05 MST")
+}
+
+// contestGeneratedAtISO — то же время в ISO 8601 (для «живого» относительного
+// времени и обратного отсчёта в JS). Пусто — времени нет.
+func contestGeneratedAtISO(generatedAt *time.Time) string {
+	if generatedAt == nil || generatedAt.IsZero() {
+		return ""
+	}
+	return generatedAt.Format(time.RFC3339)
 }
 
 func wrapPractice(text string, practice bool) string {

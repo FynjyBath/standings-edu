@@ -104,7 +104,7 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 
 	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
 	students := []domain.Student{{ID: "s1", PublicName: "Ученик"}}
-	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil)
+	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
 
 	if out.FrozenAt == nil || !out.FrozenAt.Equal(freezeAt) {
 		t.Fatalf("FrozenAt not set: %+v", out.FrozenAt)
@@ -130,7 +130,7 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 
 	// Без заморозки: всё видно, поздняя задача после конца — дорешка.
 	contest.FreezeTime = nil
-	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil)
+	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
 	if out.FrozenAt != nil {
 		t.Fatalf("FrozenAt must be nil without freeze: %+v", out.FrozenAt)
 	}
@@ -182,7 +182,7 @@ func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
 	}
 
 	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
-	out := b.buildTaskContestStandings(contest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil)
+	out := b.buildTaskContestStandings(contest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
 
 	if out.ZeroPenalty != 5 {
 		t.Fatalf("contest zero_penalty not stored: %+v", out.ZeroPenalty)
@@ -216,7 +216,7 @@ func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
 	// edu-контест: штраф игнорируется, Penalty пуст.
 	eduContest := contest
 	eduContest.ScoreSystem = domain.ScoreSystemEdu
-	out = b.buildTaskContestStandings(eduContest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil)
+	out = b.buildTaskContestStandings(eduContest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
 	if out.ZeroPenalty != 0 || out.Rows[0].Penalty != nil {
 		t.Fatalf("edu must ignore zero_penalty: %+v", out.Rows[0].Penalty)
 	}

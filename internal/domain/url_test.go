@@ -78,3 +78,31 @@ func TestNormalizeTaskURLInformaticsChapter(t *testing.T) {
 		t.Fatalf("informatics statement page must stay intact: %q", got)
 	}
 }
+
+// Ссылки ejudge (new-client) сводятся к contest_id (+ prob_id) на своём хосте:
+// схема https, лишние параметры (SID, action, locale) и фрагмент отбрасываются.
+func TestNormalizeTaskURLEjudge(t *testing.T) {
+	prob := "https://ej.kod-u.ru/new-client?contest_id=25408&prob_id=3"
+	probForms := []string{
+		prob,
+		"http://ej.kod-u.ru/new-client?contest_id=25408&prob_id=3",
+		"https://ej.kod-u.ru/new-client?SID=deadbeef&contest_id=25408&prob_id=3&action=139",
+		"https://ej.kod-u.ru/new-client?prob_id=3&contest_id=25408#top",
+	}
+	for _, raw := range probForms {
+		if got := NormalizeTaskURL(raw); got != prob {
+			t.Fatalf("ejudge problem %q normalized to %q, want %q", raw, got, prob)
+		}
+	}
+
+	// Ссылка на контест (без prob_id) остаётся ссылкой на контест (её разворачивает
+	// билд), а хост различает экземпляры.
+	contest := "https://ej.kod-u.ru/new-client?contest_id=25408"
+	if got := NormalizeTaskURL("https://ej.kod-u.ru/new-client?contest_id=25408&SID=x"); got != contest {
+		t.Fatalf("ejudge contest url: got %q, want %q", got, contest)
+	}
+	other := "https://ej.example.org/new-client?contest_id=25408&prob_id=3"
+	if NormalizeTaskURL(other) == prob {
+		t.Fatal("different ejudge hosts must not collide")
+	}
+}

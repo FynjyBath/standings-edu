@@ -206,11 +206,16 @@ func (b *Builder) collectRequiredTaskSites(prepared []preparedGroup) map[string]
 			for _, subcontest := range contest.Subcontests {
 				for _, taskURL := range subcontest.Tasks {
 					normalized := domain.NormalizeTaskURL(taskURL)
-					site, _, ok := b.sources.ResolveSiteByTaskURL(normalized)
+					site, client, ok := b.sources.ResolveSiteByTaskURL(normalized)
 					if !ok {
 						continue
 					}
 					out[domain.NormalizeSite(site)] = struct{}{}
+					// Клиентам, которым нужно знать ссылки заранее (ejudge —
+					// contest_id для забора прогонов), сообщаем ссылку задачи.
+					if observer, ok := client.(source.TaskURLObserver); ok {
+						observer.ObserveTaskURL(normalized)
+					}
 				}
 			}
 		}
@@ -381,7 +386,8 @@ func (b *Builder) buildGroupStandings(
 		case domain.ContestTypeTasks:
 			expanded := b.expandCodeforcesContestRefs(ctx, data, pg.group, contest, pg.students)
 			statementRefs := b.expandInformaticsStatementRefs(ctx, pg.group, contest)
-			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs)
+			ejudgeRefs := b.expandEjudgeContestRefs(ctx, pg.group, contest)
+			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs, ejudgeRefs)
 			generated.GeneratedAt = &now
 			out.Contests = append(out.Contests, generated)
 		case domain.ContestTypeProvider:
@@ -625,6 +631,65 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 	return out
 }
 
+// expandEjudgeContestRefs для каждой ссылки на контест ejudge (new-client?
+// contest_id=… без prob_id) в списке задач возвращает по нормализованной ссылке
+// контеста упорядоченный список ссылок на его задачи (…?contest_id=N&prob_id=M).
+// nil в значении — развернуть не удалось (задачи пропускаются). Как и informatics,
+// отдельная таблица не строится: результаты берутся из уже собранных прогонов
+// ученика по обычному сопоставлению URL. Ключ — нормализованная ссылка контеста
+// (учитывает хост, поэтому разные экземпляры ejudge не путаются).
+func (b *Builder) expandEjudgeContestRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[string][]string {
+	keys := make([]string, 0)
+	rawByKey := make(map[string]string)
+	seen := make(map[string]struct{})
+	for _, subcontest := range contest.Subcontests {
+		for _, rawTaskURL := range subcontest.Tasks {
+			parsed, ok := domain.ParseEjudgeTaskURL(rawTaskURL)
+			if !ok || parsed.ProbID != 0 {
+				continue // не ejudge или ссылка на конкретную задачу
+			}
+			key := domain.NormalizeTaskURL(rawTaskURL)
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+			rawByKey[key] = rawTaskURL
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	out := make(map[string][]string, len(keys))
+	for _, key := range keys {
+		raw := rawByKey[key]
+		parsed, _ := domain.ParseEjudgeTaskURL(raw)
+		_, client, ok := b.sources.ResolveSiteByTaskURL(raw)
+		expander, canExpand := client.(source.EjudgeContestExpander)
+		if !ok || !canExpand {
+			b.logger.Printf("WARN group=%s contest=%s: ejudge expander unavailable for %s; contest %d skipped", group.Slug, contest.ID, raw, parsed.ContestID)
+			out[key] = nil
+			continue
+		}
+		problems, err := expander.FetchContestProblems(ctx, parsed.ContestID)
+		if err != nil {
+			b.logger.Printf("WARN group=%s contest=%s expand ejudge contest %d failed: %v", group.Slug, contest.ID, parsed.ContestID, err)
+			out[key] = nil
+			continue
+		}
+		urls := make([]string, 0, len(problems))
+		for _, problem := range problems {
+			if problem.ProbID <= 0 {
+				continue
+			}
+			urls = append(urls, fmt.Sprintf("https://%s/new-client?contest_id=%d&prob_id=%d", parsed.Host, parsed.ContestID, problem.ProbID))
+		}
+		out[key] = urls
+	}
+	return out
+}
+
 // expandedContestProblemURL строит ссылку на задачу из исходной ссылки на
 // контест Codeforces, сохраняя её форму (group/contest/gym): <contestURL>/problem/<idx>.
 func expandedContestProblemURL(contestURL, problemIndex string) string {
@@ -643,7 +708,7 @@ type taskColumn struct {
 	useRealScores bool   // для обычной IOI-задачи
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]string) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]string, ejudgeRefs map[string][]string) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	var windowStart, windowEnd time.Time
@@ -742,6 +807,14 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			// (ссылка на саму задачу, без сборника). Каждая — обычная задача.
 			if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
 				for _, problemURL := range statementRefs[sid] {
+					addNormalTask(problemURL)
+				}
+				continue
+			}
+
+			// Контест ejudge (contest_id без prob_id): разворачиваем в задачи.
+			if parsed, ok := domain.ParseEjudgeTaskURL(rawTaskURL); ok && parsed.ProbID == 0 {
+				for _, problemURL := range ejudgeRefs[domain.NormalizeTaskURL(rawTaskURL)] {
 					addNormalTask(problemURL)
 				}
 				continue
@@ -914,7 +987,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	if frozen {
 		fullContest := contest
 		fullContest.FreezeTime = nil
-		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs)
+		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs, ejudgeRefs)
 		out.RowsFull = full.Rows
 	}
 

@@ -43,6 +43,10 @@ func NormalizeTaskURL(raw string) string {
 		return canonical
 	}
 
+	if canonical, ok := canonicalEjudgeTaskURL(u); ok {
+		return canonical
+	}
+
 	if u.Path != "/" {
 		u.Path = strings.TrimRight(u.Path, "/")
 		if u.Path == "" {
@@ -155,6 +159,76 @@ func canonicalInformaticsTaskURL(u *url.URL) (string, bool) {
 	}
 
 	return fmt.Sprintf("https://informatics.msk.ru/mod/statements/view.php?chapterid=%d", id), true
+}
+
+// canonicalEjudgeTaskURL приводит ссылки на задачу/контест любого ejudge
+// (new-client) к единому виду по contest_id (+ prob_id для конкретной задачи).
+// Хост оставляем — он различает экземпляры ejudge; схему приводим к https,
+// прочие параметры (SID, action, locale_id…) и фрагмент отбрасываем. Экземпляр
+// ejudge узнаётся по форме URL (путь …/new-client + contest_id), а не по
+// списку хостов, поэтому работает для любого сконфигурированного ejudge.
+// Канонизация касается только сопоставления (normalized_url).
+func canonicalEjudgeTaskURL(u *url.URL) (string, bool) {
+	if !isEjudgeNewClientPath(u.Path) {
+		return "", false
+	}
+	q := u.Query()
+	contestID, err := strconv.Atoi(strings.TrimSpace(q.Get("contest_id")))
+	if err != nil || contestID <= 0 {
+		return "", false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return "", false
+	}
+
+	base := fmt.Sprintf("https://%s/new-client?contest_id=%d", host, contestID)
+	if probID, err := strconv.Atoi(strings.TrimSpace(q.Get("prob_id"))); err == nil && probID > 0 {
+		base += fmt.Sprintf("&prob_id=%d", probID)
+	}
+	return base, true
+}
+
+// isEjudgeNewClientPath распознаёт путь клиента ejudge: сам "/new-client" или
+// оканчивающийся на него (например "/cgi-bin/new-client").
+func isEjudgeNewClientPath(path string) bool {
+	path = strings.ToLower(strings.TrimRight(strings.TrimSpace(path), "/"))
+	return path == "/new-client" || strings.HasSuffix(path, "/new-client")
+}
+
+// EjudgeTaskURL — разобранная ссылка ejudge new-client.
+type EjudgeTaskURL struct {
+	Host      string
+	ContestID int
+	ProbID    int // 0 — ссылка на весь контест (разворачивается в отдельные задачи)
+}
+
+// ParseEjudgeTaskURL распознаёт ссылку ejudge new-client (по форме URL, без
+// привязки к конкретному хосту). Возвращает (…, true), если это ссылка на контест
+// (contest_id без prob_id) или на задачу (contest_id + prob_id). host в нижнем
+// регистре.
+func ParseEjudgeTaskURL(rawURL string) (EjudgeTaskURL, bool) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return EjudgeTaskURL{}, false
+	}
+	if !isEjudgeNewClientPath(u.Path) {
+		return EjudgeTaskURL{}, false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return EjudgeTaskURL{}, false
+	}
+	q := u.Query()
+	contestID, err := strconv.Atoi(strings.TrimSpace(q.Get("contest_id")))
+	if err != nil || contestID <= 0 {
+		return EjudgeTaskURL{}, false
+	}
+	out := EjudgeTaskURL{Host: host, ContestID: contestID}
+	if probID, err := strconv.Atoi(strings.TrimSpace(q.Get("prob_id"))); err == nil && probID > 0 {
+		out.ProbID = probID
+	}
+	return out, true
 }
 
 func splitPathSegments(path string) []string {

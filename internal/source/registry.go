@@ -56,6 +56,19 @@ type StatementExpander interface {
 	FetchStatementProblems(ctx context.Context, statementID int) ([]InformaticsStatementProblem, error)
 }
 
+// TaskURLObserver реализуют клиенты, которым нужно заранее знать ссылки задач,
+// чтобы решить, что скачивать (ejudge: из ссылок берутся contest_id для забора
+// прогонов). Билд сообщает каждую ссылку задачи до сбора статусов учеников.
+type TaskURLObserver interface {
+	ObserveTaskURL(taskURL string)
+}
+
+// EjudgeContestExpander реализуют клиенты, умеющие разворачивать ссылку на контест
+// ejudge в список его задач.
+type EjudgeContestExpander interface {
+	FetchContestProblems(ctx context.Context, contestID int) ([]EjudgeProblem, error)
+}
+
 type ContestProviderInput struct {
 	Source   *domain.SourceData
 	Group    domain.GroupDefinition

@@ -23,6 +23,7 @@ func main() {
 		parallelism      = flag.Int("parallelism", 8, "max concurrent account fetches")
 		informaticsCreds = flag.String("informatics-creds-file", "./data/credentials/informatics_credentials.json", "path to informatics credentials JSON")
 		codeforcesCreds  = flag.String("codeforces-creds-file", "./data/credentials/codeforces_credentials.json", "path to optional codeforces credentials JSON")
+		ejudgeCreds      = flag.String("ejudge-creds-file", "./data/ejudge_credentials.json", "path to optional ejudge instances JSON (array)")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 		codeforcesState  = flag.String("codeforces-state", "", "path to persisted codeforces submission_id state file (default: <out>/cache/codeforces_user_status_state.json)")
 	)
@@ -62,6 +63,22 @@ func main() {
 		}
 	} else {
 		registry.RegisterSite("informatics", infClient)
+	}
+
+	// Любые ejudge из ejudge_credentials.json: каждый регистрируется как отдельный
+	// сайт (site = ejudge_id), сопоставление по хосту ссылки.
+	ejInstances, err := source.LoadEjudgeInstances(*ejudgeCreds)
+	if err != nil {
+		logger.Fatalf("failed to load ejudge credentials: %v", err)
+	}
+	for _, cfg := range ejInstances {
+		ejClient, err := source.NewEjudgeClient(cfg)
+		if err != nil {
+			logger.Fatalf("failed to init ejudge %q: %v", cfg.EjudgeID, err)
+		}
+		ejClient.SetLogger(logger)
+		registry.RegisterSite(ejClient.SiteName(), ejClient)
+		logger.Printf("INFO ejudge instance %q (%s) registered", cfg.EjudgeID, cfg.BaseURL)
 	}
 
 	loader := storage.NewSourceLoader(*dataDir)

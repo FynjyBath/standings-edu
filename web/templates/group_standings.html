@@ -57,7 +57,7 @@
 {{if .Standings.Contests}}
   {{range .Standings.Contests}}
   {{$contest := .}}
-  <section class="contest-block">
+  <section class="contest-block" id="contest-{{.ID}}">
     {{if .FrozenAt}}
     <div class="contest-block-head">
       <h2>{{.Title}}</h2>

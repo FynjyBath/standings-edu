@@ -12,7 +12,7 @@
 
 <section class="contest-block">
   <h2>Сводная таблица</h2>
-  <div class="table-wrap" id="summary-root"></div>
+  <div class="table-wrap" id="summary-root" data-token="{{.Token}}"></div>
   <p class="empty-hint" id="summary-empty" style="display:none;">Нет контестов для выбранной таблицы.</p>
 </section>
 
@@ -43,6 +43,30 @@
 
     var ALL_TAB = "Все"; // "Все"
     var allContests = Array.isArray(standings.contests) ? standings.contests : [];
+
+    // Ссылка на таблицу контеста в списке (та же группа, якорь на контест).
+    var listBase = "/standings/" + (standings.group_slug || "");
+    var token = root.getAttribute("data-token") || "";
+    var tokenQuery = token ? ("?token=" + encodeURIComponent(token)) : "";
+    function contestListURL(contestId) {
+      if (!contestId) return null;
+      return listBase + tokenQuery + "#contest-" + contestId;
+    }
+    // Заголовок контеста в шапке сводной: ссылка «открыть в списке», если id есть.
+    function setContestHeader(th, text, contestId, tooltip) {
+      var url = contestListURL(contestId);
+      if (!url) {
+        th.textContent = text;
+        if (tooltip) th.title = tooltip;
+        return;
+      }
+      var a = document.createElement("a");
+      a.className = "summary-contest-link";
+      a.href = url;
+      a.textContent = text;
+      a.title = tooltip || "Открыть таблицу этого контеста в списке";
+      th.appendChild(a);
+    }
 
     function tableNamesOf(contest) {
       return Array.isArray(contest.table_name) ? contest.table_name : [];
@@ -184,10 +208,9 @@
           if (contest.short_name) {
             var shortTitle = contest.short_name;
             if (contest.frozen_at) shortTitle += " ❄";
-            single.textContent = shortTitle;
-            single.title = contestTitle;
+            setContestHeader(single, shortTitle, contest.id, contestTitle);
           } else {
-            single.textContent = contestTitle;
+            setContestHeader(single, contestTitle, contest.id);
           }
           trTop.appendChild(single);
           return;
@@ -198,7 +221,7 @@
         var top = document.createElement("th");
         top.className = "subcontest-head";
         top.colSpan = tasks.length;
-        top.textContent = contestTitle;
+        setContestHeader(top, contestTitle, contest.id);
         trTop.appendChild(top);
 
         contestSubcontests(contest).forEach(function (subcontest) {

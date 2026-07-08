@@ -357,6 +357,30 @@ button.summary-link-btn {
   border-radius: 16px;
   padding: 1rem;
   box-shadow: var(--shadow);
+  /* Прокрутка к контесту по якорю (из сводной) не должна прятать заголовок под
+     липкой шапкой. */
+  scroll-margin-top: 72px;
+}
+
+/* Подсветка контеста, к которому пришли по якорю (клик по названию в сводной). */
+.contest-block:target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent 45%), var(--shadow);
+  animation: contest-target-flash 1.6s ease-out 1;
+}
+
+@keyframes contest-target-flash {
+  0% { background: color-mix(in srgb, var(--accent) 22%, var(--surface) 78%); }
+  100% { background: var(--surface); }
+}
+
+/* Ссылка-название контеста в шапке сводной таблицы. */
+.summary-contest-link {
+  color: inherit;
+  text-decoration: none;
+}
+.summary-contest-link:hover {
+  text-decoration: underline;
 }
 
 .contest-block h2 {

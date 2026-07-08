@@ -128,9 +128,9 @@
             {{end}}
             {{range taskCells . $contest.ScoreSystem}}
               {{if .IsIOI}}
-              <td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено (не полный OK)"{{end}} style="--score-alpha: {{.Alpha}};">{{.Text}}</td>
+              <td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}} style="--score-alpha: {{.Alpha}};">{{.Text}}</td>
               {{else}}
-              <td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено (не полный OK)"{{end}}>{{.Text}}</td>
+              <td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}}>{{.Text}}</td>
               {{end}}
             {{end}}
             {{if and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}

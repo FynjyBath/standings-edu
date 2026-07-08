@@ -71,17 +71,13 @@
   {{if .CombinedGroups}}
   <ul class="admin-groups-list" id="combined-list">
     {{range .CombinedGroups}}
-    <li data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}" data-token="{{.Token}}">
-      <a class="admin-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+    <li data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}">
+      <a class="admin-btn" href="/standings/admin/combined?slug={{.Slug}}">{{.Title}}</a>
       <span>({{.Slug}})</span>
       <span class="grade-weight">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</span>
-      <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить</button>
-      {{if .Token}}
-      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}?token={{.Token}}" target="_blank" rel="noopener noreferrer">Ссылка жюри</a>
-      <button type="button" class="admin-btn admin-btn--secondary combined-token" data-clear="1">Убрать токен</button>
-      {{else}}
-      <button type="button" class="admin-btn admin-btn--secondary combined-token" data-clear="0">Токен жюри</button>
-      {{end}}
+      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+      <a class="admin-btn admin-btn--secondary" href="/standings/admin/combined?slug={{.Slug}}">Настроить{{if .Token}} 🔑{{end}}</a>
+      <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить состав</button>
       <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>
     </li>
     {{end}}
@@ -479,20 +475,6 @@
 
 <script>
   (function () {
-    // Токен жюри у объединённых групп — тот же эндпоинт, что и у обычных.
-    document.querySelectorAll(".combined-token").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var li = btn.closest("li");
-        var slug = li.dataset.slug;
-        var clear = btn.dataset.clear === "1";
-        if (clear && !confirm("Убрать токен жюри у «" + (li.dataset.title || slug) + "»?")) return;
-        fetch("/api/admin/group/token/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, clear: clear }) })
-          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
-          .then(function () { location.reload(); })
-          .catch(function (err) { alert(err.message); });
-      });
-    });
-
     var saveBtn = document.getElementById("combined-save");
     if (!saveBtn) return;
 

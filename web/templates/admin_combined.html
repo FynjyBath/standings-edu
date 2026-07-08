@@ -1,0 +1,93 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Объединённая: {{.Title}} <span class="grade-weight">({{.Slug}})</span></h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    <a class="summary-link-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница объединения</a>
+  </p>
+  <p class="empty-hint">👥 Составлена из групп: {{range $i, $m := .Members}}{{if $i}} · {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}. Состав групп меняется на главной странице админки.</p>
+</section>
+
+<section class="admin-block">
+  <h2>Токен жюри (просмотр без заморозки)</h2>
+  {{if .Token}}
+  <p>Токен: <code id="jury-token">{{.Token}}</code></p>
+  <p>Ссылка для жюри: <a id="jury-link" href="/standings/{{.Slug}}?token={{.Token}}" target="_blank" rel="noopener noreferrer"></a></p>
+  <p class="empty-hint">По ссылке замороженные контесты показываются полностью и доступна статистика участников. Смена или удаление токена действует сразу.</p>
+  {{else}}
+  <p class="empty-hint">Токен не задан — размороженный просмотр и статистика участников недоступны. Сгенерируйте токен и отдайте ссылку жюри.</p>
+  {{end}}
+  <div class="admin-editor-tools">
+    <button type="button" id="token-generate" class="admin-btn">{{if .Token}}Перегенерировать{{else}}Сгенерировать{{end}}</button>
+    {{if .Token}}<button type="button" id="token-clear" class="admin-btn admin-btn--secondary">Убрать токен</button>{{end}}
+    <span id="token-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
+  <h2>Контесты в объединении ({{len .Contests}})</h2>
+  <p class="empty-hint">Список контестов из групп-участниц (контесты с одной ссылкой уже слиты в один). Снимите галочку, чтобы скрыть контест на странице объединения. Изменения видны сразу, без перегенерации.</p>
+  {{if .NotGenerated}}
+  <p class="empty-hint">Пока пусто. Список появится после ближайшей генерации таблиц групп-участниц.</p>
+  {{else}}
+  <ul class="admin-groups-list" id="combined-contests">
+    {{range .Contests}}
+    <li data-id="{{.ID}}">
+      <label style="flex-direction:row;align-items:center;gap:0.5rem;">
+        <input type="checkbox" class="contest-show" {{if not .Hidden}}checked{{end}} style="width:auto;" />
+        <span>{{.Title}} <span class="grade-weight">{{.ID}}</span></span>
+      </label>
+      <span class="contest-show-status admin-editor-status"></span>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+
+<script>
+  (function () {
+    var slug = {{.Slug}};
+
+    function post(url, body) {
+      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
+    }
+
+    // Токен жюри — тот же эндпоинт, что и у обычных групп.
+    var juryLink = document.getElementById("jury-link");
+    if (juryLink) juryLink.textContent = location.origin + juryLink.getAttribute("href");
+    var tokenStatus = document.getElementById("token-status");
+    function tokenAction(clear) {
+      if (clear && !confirm("Убрать токен? Старая ссылка жюри перестанет работать сразу.")) return;
+      post("/api/admin/group/token/set", { slug: slug, clear: clear })
+        .then(function () { location.reload(); })
+        .catch(function (err) { tokenStatus.textContent = err.message; tokenStatus.className = "admin-editor-status admin-editor-status--error"; });
+    }
+    var tokenGen = document.getElementById("token-generate");
+    if (tokenGen) tokenGen.addEventListener("click", function () { tokenAction(false); });
+    var tokenClear = document.getElementById("token-clear");
+    if (tokenClear) tokenClear.addEventListener("click", function () { tokenAction(true); });
+
+    // Галочки «показывать контест».
+    document.querySelectorAll("#combined-contests .contest-show").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        var li = cb.closest("li");
+        var status = li.querySelector(".contest-show-status");
+        var hidden = !cb.checked;
+        status.textContent = "Сохранение…";
+        status.className = "contest-show-status admin-editor-status";
+        post("/api/admin/combined/set-contest-hidden", { slug: slug, contest_id: li.dataset.id, hidden: hidden })
+          .then(function () {
+            status.textContent = hidden ? "скрыт" : "показан";
+            status.className = "contest-show-status admin-editor-status admin-editor-status--ok";
+          })
+          .catch(function (err) {
+            cb.checked = !cb.checked; // откат
+            status.textContent = err.message;
+            status.className = "contest-show-status admin-editor-status admin-editor-status--error";
+          });
+      });
+    });
+  })();
+</script>
+{{end}}

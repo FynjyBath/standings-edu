@@ -38,6 +38,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/groups/create", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupCreate)))
 	mux.HandleFunc("POST /api/admin/combined/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminCombinedGroupSave)))
 	mux.HandleFunc("POST /api/admin/combined/delete", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminCombinedGroupDelete)))
+	mux.HandleFunc("GET /standings/admin/combined", handlers.AdminAuth(handlers.AdminCombinedManagePage))
+	mux.HandleFunc("POST /api/admin/combined/set-contest-hidden", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminCombinedSetContestHidden)))
 	mux.HandleFunc("GET /api/admin/files", handlers.AdminAuth(handlers.AdminFiles))
 	mux.HandleFunc("GET /api/admin/file", handlers.AdminAuth(handlers.AdminFile))
 	mux.HandleFunc("POST /api/admin/file/validate", handlers.AdminAuth(handlers.AdminFileValidate))

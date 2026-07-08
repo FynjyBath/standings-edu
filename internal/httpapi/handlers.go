@@ -113,6 +113,30 @@ func (h *Handlers) loadGroupStandingsGuarded(slug string, visiting map[string]st
 // контесты — в одну таблицу). Недоступные участницы (ещё не сгенерированы)
 // пропускаются. Если ни одной таблицы нет — отдаём пустую страницу.
 func (h *Handlers) loadCombinedGroupStandings(slug string, gf domain.GroupFile, visiting map[string]struct{}) (domain.GeneratedGroupStandings, error) {
+	merged := h.mergeCombinedMembers(slug, gf, visiting)
+	// Контесты, скрытые в настройках объединённой группы, убираем совсем
+	// (и из публичного вида, и по токену — это кураторский выбор, не заморозка).
+	if len(gf.HiddenContests) > 0 {
+		hidden := make(map[string]struct{}, len(gf.HiddenContests))
+		for _, id := range gf.HiddenContests {
+			hidden[strings.TrimSpace(id)] = struct{}{}
+		}
+		kept := merged.Contests[:0]
+		for _, c := range merged.Contests {
+			if _, drop := hidden[c.ID]; !drop {
+				kept = append(kept, c)
+			}
+		}
+		merged.Contests = kept
+	}
+	hideUpcomingContestTaskURLs(&merged)
+	return merged, nil
+}
+
+// mergeCombinedMembers загружает таблицы групп-участниц (рекурсивно, с защитой от
+// циклов) и сливает их в одну. Без фильтрации скрытых контестов — её делает
+// вызывающий (для настроек нужен полный список).
+func (h *Handlers) mergeCombinedMembers(slug string, gf domain.GroupFile, visiting map[string]struct{}) domain.GeneratedGroupStandings {
 	title := strings.TrimSpace(gf.Title)
 	if title == "" {
 		title = slug
@@ -140,9 +164,7 @@ func (h *Handlers) loadCombinedGroupStandings(slug string, gf domain.GroupFile, 
 		members = append(members, member)
 	}
 
-	merged := domain.MergeGroupStandings(slug, title, members)
-	hideUpcomingContestTaskURLs(&merged)
-	return merged, nil
+	return domain.MergeGroupStandings(slug, title, members)
 }
 
 // applyFreezeView решает, какую версию замороженных таблиц отдавать: с верным

@@ -277,6 +277,9 @@ type GroupFile struct {
 	// собирается на лету из таблиц перечисленных групп (слаги). Свои контесты и
 	// ученики у неё не используются.
 	MemberGroups []string `json:"member_groups,omitempty"`
+	// HiddenContests — id контестов, скрытых в объединённой группе (галочка
+	// «показывать» в её настройках). Только для объединённых групп.
+	HiddenContests []string `json:"hidden_contests,omitempty"`
 }
 
 type GroupDefinition struct {

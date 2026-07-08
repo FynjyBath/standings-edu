@@ -69,13 +69,19 @@
   <p class="empty-hint">Общая страница нескольких групп: контесты с одной и той же ссылкой сливаются в одну табличку (с учениками всех групп), разные — идут отдельными. Оценок у объединённой группы нет. Изменения видны сразу, перегенерация не нужна.</p>
 
   {{if .CombinedGroups}}
-  <ul class="admin-groups-grid" id="combined-list">
+  <ul class="admin-groups-list" id="combined-list">
     {{range .CombinedGroups}}
-    <li data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}">
+    <li data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}" data-token="{{.Token}}">
       <a class="admin-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
       <span>({{.Slug}})</span>
       <span class="grade-weight">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</span>
       <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить</button>
+      {{if .Token}}
+      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}?token={{.Token}}" target="_blank" rel="noopener noreferrer">Ссылка жюри</a>
+      <button type="button" class="admin-btn admin-btn--secondary combined-token" data-clear="1">Убрать токен</button>
+      {{else}}
+      <button type="button" class="admin-btn admin-btn--secondary combined-token" data-clear="0">Токен жюри</button>
+      {{end}}
       <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>
     </li>
     {{end}}
@@ -84,30 +90,32 @@
   <p class="empty-hint">Пока нет объединённых групп.</p>
   {{end}}
 
+  {{if .SelectableGroups}}
   <div class="admin-form-grid" style="margin-top:0.8rem;">
     <label><span>Название</span><input type="text" id="combined-title" placeholder="10-е классы (все)" /></label>
     <label><span>slug</span><input type="text" id="combined-slug" placeholder="grade_10_all" /></label>
   </div>
   <div style="margin-top:0.6rem;">
     <strong>Группы в объединении</strong>
-    {{if .SelectableGroups}}
-    <div id="combined-members" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.35rem 0.8rem;margin-top:0.5rem;">
-      {{range .SelectableGroups}}
-      <label style="flex-direction:row;align-items:center;gap:0.45rem;">
-        <input type="checkbox" class="combined-member" value="{{.Slug}}" style="width:auto;" />
-        <span>{{.Title}} <span class="grade-weight">({{.Slug}})</span></span>
-      </label>
-      {{end}}
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;flex-wrap:wrap;">
+      <select id="combined-member-select" class="admin-select">
+        <option value="">— выберите группу —</option>
+        {{range .SelectableGroups}}
+        <option value="{{.Slug}}" data-title="{{.Title}}">{{.Title}} ({{.Slug}})</option>
+        {{end}}
+      </select>
+      <button type="button" id="combined-member-add" class="admin-btn admin-btn--secondary">Добавить</button>
     </div>
-    {{else}}
-    <p class="empty-hint">Нет обычных групп, из которых можно собрать объединение.</p>
-    {{end}}
+    <div id="combined-members-chosen" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.6rem;"></div>
   </div>
   <div class="admin-editor-tools" style="margin-top:0.8rem;">
     <button type="button" id="combined-save" class="admin-btn">Сохранить объединённую группу</button>
     <button type="button" id="combined-reset" class="admin-btn admin-btn--secondary">Очистить</button>
     <span id="combined-status" class="admin-editor-status"></span>
   </div>
+  {{else}}
+  <p class="empty-hint">Нужно минимум две обычные группы, чтобы собрать объединение.</p>
+  {{end}}
 </section>
 
 <section class="admin-block">
@@ -449,26 +457,83 @@
 
 <script>
   (function () {
+    // Токен жюри у объединённых групп — тот же эндпоинт, что и у обычных.
+    document.querySelectorAll(".combined-token").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var li = btn.closest("li");
+        var slug = li.dataset.slug;
+        var clear = btn.dataset.clear === "1";
+        if (clear && !confirm("Убрать токен жюри у «" + (li.dataset.title || slug) + "»?")) return;
+        fetch("/api/admin/group/token/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, clear: clear }) })
+          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+    });
+
+    var saveBtn = document.getElementById("combined-save");
+    if (!saveBtn) return;
+
     var titleInput = document.getElementById("combined-title");
     var slugInput = document.getElementById("combined-slug");
     var statusNode = document.getElementById("combined-status");
-    var saveBtn = document.getElementById("combined-save");
-    if (!saveBtn) return;
+    var memberSelect = document.getElementById("combined-member-select");
+    var chosenBox = document.getElementById("combined-members-chosen");
+
+    var titleBySlug = {};
+    Array.prototype.slice.call(memberSelect.options).forEach(function (o) {
+      if (o.value) titleBySlug[o.value] = o.dataset.title || o.value;
+    });
+
+    var chosen = []; // слаги выбранных групп, в порядке добавления
 
     function setStatus(msg, isError) {
       statusNode.textContent = msg;
       statusNode.className = isError ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
     }
-    function memberChecks() { return Array.prototype.slice.call(document.querySelectorAll(".combined-member")); }
-    function selectedMembers() {
-      return memberChecks().filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
-    }
-    function reset() {
-      titleInput.value = ""; slugInput.value = ""; slugInput.readOnly = false;
-      memberChecks().forEach(function (c) { c.checked = false; });
-      setStatus("", false);
+
+    function renderChosen() {
+      chosenBox.innerHTML = "";
+      chosen.forEach(function (slug) {
+        var chip = document.createElement("span");
+        chip.className = "admin-btn admin-btn--secondary";
+        chip.style.cssText = "display:inline-flex;align-items:center;gap:0.4rem;";
+        chip.textContent = (titleBySlug[slug] || slug);
+        var x = document.createElement("button");
+        x.type = "button"; x.className = "admin-btn admin-btn--secondary"; x.textContent = "×";
+        x.style.cssText = "min-height:1.4rem;padding:0 0.45rem;";
+        x.addEventListener("click", function () { chosen = chosen.filter(function (s) { return s !== slug; }); renderChosen(); });
+        chip.appendChild(x);
+        chosenBox.appendChild(chip);
+      });
+      if (!chosen.length) {
+        var hint = document.createElement("span");
+        hint.className = "empty-hint";
+        hint.textContent = "Пока ничего не выбрано.";
+        chosenBox.appendChild(hint);
+      }
     }
 
+    function addChosen(slug) {
+      slug = (slug || "").trim();
+      if (!slug || chosen.indexOf(slug) !== -1) return;
+      chosen.push(slug);
+      renderChosen();
+    }
+
+    document.getElementById("combined-member-add").addEventListener("click", function () {
+      addChosen(memberSelect.value);
+      memberSelect.value = "";
+    });
+    memberSelect.addEventListener("change", function () {
+      if (memberSelect.value) { addChosen(memberSelect.value); memberSelect.value = ""; }
+    });
+
+    function reset() {
+      titleInput.value = ""; slugInput.value = ""; slugInput.readOnly = false;
+      chosen = []; renderChosen();
+      setStatus("", false);
+    }
     document.getElementById("combined-reset").addEventListener("click", reset);
 
     document.querySelectorAll(".combined-edit").forEach(function (btn) {
@@ -477,8 +542,12 @@
         titleInput.value = li.dataset.title || "";
         slugInput.value = li.dataset.slug || "";
         slugInput.readOnly = true; // slug у существующей группы не меняем
-        var members = (li.dataset.members || "").split(",").filter(Boolean);
-        memberChecks().forEach(function (c) { c.checked = members.indexOf(c.value) !== -1; });
+        // Названия для чипов из существующего объединения могут не быть в selectable
+        (li.dataset.members || "").split(",").filter(Boolean).forEach(function (s) {
+          if (!titleBySlug[s]) titleBySlug[s] = s;
+        });
+        chosen = (li.dataset.members || "").split(",").filter(Boolean);
+        renderChosen();
         setStatus("Редактирование «" + (li.dataset.title || li.dataset.slug) + "». Slug менять нельзя.", false);
         titleInput.scrollIntoView({ behavior: "smooth", block: "center" });
       });
@@ -497,13 +566,15 @@
     });
 
     saveBtn.addEventListener("click", function () {
-      var body = { slug: slugInput.value.trim(), title: titleInput.value.trim(), member_groups: selectedMembers() };
+      var body = { slug: slugInput.value.trim(), title: titleInput.value.trim(), member_groups: chosen };
       setStatus("Сохранение…", false);
       fetch("/api/admin/combined/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); })
         .then(function () { setStatus("Сохранено. Обновляю…", false); location.reload(); })
         .catch(function (err) { setStatus(err.message, true); });
     });
+
+    renderChosen();
   })();
 </script>
 {{end}}

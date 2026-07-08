@@ -14,6 +14,7 @@ type AdminCombinedGroup struct {
 	Slug    string
 	Title   string
 	Members []AdminCombinedMember
+	Token   string // group_secret_token (для ссылки жюри), пусто — токена нет
 }
 
 type AdminCombinedMember struct {
@@ -146,6 +147,9 @@ func (h *Handlers) listCombinedGroups() (combined []AdminCombinedGroup, selectab
 			continue
 		}
 		item := AdminCombinedGroup{Slug: link.Slug, Title: link.Title}
+		if gf, ok, _ := h.readGroupFile(link.Slug); ok {
+			item.Token = strings.TrimSpace(gf.GroupSecretToken)
+		}
 		for _, member := range link.Members {
 			title, ok := titleBySlug[member]
 			item.Members = append(item.Members, AdminCombinedMember{Slug: member, Title: title, Missing: !ok})

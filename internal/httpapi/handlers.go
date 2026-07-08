@@ -358,8 +358,9 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 		title = slug
 	}
 
-	rows := make([]ParticipantRow, 0, len(gf.StudentIDs))
-	for _, id := range domain.NormalizeGroups(gf.StudentIDs) {
+	studentIDs := h.resolveGroupStudentIDs(slug)
+	rows := make([]ParticipantRow, 0, len(studentIDs))
+	for _, id := range studentIDs {
 		row := ParticipantRow{StudentID: id, PublicName: id}
 		if profile, err := h.loader.LoadStudentProfile(id); err == nil {
 			row.HasProfile = true
@@ -394,8 +395,7 @@ func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Reques
 		http.NotFound(w, r)
 		return
 	}
-	gf, ok := h.readSourceGroupFile(slug)
-	if !ok || !groupHasStudent(gf, id) {
+	if !h.groupContainsStudent(slug, id) {
 		http.NotFound(w, r)
 		return
 	}
@@ -429,9 +429,46 @@ func (h *Handlers) readSourceGroupFile(slug string) (domain.GroupFile, bool) {
 	return gf, true
 }
 
-func groupHasStudent(gf domain.GroupFile, id string) bool {
-	for _, sid := range gf.StudentIDs {
-		if strings.TrimSpace(sid) == id {
+// resolveGroupStudentIDs возвращает состав группы. Для объединённой группы —
+// объединение составов групп-участниц (рекурсивно, с защитой от циклов), для
+// обычной — её student_ids. Порядок сохраняется, дубликаты убираются.
+func (h *Handlers) resolveGroupStudentIDs(slug string) []string {
+	return h.resolveGroupStudentIDsGuarded(slug, make(map[string]struct{}), make(map[string]struct{}))
+}
+
+func (h *Handlers) resolveGroupStudentIDsGuarded(slug string, seen, visiting map[string]struct{}) []string {
+	gf, ok := h.readSourceGroupFile(slug)
+	if !ok {
+		return nil
+	}
+	if len(gf.MemberGroups) == 0 {
+		out := make([]string, 0, len(gf.StudentIDs))
+		for _, id := range domain.NormalizeGroups(gf.StudentIDs) {
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+		return out
+	}
+	if _, cycle := visiting[slug]; cycle {
+		return nil
+	}
+	visiting[slug] = struct{}{}
+	out := make([]string, 0)
+	for _, member := range gf.MemberGroups {
+		out = append(out, h.resolveGroupStudentIDsGuarded(member, seen, visiting)...)
+	}
+	delete(visiting, slug)
+	return out
+}
+
+// groupContainsStudent проверяет членство ученика в группе с учётом объединённых
+// групп (по резолвнутому составу).
+func (h *Handlers) groupContainsStudent(slug, id string) bool {
+	for _, sid := range h.resolveGroupStudentIDs(slug) {
+		if sid == id {
 			return true
 		}
 	}

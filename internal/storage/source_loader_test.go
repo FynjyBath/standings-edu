@@ -2,7 +2,11 @@ package storage
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"standings-edu/internal/domain"
 )
 
 // Проверяем, что генератор понимает записи в том виде, в котором их пишет
@@ -139,5 +143,48 @@ func TestParseGroupContestItemOverrides(t *testing.T) {
 
 	if _, err := parseGroupContestItem(json.RawMessage(`{"id":"c1","zero_penalty":-2}`)); err == nil {
 		t.Fatal("negative zero_penalty must fail")
+	}
+}
+
+// Регресс: объединённая группа (member_groups, без своего contests.json) не должна
+// ронять загрузку исходных данных. Раньше отсутствие contests.json было ошибкой.
+func TestLoadCombinedGroupNoContestsFile(t *testing.T) {
+	dir := t.TempDir()
+	writeSourceFile(t, filepath.Join(dir, "students.json"), `[]`)
+	writeSourceFile(t, filepath.Join(dir, "contests.json"), `[]`)
+	// обычная группа со своим contests.json
+	writeSourceFile(t, filepath.Join(dir, "groups", "grp_a", "group.json"), `{"title":"A","student_ids":["s1"]}`)
+	writeSourceFile(t, filepath.Join(dir, "groups", "grp_a", "contests.json"), `[]`)
+	// объединённая группа — только group.json, contests.json НЕТ
+	writeSourceFile(t, filepath.Join(dir, "groups", "combo", "group.json"), `{"title":"Combo","member_groups":["grp_a"]}`)
+
+	data, err := NewSourceLoader(dir).Load()
+	if err != nil {
+		t.Fatalf("Load must not fail on combined group without contests.json: %v", err)
+	}
+	var combo *domain.GroupDefinition
+	for i := range data.Groups {
+		if data.Groups[i].Slug == "combo" {
+			combo = &data.Groups[i]
+		}
+	}
+	if combo == nil {
+		t.Fatal("combo group not loaded")
+	}
+	if len(combo.MemberGroups) != 1 || combo.MemberGroups[0] != "grp_a" {
+		t.Fatalf("member_groups wrong: %+v", combo.MemberGroups)
+	}
+	if len(combo.Contests) != 0 {
+		t.Fatalf("combined group must have no contests: %+v", combo.Contests)
+	}
+}
+
+func writeSourceFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

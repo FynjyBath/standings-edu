@@ -210,6 +210,11 @@ var inlineContestKeys = []string{
 func (l *SourceLoader) loadGroupContests(path string) ([]domain.GroupContestRef, error) {
 	var items []json.RawMessage
 	if err := fileutil.ReadJSON(path, &items); err != nil {
+		// Нет файла — у группы просто нет своих контестов (объединённая группа,
+		// или свежесозданная). Это не ошибка.
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 

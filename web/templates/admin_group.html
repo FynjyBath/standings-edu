@@ -106,6 +106,8 @@
           </td>
           <td><input type="number" class="c-zeropenalty" min="0" step="1" value="{{.ZeroPenalty}}" placeholder="{{if .Inline}}0{{else if .InhZeroPenalty}}насл.: {{.InhZeroPenalty}}{{else}}как у контеста{{end}}" style="max-width:6.5rem;" title="Штраф за задачу без баллов (только ioi). Пусто — как у контеста, 0 — выключить." /></td>
           <td style="white-space:nowrap;">
+            <button type="button" class="admin-btn admin-btn--secondary c-move-up" title="Поднять выше">↑</button>
+            <button type="button" class="admin-btn admin-btn--secondary c-move-down" title="Опустить ниже">↓</button>
             <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
             {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
             <button type="button" class="admin-btn admin-btn--secondary c-remove">Удал.</button>
@@ -261,7 +263,25 @@
         var c = inlineById[id];
         if (c) { ContestForm.fill(c); openInlineForm(); }
       });
+      function move(dir) {
+        post("/api/admin/group/contests/move", { slug: slug, id: id, dir: dir })
+          .then(function () { location.reload(); })
+          .catch(function (err) { setStatus(err.message, true); });
+      }
+      var moveUp = row.querySelector(".c-move-up");
+      if (moveUp) moveUp.addEventListener("click", function () { move("up"); });
+      var moveDown = row.querySelector(".c-move-down");
+      if (moveDown) moveDown.addEventListener("click", function () { move("down"); });
     });
+
+    // Крайние стрелки некуда двигать — гасим.
+    var contestRows = document.querySelectorAll("tr[data-id]");
+    if (contestRows.length) {
+      var firstUp = contestRows[0].querySelector(".c-move-up");
+      if (firstUp) firstUp.disabled = true;
+      var lastDown = contestRows[contestRows.length - 1].querySelector(".c-move-down");
+      if (lastDown) lastDown.disabled = true;
+    }
 
     document.getElementById("add-ref-btn").addEventListener("click", function () {
       var sel = document.getElementById("add-ref-select");

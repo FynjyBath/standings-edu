@@ -783,6 +783,71 @@ func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// AdminGroupContestMove меняет контест местами с соседним (вверх/вниз),
+// переставляя его в порядке контестов группы.
+func (h *Handlers) AdminGroupContestMove(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug string `json:"slug"`
+		ID   string `json:"id"`
+		Dir  string `json:"dir"` // "up" | "down"
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	id := strings.TrimSpace(req.ID)
+	dir := strings.TrimSpace(req.Dir)
+	if !domain.IsValidSlug(slug) || id == "" || (dir != "up" && dir != "down") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+		return
+	}
+	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+
+	entries, err := h.loadGroupContestEntries(slug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	idx := -1
+	for i, e := range entries {
+		if e.id == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест не найден в группе"})
+		return
+	}
+	swap := idx - 1
+	if dir == "down" {
+		swap = idx + 1
+	}
+	if swap < 0 || swap >= len(entries) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест уже с краю"})
+		return
+	}
+
+	out := make([]json.RawMessage, len(entries))
+	for i, e := range entries {
+		out[i] = e.raw
+	}
+	out[idx], out[swap] = out[swap], out[idx]
+	if err := h.writeGroupContestRaw(slug, out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // AdminGroupContestSetOptions меняет entry-настройки контеста группы: update,
 // freeze, table_name и окно start/end — одинаково для ссылок и inline (у inline
 // table_name и окно лежат в том же объекте, что и тело контеста).

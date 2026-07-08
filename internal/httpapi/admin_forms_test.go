@@ -161,6 +161,52 @@ func TestAdminGroupContestRemove(t *testing.T) {
 	}
 }
 
+func TestAdminGroupContestMove(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	setupGroup(t, dataDir, "grp",
+		`[{"id":"a","update":true},{"id":"b","update":true},{"id":"c","update":true}]`)
+
+	order := func() []any {
+		items := readGroupContestsRaw(t, dataDir, "grp")
+		ids := make([]any, len(items))
+		for i, it := range items {
+			ids[i] = it["id"]
+		}
+		return ids
+	}
+
+	// b вниз → a, c, b.
+	code, resp := postJSON(t, h.AdminGroupContestMove, `{"slug":"grp","id":"b","dir":"down"}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("move down failed: code=%d resp=%v", code, resp)
+	}
+	if got := order(); got[0] != "a" || got[1] != "c" || got[2] != "b" {
+		t.Fatalf("after down expected [a c b], got %v", got)
+	}
+
+	// b вверх → a, b, c (обратно).
+	if _, r := postJSON(t, h.AdminGroupContestMove, `{"slug":"grp","id":"b","dir":"up"}`); r["ok"] != true {
+		t.Fatalf("move up failed: %v", r)
+	}
+	if got := order(); got[0] != "a" || got[1] != "b" || got[2] != "c" {
+		t.Fatalf("after up expected [a b c], got %v", got)
+	}
+
+	// Верхний вверх — отказ, порядок не меняется.
+	code, _ = postJSON(t, h.AdminGroupContestMove, `{"slug":"grp","id":"a","dir":"up"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected rejection at top edge, got code=%d", code)
+	}
+	if got := order(); got[0] != "a" {
+		t.Fatalf("order must be unchanged after edge reject, got %v", got)
+	}
+
+	// Несуществующий id — отказ.
+	if code, _ := postJSON(t, h.AdminGroupContestMove, `{"slug":"grp","id":"zzz","dir":"up"}`); code != http.StatusBadRequest {
+		t.Fatalf("expected rejection for missing id, got code=%d", code)
+	}
+}
+
 func TestAdminGroupContestSetOptionsRef(t *testing.T) {
 	h, dataDir := newTestHandlers(t)
 	setupGroup(t, dataDir, "grp", `[{"id":"a","update":true}]`)

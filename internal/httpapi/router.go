@@ -26,6 +26,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/group/token/set", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupTokenSet)))
 	mux.HandleFunc("POST /api/admin/group/contests/add-ref", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupContestAddRef)))
 	mux.HandleFunc("POST /api/admin/group/contests/remove", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupContestRemove)))
+	mux.HandleFunc("POST /api/admin/group/contests/move", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupContestMove)))
 	mux.HandleFunc("POST /api/admin/group/contests/set-options", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupContestSetOptions)))
 	mux.HandleFunc("POST /api/admin/group/contests/inline-save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupContestInlineSave)))
 	mux.HandleFunc("GET /standings/admin/contests", handlers.AdminAuth(handlers.AdminContestsPage))

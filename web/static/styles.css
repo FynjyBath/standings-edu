@@ -663,6 +663,16 @@ button.summary-link-btn {
   font-weight: 600;
 }
 
+/* «Зачтено» (ejudge/informatics RUN_ACCEPTED, не полный OK): остаётся зелёной
+   ячейкой решённой задачи, но внутри выделяется жёлтой рамочкой. outline с
+   отрицательным offset рисуется ВНУТРИ клетки и не влияет на разметку/фон. */
+.status-cell.solved.accepted,
+.score-cell.accepted {
+  outline: 2px solid #e6b400;
+  outline-offset: -4px;
+  border-radius: 5px;
+}
+
 .grade-input {
   width: 4.2rem;
   padding: 0.3rem 0.4rem;
@@ -881,6 +891,29 @@ button.summary-link-btn {
 
 .admin-editor-status--error {
   color: #b03535;
+}
+
+/* Предупреждение о коллизии аккаунтов в пробном merge (dry-run). */
+.merge-conflict-note {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e0a800;
+  border-radius: 10px;
+  background: color-mix(in srgb, #ffd54a 22%, var(--surface) 78%);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.merge-conflict-row {
+  background: color-mix(in srgb, #ffd54a 14%, transparent 86%);
+}
+.merge-conflict-row td:last-child {
+  color: #a06b00;
+}
+.acct-conflict {
+  background: color-mix(in srgb, #ffd54a 40%, transparent 60%);
+  outline: 1px solid #e0a800;
+  border-radius: 4px;
+  padding: 0 0.15rem;
 }
 
 .admin-result-meta {

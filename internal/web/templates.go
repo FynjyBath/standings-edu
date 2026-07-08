@@ -85,6 +85,7 @@ type TaskCell struct {
 	Text     string // символ или баллы; для дорешки уже обёрнуто в скобки
 	Alpha    string // прозрачность фона для IOI
 	Practice bool   // дорешка: добавляет CSS-класс practice
+	Accepted bool   // «зачтено» (не полный OK): добавляет CSS-класс accepted
 }
 
 // taskCells объединяет статусы, баллы и пометку дорешки в единый набор ячеек.
@@ -95,7 +96,8 @@ func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCe
 	cells := make([]TaskCell, 0, len(row.Statuses))
 	for i := range row.Statuses {
 		practice := i < len(row.Upsolved) && row.Upsolved[i]
-		cell := TaskCell{IsIOI: isIOI, Practice: practice}
+		accepted := i < len(row.Accepted) && row.Accepted[i]
+		cell := TaskCell{IsIOI: isIOI, Practice: practice, Accepted: accepted}
 
 		if isIOI {
 			var main, practiceScore *int

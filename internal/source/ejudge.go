@@ -185,11 +185,13 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 		taskURL string
 	}
 	type agg struct {
-		attempted bool
-		solved    bool
-		score     int
-		hasScore  bool
-		timed     []TimedSubmission
+		attempted      bool
+		solved         bool
+		okSolved       bool
+		acceptedSolved bool
+		score          int
+		hasScore       bool
+		timed          []TimedSubmission
 	}
 	byKey := make(map[aggKey]*agg)
 
@@ -222,8 +224,14 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 			}
 			a.attempted = true
 			solved := isEjudgeSolvedStatus(run.Status)
+			accepted := solved && isEjudgeAcceptedStatus(run.Status)
 			if solved {
 				a.solved = true
+				if accepted {
+					a.acceptedSolved = true
+				} else {
+					a.okSolved = true
+				}
 			}
 			score := domain.ClampScore(run.Score)
 			if !a.hasScore || score > a.score {
@@ -233,9 +241,10 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 			if run.RunTime > 0 {
 				submissionScore := score
 				a.timed = append(a.timed, TimedSubmission{
-					At:     time.Unix(run.RunTime, 0).UTC(),
-					Solved: solved,
-					Score:  &submissionScore,
+					At:       time.Unix(run.RunTime, 0).UTC(),
+					Solved:   solved,
+					Score:    &submissionScore,
+					Accepted: accepted,
 				})
 			}
 		}
@@ -243,7 +252,7 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 
 	byLogin := make(map[string][]TaskResult)
 	for key, a := range byKey {
-		result := TaskResult{TaskURL: key.taskURL, Attempted: a.attempted, Solved: a.solved}
+		result := TaskResult{TaskURL: key.taskURL, Attempted: a.attempted, Solved: a.solved, Accepted: a.acceptedSolved && !a.okSolved}
 		if a.hasScore {
 			score := a.score
 			result.Score = &score
@@ -432,5 +441,6 @@ func (c *EjudgeClient) callAPI(ctx context.Context, method string, q url.Values,
 
 // Статусы ejudge совпадают с informatics (informatics — тоже ejudge): 0 — OK,
 // 8 — «зачтено»; незавершённые — 11 (в очереди) и транзиентные 96..99.
-func isEjudgeSolvedStatus(status int) bool  { return isInformaticsSolvedStatus(status) }
-func isEjudgePendingStatus(status int) bool { return isInformaticsPendingStatus(status) }
+func isEjudgeSolvedStatus(status int) bool   { return isInformaticsSolvedStatus(status) }
+func isEjudgePendingStatus(status int) bool  { return isInformaticsPendingStatus(status) }
+func isEjudgeAcceptedStatus(status int) bool { return isInformaticsAcceptedStatus(status) }

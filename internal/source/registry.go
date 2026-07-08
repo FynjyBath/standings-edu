@@ -13,6 +13,9 @@ type TaskResult struct {
 	Attempted bool
 	Solved    bool
 	Score     *int
+	// Accepted — задача решена статусом «зачтено» (ejudge/informatics
+	// RUN_ACCEPTED), а полного OK не было. Такие ячейки помечаются в таблице.
+	Accepted bool `json:"accepted,omitempty"`
 	// Timed — посылки с временем (для сайтов, которые его отдают: codeforces,
 	// informatics). Пусто — сайт время не отдаёт, фильтрация по окну контеста
 	// к этой задаче не применяется. Хранится в кэше.
@@ -24,6 +27,8 @@ type TimedSubmission struct {
 	At     time.Time `json:"at"`
 	Solved bool      `json:"solved,omitempty"`
 	Score  *int      `json:"score,omitempty"`
+	// Accepted — посылка «зачтена» (RUN_ACCEPTED), а не полный OK.
+	Accepted bool `json:"accepted,omitempty"`
 }
 
 func cloneTimedSubmissions(in []TimedSubmission) []TimedSubmission {

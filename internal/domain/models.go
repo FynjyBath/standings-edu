@@ -495,6 +495,10 @@ type GeneratedRow struct {
 	// дорешке (после контеста). Такие ячейки показываются в скобках и не влияют
 	// на место/штраф. Пустой/nil — дорешки нет.
 	Upsolved []bool `json:"upsolved,omitempty"`
+	// Accepted[i] == true означает, что задача i решена статусом «зачтено»
+	// (ejudge/informatics RUN_ACCEPTED), а не полным OK. Ячейка помечается
+	// жёлтой рамкой. Пустой/nil — таких пометок нет.
+	Accepted []bool `json:"accepted,omitempty"`
 }
 
 type GeneratedContestStandings struct {

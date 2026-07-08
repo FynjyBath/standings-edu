@@ -202,13 +202,24 @@ type MergePreviewGroup struct {
 	AlreadyMember bool   `json:"already_member"`
 }
 
+// MergeAccountConflict — аккаунт анкеты, который после merge оказался ещё и у
+// ДРУГОГО ученика (одна учётка на разных сайтах указана двум людям — вероятно
+// опечатка или чужой аккаунт).
+type MergeAccountConflict struct {
+	Site      string `json:"site"`
+	AccountID string `json:"account_id"`
+	OtherID   string `json:"other_id"`
+	OtherName string `json:"other_name"`
+}
+
 // MergePreviewStudent — одна анкета в превью: во что она разрешается.
 type MergePreviewStudent struct {
-	FullName string              `json:"full_name"`
-	FinalID  string              `json:"final_id"`
-	IsNew    bool                `json:"is_new"`
-	Accounts []domain.Account    `json:"accounts,omitempty"`
-	Groups   []MergePreviewGroup `json:"groups,omitempty"`
+	FullName  string                 `json:"full_name"`
+	FinalID   string                 `json:"final_id"`
+	IsNew     bool                   `json:"is_new"`
+	Accounts  []domain.Account       `json:"accounts,omitempty"`
+	Groups    []MergePreviewGroup    `json:"groups,omitempty"`
+	Conflicts []MergeAccountConflict `json:"conflicts,omitempty"`
 }
 
 // MergePreview — результат пробного merge (dry-run): что и куда будет привязано,
@@ -269,7 +280,67 @@ func BuildMergePreview(dataDir string, existing, intake []domain.Student) (Merge
 		}
 		preview.Students = append(preview.Students, ps)
 	}
+
+	// Коллизии аккаунтов: после merge одна и та же учётка (site+account_id) может
+	// оказаться у разных учеников — предупреждаем, с кем именно совпало.
+	fillAccountConflicts(preview.Students, result)
 	return preview, nil
+}
+
+// accountKey нормализует учётку для сравнения: сайт и id без регистра/пробелов
+// (handle codeforces и login ejudge регистронезависимы).
+func accountKey(a domain.Account) string {
+	return domain.NormalizeSite(a.Site) + "\x00" + strings.ToLower(strings.TrimSpace(a.AccountID))
+}
+
+func fillAccountConflicts(students []MergePreviewStudent, result []domain.Student) {
+	owners := make(map[string]map[string]struct{})
+	nameByID := make(map[string]string, len(result))
+	for _, s := range result {
+		nameByID[s.ID] = s.FullName
+		for _, a := range s.Accounts {
+			if strings.TrimSpace(a.AccountID) == "" {
+				continue
+			}
+			key := accountKey(a)
+			if owners[key] == nil {
+				owners[key] = make(map[string]struct{})
+			}
+			owners[key][s.ID] = struct{}{}
+		}
+	}
+
+	for i := range students {
+		ps := &students[i]
+		seenOther := make(map[string]struct{})
+		for _, a := range ps.Accounts {
+			if strings.TrimSpace(a.AccountID) == "" {
+				continue
+			}
+			for ownerID := range owners[accountKey(a)] {
+				if ownerID == ps.FinalID {
+					continue
+				}
+				dedup := accountKey(a) + "\x00" + ownerID
+				if _, dup := seenOther[dedup]; dup {
+					continue
+				}
+				seenOther[dedup] = struct{}{}
+				ps.Conflicts = append(ps.Conflicts, MergeAccountConflict{
+					Site:      a.Site,
+					AccountID: a.AccountID,
+					OtherID:   ownerID,
+					OtherName: nameByID[ownerID],
+				})
+			}
+		}
+		sort.Slice(ps.Conflicts, func(a, b int) bool {
+			if ps.Conflicts[a].Site != ps.Conflicts[b].Site {
+				return ps.Conflicts[a].Site < ps.Conflicts[b].Site
+			}
+			return ps.Conflicts[a].OtherName < ps.Conflicts[b].OtherName
+		})
+	}
 }
 
 func MergeStudents(existing []domain.Student, intake []domain.Student) ([]domain.Student, MergeStats, error) {

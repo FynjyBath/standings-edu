@@ -278,3 +278,46 @@ func TestResolveGroupContestDefInheritance(t *testing.T) {
 		t.Fatalf("local penalty must override: %+v", got.ZeroPenalty)
 	}
 }
+
+// «Зачтено» доходит до GeneratedRow.Accepted: без окна — по okSolved,
+// с окном — по TimedSubmission.Accepted.
+func TestBuildTaskContestAcceptedMark(t *testing.T) {
+	contest := domain.Contest{
+		ID: "c", ScoreSystem: domain.ScoreSystemEdu,
+		Subcontests: []domain.Subcontest{{Title: "S", Tasks: []string{
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=1", // зачтено
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=2", // полный OK
+		}}},
+	}
+	u := make([]string, 2)
+	for i, raw := range contest.Subcontests[0].Tasks {
+		u[i] = domain.NormalizeTaskURL(raw)
+	}
+	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
+	students := []domain.Student{{ID: "s1", PublicName: "У"}}
+
+	// Без окна: solved обе, okSolved только у второй.
+	st := newAccountStatuses()
+	st.solved[u[0]] = struct{}{}
+	st.solved[u[1]] = struct{}{}
+	st.okSolved[u[1]] = struct{}{}
+	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
+	row := out.Rows[0]
+	if row.Accepted == nil || !row.Accepted[0] || row.Accepted[1] {
+		t.Fatalf("no-window accepted marks wrong: %+v", row.Accepted)
+	}
+
+	// С окном: обе решены в окне, первая — «зачтено» (Accepted), вторая — OK.
+	start := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	end := start.Add(2 * time.Hour)
+	inTime := start.Add(30 * time.Minute)
+	contest.StartTime, contest.EndTime = &start, &end
+	st2 := newAccountStatuses()
+	st2.timed[u[0]] = []source.TimedSubmission{{At: inTime, Solved: true, Accepted: true}}
+	st2.timed[u[1]] = []source.TimedSubmission{{At: inTime, Solved: true, Accepted: false}}
+	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st2}, nil, nil, nil)
+	row = out.Rows[0]
+	if row.Accepted == nil || !row.Accepted[0] || row.Accepted[1] {
+		t.Fatalf("windowed accepted marks wrong: %+v", row.Accepted)
+	}
+}

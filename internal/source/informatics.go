@@ -362,8 +362,14 @@ func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTask
 	agg := aggByTask[taskURL]
 	agg.attempted = true
 	solved := isInformaticsSolvedStatus(run.EjudgeStatus)
+	accepted := solved && isInformaticsAcceptedStatus(run.EjudgeStatus)
 	if solved {
 		agg.solved = true
+		if accepted {
+			agg.acceptedSolved = true
+		} else {
+			agg.okSolved = true
+		}
 	}
 
 	score := inferInformaticsScore(run)
@@ -374,7 +380,7 @@ func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTask
 
 	if at, ok := parseInformaticsTime(run.CreateTime); ok {
 		submissionScore := score
-		agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore})
+		agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore, Accepted: accepted})
 	}
 
 	aggByTask[taskURL] = agg
@@ -436,6 +442,11 @@ func isInformaticsSolvedStatus(ejudgeStatus int) bool {
 	return ejudgeStatus == informaticsStatusOK || ejudgeStatus == informaticsStatusAccepted
 }
 
+// isInformaticsAcceptedStatus — «зачтено» (RUN_ACCEPTED=8), не полный OK.
+func isInformaticsAcceptedStatus(ejudgeStatus int) bool {
+	return ejudgeStatus == informaticsStatusAccepted
+}
+
 func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, state informaticsAccountState) {
 	for _, task := range state.Solved {
 		url := strings.TrimSpace(task)
@@ -479,6 +490,11 @@ func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, sta
 		}
 		if result.Solved {
 			agg.solved = true
+			if result.Accepted {
+				agg.acceptedSolved = true
+			} else {
+				agg.okSolved = true
+			}
 		}
 
 		if result.Score != nil {
@@ -529,6 +545,7 @@ func aggregatesToTaskResults(aggByTask map[string]informaticsTaskAggregate) []Ta
 			TaskURL:   taskURL,
 			Attempted: agg.attempted,
 			Solved:    agg.solved,
+			Accepted:  agg.acceptedSolved && !agg.okSolved,
 			Score:     score,
 			Timed:     timed,
 		})
@@ -975,15 +992,19 @@ func (m *maybeInt) UnmarshalJSON(data []byte) error {
 type informaticsTaskAggregate struct {
 	attempted bool
 	solved    bool
-	score     int
-	hasScore  bool
-	timed     []TimedSubmission
+	// okSolved — был полный OK; acceptedSolved — было «зачтено» (RUN_ACCEPTED).
+	// «Зачтено» (без полного OK) помечается в таблице.
+	okSolved       bool
+	acceptedSolved bool
+	score          int
+	hasScore       bool
+	timed          []TimedSubmission
 }
 
 // informaticsStateVersion — версия схемы/логики кэша. При изменении правил
 // трактовки вердиктов или формата (добавление статуса «Зачтено», времени посылок)
 // версию повышаем, чтобы старый кэш игнорировался и результаты пересчитались с нуля.
-const informaticsStateVersion = 3
+const informaticsStateVersion = 4
 
 type informaticsStateFile struct {
 	Version  int                                `json:"version"`

@@ -291,22 +291,44 @@
 
     function renderMergePreview(preview) {
       if (!intakePreviewNode) return;
+      var totalConflicts = 0;
       var rows = (preview.students || []).map(function (st) {
         var groups = (st.groups || []).map(function (g) {
           return "<code>" + escapeHtml(g.slug) + "</code>" + (g.already_member ? " <span class=\"grade-weight\">(уже в группе)</span>" : " <span style=\"color:var(--solved-text);font-weight:700;\">+ добавится</span>");
         }).join(", ") || "<span class=\"grade-weight\">— без групп</span>";
+
+        var conflicts = st.conflicts || [];
+        totalConflicts += conflicts.length;
+        // Аккаунты, которые оказались коллизионными — подсветим отдельно.
+        var conflictKeys = {};
+        conflicts.forEach(function (c) { conflictKeys[(c.site + ":" + c.account_id).toLowerCase()] = true; });
+
         var accounts = (st.accounts || []).map(function (a) {
-          return "<code>" + escapeHtml(a.site) + ":" + escapeHtml(a.account_id) + "</code>";
+          var label = escapeHtml(a.site) + ":" + escapeHtml(a.account_id);
+          if (conflictKeys[(a.site + ":" + a.account_id).toLowerCase()]) {
+            return "<code class=\"acct-conflict\" title=\"Эта учётка есть и у другого ученика\">" + label + "</code>";
+          }
+          return "<code>" + label + "</code>";
         }).join(" ");
-        return "<tr><td>" + escapeHtml(st.full_name) + "</td>" +
+
+        var warn = conflicts.map(function (c) {
+          return "⚠ <code>" + escapeHtml(c.site) + ":" + escapeHtml(c.account_id) + "</code> уже у <strong>" + escapeHtml(c.other_name || c.other_id) + "</strong>";
+        }).join("<br>") || "<span class=\"grade-weight\">—</span>";
+
+        return "<tr" + (conflicts.length ? " class=\"merge-conflict-row\"" : "") + "><td>" + escapeHtml(st.full_name) + "</td>" +
           "<td><code>" + escapeHtml(st.final_id) + "</code> " + (st.is_new ? "<span style=\"color:var(--solved-text);font-weight:700;\">новый</span>" : "<span class=\"grade-weight\">обновление</span>") + "</td>" +
           "<td>" + groups + "</td>" +
-          "<td>" + accounts + "</td></tr>";
+          "<td>" + accounts + "</td>" +
+          "<td>" + warn + "</td></tr>";
       }).join("");
-      intakePreviewNode.innerHTML =
-        "<p class=\"empty-hint\">Пробный запуск (ничего не записано). Новых учеников: <strong>" + preview.added + "</strong>, обновлений: <strong>" + preview.updated + "</strong>.</p>" +
-        "<div class=\"table-wrap\"><table class=\"standings-table\"><thead><tr><th>Анкета (ФИО)</th><th>Итоговый ученик</th><th>Группы</th><th>Аккаунты</th></tr></thead><tbody>" +
-        (rows || "<tr><td colspan=\"4\">Пусто</td></tr>") + "</tbody></table></div>";
+
+      var head = "<p class=\"empty-hint\">Пробный запуск (ничего не записано). Новых учеников: <strong>" + preview.added + "</strong>, обновлений: <strong>" + preview.updated + "</strong>.</p>";
+      if (totalConflicts > 0) {
+        head += "<p class=\"merge-conflict-note\">⚠ Найдено совпадений аккаунтов с другими учениками: <strong>" + totalConflicts + "</strong>. Проверьте — возможно, где-то указана чужая или ошибочная учётка.</p>";
+      }
+      intakePreviewNode.innerHTML = head +
+        "<div class=\"table-wrap\"><table class=\"standings-table\"><thead><tr><th>Анкета (ФИО)</th><th>Итоговый ученик</th><th>Группы</th><th>Аккаунты</th><th>Предупреждения</th></tr></thead><tbody>" +
+        (rows || "<tr><td colspan=\"5\">Пусто</td></tr>") + "</tbody></table></div>";
       intakePreviewNode.style.display = "";
     }
 

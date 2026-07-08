@@ -326,9 +326,11 @@
             }
 
             var practice = !!(row && Array.isArray(row.upsolved) && row.upsolved[i]);
+            var accepted = !!(row && Array.isArray(row.accepted) && row.accepted[i]);
             var td = document.createElement("td");
+            if (accepted) td.title = "Зачтено (не полный OK)";
             if (isIoi) {
-              td.className = practice ? "score-cell practice" : "score-cell";
+              td.className = "score-cell" + (practice ? " practice" : "") + (accepted ? " accepted" : "");
               // «50 (70)»: основной балл и дорешка; фон — по лучшему из них.
               var effective = (practiceScore !== null && (score === null || practiceScore > score)) ? practiceScore : score;
               if (score !== null && practiceScore !== null) {
@@ -342,7 +344,7 @@
               }
               td.style.setProperty("--score-alpha", effective !== null ? String(clampScore(effective) / 100) : "0");
             } else {
-              td.className = "status-cell " + status + (practice ? " practice" : "");
+              td.className = "status-cell " + status + (practice ? " practice" : "") + (accepted ? " accepted" : "");
               if (status === "solved") {
                 td.textContent = wrapPractice("+", practice);
               } else if (status === "attempted") {

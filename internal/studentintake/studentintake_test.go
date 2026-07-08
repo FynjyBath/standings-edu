@@ -190,6 +190,43 @@ func TestBuildMergePreview(t *testing.T) {
 	}
 }
 
+// Коллизия аккаунтов: одна учётка попала двум разным людям — в превью
+// появляется предупреждение с указанием другого ученика.
+func TestBuildMergePreviewAccountConflicts(t *testing.T) {
+	dir := t.TempDir()
+	existing := []domain.Student{
+		{ID: "alice", FullName: "Алиса Иванова", Accounts: []domain.Account{{Site: "codeforces", AccountID: "tourist"}}},
+	}
+	intake := []domain.Student{
+		// Другой человек указал тот же codeforces-аккаунт (регистр другой) — коллизия с alice.
+		{FullName: "Борис Петров", Accounts: []domain.Account{{Site: "codeforces", AccountID: "Tourist"}, {Site: "acmp", AccountID: "5"}}},
+		// Третий указал acmp:5 — коллизия с Борисом (в рамках того же батча).
+		{FullName: "Виктор Сидоров", Accounts: []domain.Account{{Site: "acmp", AccountID: "5"}}},
+	}
+
+	preview, err := BuildMergePreview(dir, existing, intake)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	boris := preview.Students[0]
+	// Борис: codeforces:Tourist совпал с Алисой, acmp:5 — с Виктором.
+	if len(boris.Conflicts) != 2 {
+		t.Fatalf("boris must have 2 conflicts: %+v", boris.Conflicts)
+	}
+	names := map[string]bool{}
+	for _, c := range boris.Conflicts {
+		names[c.OtherName] = true
+	}
+	if !names["Алиса Иванова"] || !names["Виктор Сидоров"] {
+		t.Fatalf("boris conflict names wrong: %+v", boris.Conflicts)
+	}
+	// Виктор: acmp:5 совпал с Борисом.
+	viktor := preview.Students[1]
+	if len(viktor.Conflicts) != 1 || viktor.Conflicts[0].OtherName != "Борис Петров" {
+		t.Fatalf("viktor conflict wrong: %+v", viktor.Conflicts)
+	}
+}
+
 func TestParseIntakeBytes(t *testing.T) {
 	items, err := ParseIntakeBytes([]byte(`[{"full_name":"Иван Иванов","group":"g1","acmp":"5"}]`))
 	if err != nil || len(items) != 1 {

@@ -11,6 +11,10 @@
       {
         "site": "informatics",
         "account_id": "12345"
+      },
+      {
+        "site": "kodu",
+        "account_id": "ivanov_ii"
       }
     ]
   },

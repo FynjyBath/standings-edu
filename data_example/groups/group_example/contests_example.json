@@ -8,6 +8,10 @@
     "update": true
   },
   {
+    "id": "contest_ejudge_tasks",
+    "update": true
+  },
+  {
     "id": "contest_cf_provider",
     "update": true
   },

@@ -40,6 +40,21 @@
     ]
   },
   {
+    "id": "contest_ejudge_tasks",
+    "title": "Контест ejudge (tasks + score)",
+    "score_system": "ioi",
+    "table_name": "Тематические",
+    "subcontests": [
+      {
+        "title": "Задачи ejudge",
+        "tasks": [
+          "https://ej.kod-u.ru/new-client?contest_id=25408",
+          "https://ej.kod-u.ru/new-client?contest_id=25409&prob_id=3"
+        ]
+      }
+    ]
+  },
+  {
     "id": "contest_cf_provider",
     "title": "Codeforces standings (provider)",
     "score_system": "ioi",

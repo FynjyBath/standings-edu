@@ -454,6 +454,15 @@ cp data_example/groups/group_example/contests_example.json data/groups/group_exa
 cp data_example/student_intake_example.json data/student_intake.json
 ```
 
+Для источников с доступом по ключу/логину скопируйте нужные креды (заполнив их):
+
+```bash
+mkdir -p data/credentials
+cp data_example/credentials/codeforces_credentials_example.json data/credentials/codeforces_credentials.json
+cp data_example/credentials/informatics_credentials_example.json data/credentials/informatics_credentials.json
+cp data_example/credentials/ejudge_credentials_example.json data/credentials/ejudge_credentials.json
+```
+
 После этого можно сразу запускать генерацию и сервер.
 
 ### Объединённые группы (общая страница нескольких групп)
@@ -547,9 +556,12 @@ go run ./cmd/generate \
 `base_url` опционален: если не задан, используется `https://codeforces.com/api`.
 
 - `ejudge` (любые экземпляры ejudge):
-  - используется `-ejudge-creds-file` (по умолчанию `./data/ejudge_credentials.json`);
+  - используется `-ejudge-creds-file` (по умолчанию `./data/credentials/ejudge_credentials.json`);
   - файл опциональный (массив экземпляров); если его нет — источник просто отключён;
-  - если файл есть, но невалидный (битый JSON, пустой/повторяющийся `ejudge_id`, нет `base_url`), `cmd/generate` завершается с ошибкой.
+  - если файл есть, но невалидный (битый JSON, пустой/повторяющийся `ejudge_id`, нет `base_url`), `cmd/generate` завершается с ошибкой;
+  - пример: `data_example/credentials/ejudge_credentials_example.json` (и контест
+    `contest_ejudge_tasks` в `data_example/contests_example.json`, аккаунт `kodu`
+    у ученика в `data_example/students_example.json`).
 
 Формат `ejudge_credentials.json` (массив, можно несколько экземпляров):
 

@@ -48,6 +48,7 @@
   {{if .Groups}}
   <ul class="admin-groups-grid">
     {{range .Groups}}
+    {{if not .IsCombined}}
     <li>
       <a class="admin-btn" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
       <span>({{.Slug}})</span>
@@ -56,10 +57,57 @@
       <a class="admin-btn admin-btn--secondary" href="/standings/admin/group-grades?slug={{.Slug}}">Оценки</a>
     </li>
     {{end}}
+    {{end}}
   </ul>
   {{else}}
   <p class="empty-hint">Группы не найдены.</p>
   {{end}}
+</section>
+
+<section class="admin-block">
+  <h2>Объединённые группы</h2>
+  <p class="empty-hint">Общая страница нескольких групп: контесты с одной и той же ссылкой сливаются в одну табличку (с учениками всех групп), разные — идут отдельными. Оценок у объединённой группы нет. Изменения видны сразу, перегенерация не нужна.</p>
+
+  {{if .CombinedGroups}}
+  <ul class="admin-groups-grid" id="combined-list">
+    {{range .CombinedGroups}}
+    <li data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}">
+      <a class="admin-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+      <span>({{.Slug}})</span>
+      <span class="grade-weight">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</span>
+      <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить</button>
+      <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="empty-hint">Пока нет объединённых групп.</p>
+  {{end}}
+
+  <div class="admin-form-grid" style="margin-top:0.8rem;">
+    <label><span>Название</span><input type="text" id="combined-title" placeholder="10-е классы (все)" /></label>
+    <label><span>slug</span><input type="text" id="combined-slug" placeholder="grade_10_all" /></label>
+  </div>
+  <div style="margin-top:0.6rem;">
+    <strong>Группы в объединении</strong>
+    {{if .SelectableGroups}}
+    <div id="combined-members" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.35rem 0.8rem;margin-top:0.5rem;">
+      {{range .SelectableGroups}}
+      <label style="flex-direction:row;align-items:center;gap:0.45rem;">
+        <input type="checkbox" class="combined-member" value="{{.Slug}}" style="width:auto;" />
+        <span>{{.Title}} <span class="grade-weight">({{.Slug}})</span></span>
+      </label>
+      {{end}}
+    </div>
+    {{else}}
+    <p class="empty-hint">Нет обычных групп, из которых можно собрать объединение.</p>
+    {{end}}
+  </div>
+  <div class="admin-editor-tools" style="margin-top:0.8rem;">
+    <button type="button" id="combined-save" class="admin-btn">Сохранить объединённую группу</button>
+    <button type="button" id="combined-reset" class="admin-btn admin-btn--secondary">Очистить</button>
+    <span id="combined-status" class="admin-editor-status"></span>
+  </div>
 </section>
 
 <section class="admin-block">
@@ -395,6 +443,66 @@
 
     refreshFileList().catch(function (err) {
       setStatus(err.message, true);
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    var titleInput = document.getElementById("combined-title");
+    var slugInput = document.getElementById("combined-slug");
+    var statusNode = document.getElementById("combined-status");
+    var saveBtn = document.getElementById("combined-save");
+    if (!saveBtn) return;
+
+    function setStatus(msg, isError) {
+      statusNode.textContent = msg;
+      statusNode.className = isError ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+    function memberChecks() { return Array.prototype.slice.call(document.querySelectorAll(".combined-member")); }
+    function selectedMembers() {
+      return memberChecks().filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+    }
+    function reset() {
+      titleInput.value = ""; slugInput.value = ""; slugInput.readOnly = false;
+      memberChecks().forEach(function (c) { c.checked = false; });
+      setStatus("", false);
+    }
+
+    document.getElementById("combined-reset").addEventListener("click", reset);
+
+    document.querySelectorAll(".combined-edit").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var li = btn.closest("li");
+        titleInput.value = li.dataset.title || "";
+        slugInput.value = li.dataset.slug || "";
+        slugInput.readOnly = true; // slug у существующей группы не меняем
+        var members = (li.dataset.members || "").split(",").filter(Boolean);
+        memberChecks().forEach(function (c) { c.checked = members.indexOf(c.value) !== -1; });
+        setStatus("Редактирование «" + (li.dataset.title || li.dataset.slug) + "». Slug менять нельзя.", false);
+        titleInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+
+    document.querySelectorAll(".combined-delete").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var li = btn.closest("li");
+        var slug = li.dataset.slug;
+        if (!confirm("Удалить объединённую группу «" + (li.dataset.title || slug) + "»? (сами группы не трогаются)")) return;
+        fetch("/api/admin/combined/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug }) })
+          .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+    });
+
+    saveBtn.addEventListener("click", function () {
+      var body = { slug: slugInput.value.trim(), title: titleInput.value.trim(), member_groups: selectedMembers() };
+      setStatus("Сохранение…", false);
+      fetch("/api/admin/combined/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); })
+        .then(function () { setStatus("Сохранено. Обновляю…", false); location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
     });
   })();
 </script>

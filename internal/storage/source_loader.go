@@ -131,13 +131,14 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 		}
 
 		groups = append(groups, domain.GroupDefinition{
-			Slug:       slug,
-			Title:      title,
-			FormLink:   strings.TrimSpace(gf.FormLink),
-			Update:     update,
-			StudentIDs: domain.NormalizeGroups(gf.StudentIDs),
-			Contests:   contests,
-			Grades:     gf.Grades,
+			Slug:         slug,
+			Title:        title,
+			FormLink:     strings.TrimSpace(gf.FormLink),
+			Update:       update,
+			StudentIDs:   domain.NormalizeGroups(gf.StudentIDs),
+			Contests:     contests,
+			Grades:       gf.Grades,
+			MemberGroups: normalizeMemberGroups(gf.MemberGroups, slug),
 		})
 	}
 
@@ -146,6 +147,31 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 	})
 
 	return groups, nil
+}
+
+// normalizeMemberGroups чистит список слагов объединённой группы: пробелы, пустые,
+// дубликаты и ссылку на саму себя убираются, порядок сохраняется.
+func normalizeMemberGroups(raw []string, self string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, slug := range raw {
+		slug = strings.TrimSpace(slug)
+		if slug == "" || slug == self || !domain.IsValidSlug(slug) {
+			continue
+		}
+		if _, dup := seen[slug]; dup {
+			continue
+		}
+		seen[slug] = struct{}{}
+		out = append(out, slug)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // LoadManualGrades читает ручные оценки группы из

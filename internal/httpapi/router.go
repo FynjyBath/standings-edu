@@ -36,6 +36,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/actions/intake/dry-run", handlers.AdminAuth(handlers.AdminIntakeMergeDryRun))
 	mux.HandleFunc("POST /api/admin/actions/intake/merge", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminIntakeStagingMerge)))
 	mux.HandleFunc("POST /api/admin/groups/create", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupCreate)))
+	mux.HandleFunc("POST /api/admin/combined/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminCombinedGroupSave)))
+	mux.HandleFunc("POST /api/admin/combined/delete", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminCombinedGroupDelete)))
 	mux.HandleFunc("GET /api/admin/files", handlers.AdminAuth(handlers.AdminFiles))
 	mux.HandleFunc("GET /api/admin/file", handlers.AdminAuth(handlers.AdminFile))
 	mux.HandleFunc("POST /api/admin/file/validate", handlers.AdminAuth(handlers.AdminFileValidate))

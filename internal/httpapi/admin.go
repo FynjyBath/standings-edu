@@ -57,18 +57,22 @@ type AdminActionResult struct {
 }
 
 type AdminPageData struct {
-	PageTitle   string
-	Footer      FooterInfo
-	Editable    []string
-	Groups      []AdminGroupLink
-	LastResult  *AdminActionResult
-	DefaultPath string
+	PageTitle        string
+	Footer           FooterInfo
+	Editable         []string
+	Groups           []AdminGroupLink
+	CombinedGroups   []AdminCombinedGroup
+	SelectableGroups []AdminGroupLink
+	LastResult       *AdminActionResult
+	DefaultPath      string
 }
 
 type AdminGroupLink struct {
-	Slug  string
-	Title string
-	URL   string
+	Slug       string
+	Title      string
+	URL        string
+	IsCombined bool
+	Members    []string
 }
 
 type AdminGroupAccountsPageData struct {
@@ -268,6 +272,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		h.logger.Printf("ERROR list admin groups: %v", err)
 		groupLinks = nil
 	}
+	combinedGroups, selectableGroups := h.listCombinedGroups()
 
 	defaultPath := ""
 	if len(files) > 0 {
@@ -275,12 +280,14 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	page := AdminPageData{
-		PageTitle:   "Admin",
-		Footer:      h.buildFooterInfo(),
-		Editable:    files,
-		Groups:      groupLinks,
-		LastResult:  h.lastAdminResult(),
-		DefaultPath: defaultPath,
+		PageTitle:        "Admin",
+		Footer:           h.buildFooterInfo(),
+		Editable:         files,
+		Groups:           groupLinks,
+		CombinedGroups:   combinedGroups,
+		SelectableGroups: selectableGroups,
+		LastResult:       h.lastAdminResult(),
+		DefaultPath:      defaultPath,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin.html", page); err != nil {
 		h.logger.Printf("ERROR render admin page: %v", err)
@@ -739,6 +746,7 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 		}
 
 		title := slug
+		var members []string
 		groupPath := filepath.Join(groupsDir, slug, "group.json")
 		body, readErr := os.ReadFile(groupPath)
 		if readErr == nil {
@@ -747,13 +755,16 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 				if groupTitle := strings.TrimSpace(groupFile.Title); groupTitle != "" {
 					title = groupTitle
 				}
+				members = groupFile.MemberGroups
 			}
 		}
 
 		out = append(out, AdminGroupLink{
-			Slug:  slug,
-			Title: title,
-			URL:   "/standings/" + slug,
+			Slug:       slug,
+			Title:      title,
+			URL:        "/standings/" + slug,
+			IsCombined: len(members) > 0,
+			Members:    members,
 		})
 	}
 

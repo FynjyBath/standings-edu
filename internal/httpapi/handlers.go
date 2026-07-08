@@ -72,6 +72,19 @@ func (h *Handlers) ConfigureSourceDir(dataDir string) {
 // страница новой группы открывалась со ссылкой на форму). Если группы нет нигде —
 // возвращает os.ErrNotExist.
 func (h *Handlers) loadGroupStandings(slug string) (domain.GeneratedGroupStandings, error) {
+	return h.loadGroupStandingsGuarded(slug, nil)
+}
+
+func (h *Handlers) loadGroupStandingsGuarded(slug string, visiting map[string]struct{}) (domain.GeneratedGroupStandings, error) {
+	// Объединённая группа (member_groups в group.json) собирается на лету из
+	// таблиц групп-участниц.
+	if gf, ok := h.readSourceGroupFile(slug); ok && len(gf.MemberGroups) > 0 {
+		if _, cycle := visiting[slug]; cycle {
+			return domain.GeneratedGroupStandings{}, storage.ErrInvalidGroupSlug
+		}
+		return h.loadCombinedGroupStandings(slug, gf, visiting)
+	}
+
 	standings, err := h.loader.LoadGroupStandings(slug)
 	if err == nil {
 		hideUpcomingContestTaskURLs(&standings)
@@ -90,6 +103,43 @@ func (h *Handlers) loadGroupStandings(slug string) (domain.GeneratedGroupStandin
 		return domain.GeneratedGroupStandings{}, err
 	}
 	return empty, nil
+}
+
+// loadCombinedGroupStandings собирает таблицы объединённой группы: загружает
+// сгенерированные таблицы каждой группы-участницы и сливает их (общие по ссылке
+// контесты — в одну таблицу). Недоступные участницы (ещё не сгенерированы)
+// пропускаются. Если ни одной таблицы нет — отдаём пустую страницу.
+func (h *Handlers) loadCombinedGroupStandings(slug string, gf domain.GroupFile, visiting map[string]struct{}) (domain.GeneratedGroupStandings, error) {
+	title := strings.TrimSpace(gf.Title)
+	if title == "" {
+		title = slug
+	}
+
+	nextVisiting := make(map[string]struct{}, len(visiting)+1)
+	for k := range visiting {
+		nextVisiting[k] = struct{}{}
+	}
+	nextVisiting[slug] = struct{}{}
+
+	members := make([]domain.GeneratedGroupStandings, 0, len(gf.MemberGroups))
+	for _, memberSlug := range gf.MemberGroups {
+		memberSlug = strings.TrimSpace(memberSlug)
+		if memberSlug == "" || memberSlug == slug {
+			continue
+		}
+		member, err := h.loadGroupStandingsGuarded(memberSlug, nextVisiting)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, storage.ErrInvalidGroupSlug) {
+				h.logger.Printf("WARN combined group=%s member=%s load failed: %v", slug, memberSlug, err)
+			}
+			continue
+		}
+		members = append(members, member)
+	}
+
+	merged := domain.MergeGroupStandings(slug, title, members)
+	hideUpcomingContestTaskURLs(&merged)
+	return merged, nil
 }
 
 // applyFreezeView решает, какую версию замороженных таблиц отдавать: с верным
@@ -255,11 +305,12 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	tokenValid := token != "" && h.groupTokenValid(slug, token)
 	page := GroupPageData{
-		PageTitle:    standings.GroupTitle,
-		Standings:    standings,
-		Footer:       h.buildFooterInfo(),
-		UnfrozenView: unfrozen,
-		TokenValid:   tokenValid,
+		PageTitle:       standings.GroupTitle,
+		Standings:       standings,
+		Footer:          h.buildFooterInfo(),
+		UnfrozenView:    unfrozen,
+		TokenValid:      tokenValid,
+		CombinedMembers: h.combinedMemberTitles(slug),
 	}
 	if tokenValid {
 		page.Token = token
@@ -267,6 +318,26 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	if err := h.renderer.Render(w, http.StatusOK, "group_standings.html", page); err != nil {
 		h.logger.Printf("ERROR render group standings slug=%s err=%v", slug, err)
 	}
+}
+
+// combinedMemberTitles возвращает названия групп-участниц объединённой группы
+// (для подписи на странице). Для обычной группы — nil.
+func (h *Handlers) combinedMemberTitles(slug string) []string {
+	gf, ok := h.readSourceGroupFile(slug)
+	if !ok || len(gf.MemberGroups) == 0 {
+		return nil
+	}
+	titles := make([]string, 0, len(gf.MemberGroups))
+	for _, member := range gf.MemberGroups {
+		title := strings.TrimSpace(member)
+		if mf, ok := h.readSourceGroupFile(member); ok {
+			if t := strings.TrimSpace(mf.Title); t != "" {
+				title = t
+			}
+		}
+		titles = append(titles, title)
+	}
+	return titles
 }
 
 // GroupParticipantsPage — статистика участников группы по токену жюри.
@@ -527,6 +598,9 @@ type GroupPageData struct {
 	// TokenValid — токен группы верный: доступна статистика участников (даже
 	// если замороженных таблиц нет и UnfrozenView=false).
 	TokenValid bool
+	// CombinedMembers — названия групп-участниц, если это объединённая группа
+	// (для подписи на странице). Пусто — обычная группа.
+	CombinedMembers []string
 }
 
 type ParticipantRow struct {

@@ -1,6 +1,9 @@
 {{define "content"}}
 <section class="page-head">
   <h1>{{.Standings.GroupTitle}}</h1>
+  {{if .CombinedMembers}}
+  <p class="empty-hint">👥 Объединённая группа: {{range $i, $m := .CombinedMembers}}{{if $i}} · {{end}}{{$m}}{{end}}. Контесты с одной ссылкой сведены в общую табличку.</p>
+  {{end}}
   {{if .Standings.FormLink}}
   <p>Форма добавления/обновления данных аккаунтов: <a href="{{.Standings.FormLink}}" target="_blank" rel="noopener noreferrer">{{.Standings.FormLink}}</a></p>
   {{end}}

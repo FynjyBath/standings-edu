@@ -273,16 +273,21 @@ type GroupFile struct {
 	// GroupSecretToken — секрет для просмотра размороженных таблиц
 	// (?token=… на страницах группы). Пусто — токенного доступа нет.
 	GroupSecretToken string `json:"group_secret_token,omitempty"`
+	// MemberGroups — если непусто, это «объединённая группа»: её страница
+	// собирается на лету из таблиц перечисленных групп (слаги). Свои контесты и
+	// ученики у неё не используются.
+	MemberGroups []string `json:"member_groups,omitempty"`
 }
 
 type GroupDefinition struct {
-	Slug       string
-	Title      string
-	FormLink   string
-	Update     bool
-	StudentIDs []string
-	Contests   []GroupContestRef
-	Grades     *GradesConfig
+	Slug         string
+	Title        string
+	FormLink     string
+	Update       bool
+	StudentIDs   []string
+	Contests     []GroupContestRef
+	Grades       *GradesConfig
+	MemberGroups []string
 }
 
 // GradesConfig — описание таблицы оценок группы (из group.json).

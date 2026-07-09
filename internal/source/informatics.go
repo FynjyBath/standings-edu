@@ -752,7 +752,7 @@ func (c *InformaticsAPIClient) fetchRunsPage(ctx context.Context, accountID stri
 		return informaticsRunsResponse{}, err
 	}
 
-	res, err := c.httpClient.Do(req)
+	res, err := doHTTPWithRetry(c.httpClient, req, defaultHTTPRetryAttempts)
 	if err != nil {
 		return informaticsRunsResponse{}, err
 	}
@@ -866,7 +866,7 @@ func (c *InformaticsAPIClient) fetchStatementPage(ctx context.Context, statement
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.httpClient.Do(req)
+	res, err := doHTTPWithRetry(c.httpClient, req, defaultHTTPRetryAttempts)
 	if err != nil {
 		return nil, err
 	}

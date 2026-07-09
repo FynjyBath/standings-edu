@@ -454,7 +454,7 @@ func (c *CodeforcesAPIClient) fetchPage(ctx context.Context, handle string, from
 		return codeforcesAPIResponse{}, err
 	}
 
-	res, err := c.httpClient.Do(req)
+	res, err := doHTTPWithRetry(c.httpClient, req, defaultHTTPRetryAttempts)
 	if err != nil {
 		return codeforcesAPIResponse{}, err
 	}

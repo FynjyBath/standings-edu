@@ -338,6 +338,12 @@ type ejudgeRun struct {
 // ejudgeListRunsPageSize — размер окна прогонов при постраничном заборе.
 const ejudgeListRunsPageSize = 5000
 
+// ejudgeRunsFieldMask — максимальная положительная маска полей list-runs-json:
+// запрашивает все доступные поля прогона (в т.ч. user_login и prob_id). Без неё
+// часть ejudge отдаёт лишь user_name/prob_name, и прогоны не привязываются к
+// ученикам. Отрицательное значение (-1) ejudge отвергает как невалидное.
+const ejudgeRunsFieldMask = "9223372036854775807"
+
 // fetchContestRuns скачивает все прогоны контеста через master list-runs-json,
 // постранично по run_id. Дедупликация по run_id делает забор устойчивым к
 // нюансам семантики first_run/last_run у конкретного ejudge.
@@ -350,6 +356,11 @@ func (c *EjudgeClient) fetchContestRuns(ctx context.Context, contestID int) ([]e
 		q.Set("contest_id", strconv.Itoa(contestID))
 		q.Set("first_run", strconv.Itoa(lo))
 		q.Set("last_run", strconv.Itoa(lo+ejudgeListRunsPageSize-1))
+		// Полная маска полей: без неё некоторые ejudge отдают только user_name/
+		// prob_name (без user_login и prob_id), и все прогоны молча теряются при
+		// сопоставлении по логину. Максимальный положительный int64 запрашивает
+		// все поля, включая user_login, prob_id, status, score, run_time.
+		q.Set("field_mask", ejudgeRunsFieldMask)
 
 		var result struct {
 			Runs      []ejudgeRun `json:"runs"`

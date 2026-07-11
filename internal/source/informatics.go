@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/http/cookiejar"
@@ -138,7 +139,7 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 		lastKnownRunID = state.MaxRunID
 	}
 
-	newRuns, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
+	newRuns, complete, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +148,12 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 
 	results := aggregatesToTaskResults(aggByTask)
 
-	if maxRunID > lastKnownRunID || !hasState {
+	// Состояние сохраняем только при ПОЛНОМ заборе: если какая-то (обычно самая
+	// старая) страница у informatics стабильно 500-ит, мы всё равно показываем
+	// аккаунт по успешно скачанным свежим страницам, но НЕ двигаем водяной знак —
+	// иначе старые, недокачанные прогоны были бы навсегда пропущены. На следующей
+	// генерации аккаунт перечитывается заново.
+	if complete && (maxRunID > lastKnownRunID || !hasState) {
 		newState := informaticsAccountState{
 			MaxRunID:  maxRunID,
 			Results:   results,
@@ -156,6 +162,9 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 		if saveErr := c.saveAccountState(accountID, newState); saveErr != nil {
 			return nil, saveErr
 		}
+	}
+	if !complete {
+		log.Printf("WARN informatics account_id=%s: неполный забор прогонов (страница отдала 500 после ретраев); показываю по свежим страницам, состояние не сохранено", accountID)
 	}
 
 	return results, nil
@@ -192,9 +201,14 @@ func (c *InformaticsAPIClient) fetchRunsPageWithRelogin(ctx context.Context, acc
 	return c.fetchRunsPage(ctx, accountID, page)
 }
 
-func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, accountID string, pageCount int) ([]informaticsRunsResponse, error) {
+// fetchRemainingRunsPages качает страницы 2..pageCount параллельно. Ошибка
+// отдельной страницы (после ретраев — обычно стабильный 500 у informatics на
+// самой глубокой странице) НЕ роняет весь забор: возвращаются успешно скачанные
+// страницы и отсортированный список номеров непрочитанных. Реальная отмена
+// контекста (ctx) прекращает всё и возвращается как ошибка.
+func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, accountID string, pageCount int) ([]informaticsRunsResponse, []int, error) {
 	if pageCount <= 1 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	type pageResult struct {
@@ -247,22 +261,23 @@ func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, acco
 	}()
 
 	out := make([]informaticsRunsResponse, 0, pageCount-1)
-	var firstErr error
+	var failed []int
 	for res := range results {
 		if res.err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("fetch informatics runs page=%d: %w", res.page, res.err)
-				cancel()
+			// Реальная отмена контекста — прекращаем весь забор.
+			if ctx.Err() != nil {
+				return nil, nil, fmt.Errorf("fetch informatics runs page=%d: %w", res.page, res.err)
 			}
+			// Иначе — конкретная страница недоступна (стабильный 500 и т.п.):
+			// запоминаем и продолжаем с остальными.
+			failed = append(failed, res.page)
 			continue
 		}
 		out = append(out, res.resp)
 	}
-	if firstErr != nil {
-		return nil, firstErr
-	}
+	sort.Ints(failed)
 
-	return out, nil
+	return out, failed, nil
 }
 
 // collectNewInformaticsRuns собирает посылки новее lastKnownRunID (при отсутствии
@@ -270,12 +285,18 @@ func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, acco
 // после того как известен порог незавершённых посылок. Пейджинг с ранним выходом
 // сохранён: список новостей идёт от свежих к старым, поэтому на первой известной
 // посылке дальнейшие страницы не запрашиваются.
-func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, accountID string, lastKnownRunID int) ([]informaticsRun, error) {
+//
+// Второе возвращаемое значение complete=false означает, что какую-то страницу не
+// удалось скачать (после ретраев). Собранные страницы всё равно возвращаются,
+// чтобы показать аккаунт по свежим данным, но выше по коду при неполном заборе
+// состояние не сохраняется.
+func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, accountID string, lastKnownRunID int) ([]informaticsRun, bool, error) {
 	firstPage, err := c.fetchRunsPageWithRelogin(ctx, accountID, 1)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
+	complete := true
 	stopOnKnownRunID := lastKnownRunID > 0
 	out := make([]informaticsRun, 0, len(firstPage.Data))
 	staleReached := appendNewInformaticsRuns(&out, firstPage.Data, lastKnownRunID, stopOnKnownRunID)
@@ -286,16 +307,26 @@ func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, ac
 			for page := 2; page <= pageCount; page++ {
 				resp, pageErr := c.fetchRunsPageWithRelogin(ctx, accountID, page)
 				if pageErr != nil {
-					return nil, pageErr
+					// Реальная отмена — пробрасываем; иначе страница
+					// недоступна: помечаем забор неполным и прекращаем (дальше
+					// только более старые страницы).
+					if ctx.Err() != nil {
+						return nil, false, pageErr
+					}
+					complete = false
+					break
 				}
 				if appendNewInformaticsRuns(&out, resp.Data, lastKnownRunID, true) {
 					break
 				}
 			}
 		} else {
-			otherPages, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
+			otherPages, failed, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
 			if pageErr != nil {
-				return nil, pageErr
+				return nil, false, pageErr
+			}
+			if len(failed) > 0 {
+				complete = false
 			}
 			for _, page := range otherPages {
 				appendNewInformaticsRuns(&out, page.Data, 0, false)
@@ -303,7 +334,7 @@ func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, ac
 		}
 	}
 
-	return out, nil
+	return out, complete, nil
 }
 
 func appendNewInformaticsRuns(out *[]informaticsRun, runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool) (staleReached bool) {

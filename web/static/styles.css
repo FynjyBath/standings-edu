@@ -611,6 +611,19 @@ button.summary-link-btn {
   font-size: 0.92rem;
 }
 
+/* Ячейка-ссылка на посылки ученика по задаче: занимает всю клетку, цвет
+   наследуется, подчёркивание — при наведении. */
+.cell-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cell-link:hover {
+  text-decoration: underline;
+}
+
 /* Сводная: фон названия контеста — цвет его таблички (table_name). Оверлей
    поверх обычного фона шапки, чтобы различать контесты из разных табличек.
    --tab-hue проставляется из JS. */

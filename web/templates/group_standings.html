@@ -126,11 +126,11 @@
             {{if hasPenaltyColumn $contest.Rows}}
             <td class="solved-count">{{penaltyText .Penalty}}</td>
             {{end}}
-            {{range taskCells . $contest.ScoreSystem}}
+            {{range taskCells $contest .}}
               {{if .IsIOI}}
-              <td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}} style="--score-alpha: {{.Alpha}};">{{.Text}}</td>
+              <td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}} style="--score-alpha: {{.Alpha}};">{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
               {{else}}
-              <td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}}>{{.Text}}</td>
+              <td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}}>{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
               {{end}}
             {{end}}
             {{if and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}

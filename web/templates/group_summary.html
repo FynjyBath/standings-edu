@@ -147,6 +147,23 @@
       return v;
     }
 
+    // Ссылка на список посылок ученика по задаче (пока только informatics).
+    function submissionURL(taskURL, accounts) {
+      if (!taskURL || !accounts) return "";
+      var u;
+      try { u = new URL(taskURL); } catch (e) { return ""; }
+      var host = u.hostname.toLowerCase();
+      if (host === "informatics.msk.ru" || host === "www.informatics.msk.ru" ||
+          host === "informatics.mccme.ru" || host === "www.informatics.mccme.ru") {
+        var acc = accounts.informatics;
+        if (!acc) return "";
+        var q = u.search ? u.search.slice(1) + "&" : "";
+        q += "submit&user_id=" + encodeURIComponent(acc);
+        return u.origin + u.pathname + "?" + q + (u.hash || "");
+      }
+      return "";
+    }
+
     function contestSubcontests(contest) {
       if (Array.isArray(contest.subcontests) && contest.subcontests.length > 0) {
         return contest.subcontests;
@@ -401,6 +418,23 @@
                 td.textContent = "";
               }
             }
+
+            // Есть посылка → ячейка ссылается на посылки ученика по задаче.
+            if ((status === "solved" || status === "attempted") && td.textContent) {
+              var subURL = submissionURL(tasks[i].url, row && row.accounts);
+              if (subURL) {
+                var a = document.createElement("a");
+                a.className = "cell-link";
+                a.href = subURL;
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.title = "Посылки ученика по задаче";
+                a.textContent = td.textContent;
+                td.textContent = "";
+                td.appendChild(a);
+              }
+            }
+
             cells.push(td);
           }
         });

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -87,18 +88,29 @@ type TaskCell struct {
 	Alpha    string // прозрачность фона для IOI
 	Practice bool   // дорешка: добавляет CSS-класс practice
 	Accepted bool   // «зачтено» (не полный OK): добавляет CSS-класс accepted
+	// SubmissionURL — ссылка на список посылок ученика по этой задаче (если у
+	// него есть посылка и сайт это поддерживает). Пусто — ячейка не кликабельна.
+	SubmissionURL string
 }
 
 // taskCells объединяет статусы, баллы и пометку дорешки в единый набор ячеек.
 // Для IOI основной балл и дорешка показываются вместе: «50 (70)» — 50 в окне,
 // 70 в дорешке; только дорешка — «(70)». Фон ячейки — по лучшему из них.
-func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCell {
-	isIOI := scoreSystem.IsIOI()
+func taskCells(contest domain.GeneratedContestStandings, row domain.GeneratedRow) []TaskCell {
+	isIOI := contest.ScoreSystem.IsIOI()
 	cells := make([]TaskCell, 0, len(row.Statuses))
 	for i := range row.Statuses {
 		practice := i < len(row.Upsolved) && row.Upsolved[i]
 		accepted := i < len(row.Accepted) && row.Accepted[i]
 		cell := TaskCell{IsIOI: isIOI, Practice: practice, Accepted: accepted}
+
+		// Есть хотя бы одна посылка (решено/попытка) → делаем ячейку ссылкой на
+		// посылки ученика по этой задаче.
+		if s := row.Statuses[i]; s == domain.TaskStatusSolved || s == domain.TaskStatusAttempted {
+			if i < len(contest.Tasks) {
+				cell.SubmissionURL = submissionURL(contest.Tasks[i].URL, row.Accounts)
+			}
+		}
 
 		if isIOI {
 			var main, practiceScore *int
@@ -130,6 +142,36 @@ func taskCells(row domain.GeneratedRow, scoreSystem domain.ScoreSystem) []TaskCe
 		cells = append(cells, cell)
 	}
 	return cells
+}
+
+// submissionURL строит ссылку на список посылок ученика по задаче. Пока умеет
+// только informatics: к её URL задачи (…/view.php?chapterid=N#i) добавляются
+// параметры &submit&user_id=<acc>, фрагмент (#i — номер задачи в главе)
+// сохраняется. Пусто — сайт не поддерживается или нет аккаунта.
+func submissionURL(taskURL string, accounts map[string]string) string {
+	taskURL = strings.TrimSpace(taskURL)
+	if taskURL == "" || len(accounts) == 0 {
+		return ""
+	}
+	u, err := url.Parse(taskURL)
+	if err != nil {
+		return ""
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "informatics.msk.ru", "www.informatics.msk.ru",
+		"informatics.mccme.ru", "www.informatics.mccme.ru":
+		acc := strings.TrimSpace(accounts["informatics"])
+		if acc == "" {
+			return ""
+		}
+		// Дописываем к сырой строке запроса, чтобы «submit» остался без значения.
+		if u.RawQuery != "" {
+			u.RawQuery += "&"
+		}
+		u.RawQuery += "submit&user_id=" + url.QueryEscape(acc)
+		return u.String()
+	}
+	return ""
 }
 
 func numText(v float64) string {

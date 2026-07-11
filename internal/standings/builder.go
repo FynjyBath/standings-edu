@@ -717,6 +717,30 @@ type taskColumn struct {
 	useRealScores bool   // для обычной IOI-задачи
 }
 
+// linkableAccounts — account_id ученика по сайтам, для которых умеем строить
+// ссылку на список его посылок по задаче. Пока только informatics (её user_id).
+// Не включаем остальные сайты, чтобы не публиковать лишние идентификаторы.
+func linkableAccounts(accounts []domain.Account) map[string]string {
+	var out map[string]string
+	for _, a := range accounts {
+		site := domain.NormalizeSite(a.Site)
+		if site != "informatics" {
+			continue
+		}
+		id := strings.TrimSpace(a.AccountID)
+		if id == "" {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, 1)
+		}
+		if _, exists := out[site]; !exists {
+			out[site] = id
+		}
+	}
+	return out
+}
+
 func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]string, ejudgeRefs map[string][]string) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
@@ -859,6 +883,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			PublicName:  student.PublicName,
 			Statuses:    make([]string, len(out.Tasks)),
 			SolvedCount: 0,
+			Accounts:    linkableAccounts(student.Accounts),
 		}
 		practice := make([]*int, len(out.Tasks))
 		hasPractice := false

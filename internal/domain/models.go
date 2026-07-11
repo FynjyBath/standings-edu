@@ -505,6 +505,10 @@ type GeneratedRow struct {
 	// (ejudge/informatics RUN_ACCEPTED), а не полным OK. Ячейка помечается
 	// жёлтой рамкой. Пустой/nil — таких пометок нет.
 	Accepted []bool `json:"accepted,omitempty"`
+	// Accounts — account_id ученика по сайтам, поддерживающим ссылку на список
+	// его посылок по задаче (сейчас только informatics). Нужно фронтенду, чтобы
+	// сделать ячейку с посылкой кликабельной. Пусто — таких аккаунтов нет.
+	Accounts map[string]string `json:"accounts,omitempty"`
 }
 
 type GeneratedContestStandings struct {

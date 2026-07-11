@@ -18,7 +18,7 @@ func TestTaskCellsMainAndPractice(t *testing.T) {
 		PracticeScores: []*int{ip(70), ip(70), nil, nil, nil},
 		Upsolved:       []bool{false, true, false, false, false},
 	}
-	cells := taskCells(row, domain.ScoreSystemIOI)
+	cells := taskCells(domain.GeneratedContestStandings{ScoreSystem: domain.ScoreSystemIOI}, row)
 	want := []string{"50 (70)", "(70)", "100", "0", ""}
 	for i, w := range want {
 		if cells[i].Text != w {
@@ -36,16 +36,72 @@ func TestTaskCellsMainAndPractice(t *testing.T) {
 		Scores:   []*int{ip(70)},
 		Upsolved: []bool{true},
 	}
-	cells = taskCells(legacy, domain.ScoreSystemIOI)
+	cells = taskCells(domain.GeneratedContestStandings{ScoreSystem: domain.ScoreSystemIOI}, legacy)
 	if cells[0].Text != "(70)" {
 		t.Fatalf("legacy cell=%q want (70)", cells[0].Text)
 	}
 
 	// edu не меняется.
 	edu := domain.GeneratedRow{Statuses: []string{"solved"}, Upsolved: []bool{true}}
-	cells = taskCells(edu, domain.ScoreSystemEdu)
+	cells = taskCells(domain.GeneratedContestStandings{ScoreSystem: domain.ScoreSystemEdu}, edu)
 	if cells[0].Text != "(+)" {
 		t.Fatalf("edu cell=%q want (+)", cells[0].Text)
+	}
+}
+
+func TestSubmissionURL(t *testing.T) {
+	acc := map[string]string{"informatics": "764934"}
+	// informatics: добавляет submit+user_id, фрагмент сохраняется.
+	got := submissionURL("https://informatics.msk.ru/mod/statements/view.php?chapterid=2793#1", acc)
+	want := "https://informatics.msk.ru/mod/statements/view.php?chapterid=2793&submit&user_id=764934#1"
+	if got != want {
+		t.Fatalf("informatics submission url:\n got %q\nwant %q", got, want)
+	}
+	// Зеркало mccme тоже.
+	if got := submissionURL("https://informatics.mccme.ru/mod/statements/view.php?chapterid=5#2", acc); got == "" {
+		t.Fatal("mccme mirror must be supported")
+	}
+	// Нет informatics-аккаунта → пусто.
+	if got := submissionURL("https://informatics.msk.ru/mod/statements/view.php?chapterid=1#1", map[string]string{"codeforces": "x"}); got != "" {
+		t.Fatalf("no informatics account → empty, got %q", got)
+	}
+	// Другой сайт → пусто (пока не поддерживаем).
+	if got := submissionURL("https://codeforces.com/problemset/problem/1/A", acc); got != "" {
+		t.Fatalf("codeforces not supported → empty, got %q", got)
+	}
+	// Пустой URL / нет аккаунтов.
+	if submissionURL("", acc) != "" || submissionURL("https://informatics.msk.ru/x#1", nil) != "" {
+		t.Fatal("empty url / no accounts → empty")
+	}
+}
+
+// В ячейке с посылкой (solved/attempted) проставляется ссылка; в пустой — нет.
+func TestTaskCellsSubmissionLink(t *testing.T) {
+	contest := domain.GeneratedContestStandings{
+		ScoreSystem: domain.ScoreSystemEdu,
+		Tasks: []domain.GeneratedTask{
+			{URL: "https://informatics.msk.ru/mod/statements/view.php?chapterid=10#1"},
+			{URL: "https://informatics.msk.ru/mod/statements/view.php?chapterid=10#2"},
+			{URL: "https://informatics.msk.ru/mod/statements/view.php?chapterid=10#3"},
+		},
+	}
+	row := domain.GeneratedRow{
+		Statuses: []string{"solved", "attempted", "none"},
+		Accounts: map[string]string{"informatics": "42"},
+	}
+	cells := taskCells(contest, row)
+	if cells[0].SubmissionURL == "" || cells[1].SubmissionURL == "" {
+		t.Fatalf("solved/attempted должны быть ссылками: %+v", cells)
+	}
+	if cells[2].SubmissionURL != "" {
+		t.Fatalf("пустая ячейка без ссылки: %q", cells[2].SubmissionURL)
+	}
+	// Без informatics-аккаунта ссылок нет.
+	noAcc := taskCells(contest, domain.GeneratedRow{Statuses: []string{"solved", "attempted", "none"}})
+	for _, c := range noAcc {
+		if c.SubmissionURL != "" {
+			t.Fatalf("без аккаунта ссылок быть не должно: %q", c.SubmissionURL)
+		}
 	}
 }
 

@@ -24,7 +24,18 @@ import (
 )
 
 const defaultInformaticsBaseURL = "https://informatics.msk.ru"
-const informaticsRunsPageSize = "1000"
+
+// informaticsRunsPageSize — размер страницы прогонов. Сервер informatics режет
+// count по максимуму 100, поэтому запрашивать больше смысла нет: иначе номера
+// страниц не совпадают с реальными офсетами, а это ломает «спасение» битой
+// страницы более мелкими запросами (см. salvageFailedRunsPage).
+const informaticsRunsPageSize = 100
+
+// informaticsMaxSalvageLostRuns — если при дроблении битой страницы не удалось
+// открыть больше стольки одиночных записей, считаем это не «битыми записями», а
+// сбоем/недоступностью: состояние не сохраняем и перечитаем аккаунт в следующий
+// раз, чтобы не пропустить их навсегда по ошибке.
+const informaticsMaxSalvageLostRuns = 30
 const informaticsRunsParallelism = 8
 
 var errInformaticsNotAuthorized = errors.New("informatics: not authorized")
@@ -139,7 +150,7 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 		lastKnownRunID = state.MaxRunID
 	}
 
-	newRuns, complete, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
+	newRuns, lostRuns, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,12 +159,14 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 
 	results := aggregatesToTaskResults(aggByTask)
 
-	// Состояние сохраняем только при ПОЛНОМ заборе: если какая-то (обычно самая
-	// старая) страница у informatics стабильно 500-ит, мы всё равно показываем
-	// аккаунт по успешно скачанным свежим страницам, но НЕ двигаем водяной знак —
-	// иначе старые, недокачанные прогоны были бы навсегда пропущены. На следующей
-	// генерации аккаунт перечитывается заново.
-	if complete && (maxRunID > lastKnownRunID || !hasState) {
+	// Состояние сохраняем, если забор по сути полный: либо всё скачалось, либо
+	// потеряны лишь единичные «битые» записи (informatics стабильно 500-ит на
+	// конкретных прогонах — их не открыть в принципе, поэтому водяной знак можно
+	// двигать: повторный перечит их всё равно не вернёт). Если недоступных записей
+	// подозрительно много — это, скорее, сбой/недоступность: состояние НЕ сохраняем
+	// и перечитаем аккаунт в следующий раз, чтобы не пропустить их навсегда.
+	tooMuchLost := lostRuns > informaticsMaxSalvageLostRuns
+	if !tooMuchLost && (maxRunID > lastKnownRunID || !hasState) {
 		newState := informaticsAccountState{
 			MaxRunID:  maxRunID,
 			Results:   results,
@@ -163,8 +176,12 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 			return nil, saveErr
 		}
 	}
-	if !complete {
-		log.Printf("WARN informatics account_id=%s: неполный забор прогонов (страница отдала 500 после ретраев); показываю по свежим страницам, состояние не сохранено", accountID)
+	if lostRuns > 0 {
+		note := "пропущены (остальное забрано)"
+		if tooMuchLost {
+			note = "слишком много — вероятно сбой, состояние не сохранено, перечитаем позже"
+		}
+		log.Printf("WARN informatics account_id=%s: %d посылок недоступны на сервере (битые записи); %s", accountID, lostRuns, note)
 	}
 
 	return results, nil
@@ -190,7 +207,11 @@ func (c *InformaticsAPIClient) MatchTaskURL(taskURL string) bool {
 }
 
 func (c *InformaticsAPIClient) fetchRunsPageWithRelogin(ctx context.Context, accountID string, page int) (informaticsRunsResponse, error) {
-	resp, err := c.fetchRunsPage(ctx, accountID, page)
+	return c.fetchRunsPageSizedWithRelogin(ctx, accountID, informaticsRunsPageSize, page)
+}
+
+func (c *InformaticsAPIClient) fetchRunsPageSizedWithRelogin(ctx context.Context, accountID string, count, page int) (informaticsRunsResponse, error) {
+	resp, err := c.fetchRunsPageSized(ctx, accountID, count, page)
 	if !errors.Is(err, errInformaticsNotAuthorized) {
 		return resp, err
 	}
@@ -198,7 +219,7 @@ func (c *InformaticsAPIClient) fetchRunsPageWithRelogin(ctx context.Context, acc
 	if loginErr := c.ensureLoggedIn(ctx, true); loginErr != nil {
 		return informaticsRunsResponse{}, loginErr
 	}
-	return c.fetchRunsPage(ctx, accountID, page)
+	return c.fetchRunsPageSized(ctx, accountID, count, page)
 }
 
 // fetchRemainingRunsPages качает страницы 2..pageCount параллельно. Ошибка
@@ -286,17 +307,17 @@ func (c *InformaticsAPIClient) fetchRemainingRunsPages(ctx context.Context, acco
 // сохранён: список новостей идёт от свежих к старым, поэтому на первой известной
 // посылке дальнейшие страницы не запрашиваются.
 //
-// Второе возвращаемое значение complete=false означает, что какую-то страницу не
-// удалось скачать (после ретраев). Собранные страницы всё равно возвращаются,
-// чтобы показать аккаунт по свежим данным, но выше по коду при неполном заборе
-// состояние не сохраняется.
-func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, accountID string, lastKnownRunID int) ([]informaticsRun, bool, error) {
+// Второе возвращаемое значение lostRuns — сколько отдельных прогонов так и не
+// удалось открыть (informatics стабильно 500-ит на конкретных «битых» записях)
+// даже после дробления страницы на одиночные запросы. Все прочие прогоны
+// возвращаются; решение о сохранении состояния принимается выше по lostRuns.
+func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, accountID string, lastKnownRunID int) ([]informaticsRun, int, error) {
 	firstPage, err := c.fetchRunsPageWithRelogin(ctx, accountID, 1)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, err
 	}
 
-	complete := true
+	lostRuns := 0
 	stopOnKnownRunID := lastKnownRunID > 0
 	out := make([]informaticsRun, 0, len(firstPage.Data))
 	staleReached := appendNewInformaticsRuns(&out, firstPage.Data, lastKnownRunID, stopOnKnownRunID)
@@ -307,14 +328,15 @@ func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, ac
 			for page := 2; page <= pageCount; page++ {
 				resp, pageErr := c.fetchRunsPageWithRelogin(ctx, accountID, page)
 				if pageErr != nil {
-					// Реальная отмена — пробрасываем; иначе страница
-					// недоступна: помечаем забор неполным и прекращаем (дальше
-					// только более старые страницы).
+					// Реальная отмена — пробрасываем; иначе страница недоступна:
+					// пытаемся спасти её по мелким запросам и идём дальше искать
+					// известную посылку (не прерываемся, чтобы не потерять более
+					// старые, но открывающиеся страницы).
 					if ctx.Err() != nil {
-						return nil, false, pageErr
+						return nil, 0, pageErr
 					}
-					complete = false
-					break
+					lostRuns += c.salvageFailedRunsPage(ctx, accountID, informaticsRunsPageSize, page, &out)
+					continue
 				}
 				if appendNewInformaticsRuns(&out, resp.Data, lastKnownRunID, true) {
 					break
@@ -323,18 +345,51 @@ func (c *InformaticsAPIClient) collectNewInformaticsRuns(ctx context.Context, ac
 		} else {
 			otherPages, failed, pageErr := c.fetchRemainingRunsPages(ctx, accountID, pageCount)
 			if pageErr != nil {
-				return nil, false, pageErr
-			}
-			if len(failed) > 0 {
-				complete = false
+				return nil, 0, pageErr
 			}
 			for _, page := range otherPages {
 				appendNewInformaticsRuns(&out, page.Data, 0, false)
 			}
+			for _, page := range failed {
+				lostRuns += c.salvageFailedRunsPage(ctx, accountID, informaticsRunsPageSize, page, &out)
+			}
 		}
 	}
 
-	return out, complete, nil
+	return out, lostRuns, nil
+}
+
+// salvageFailedRunsPage пытается забрать прогоны упавшей страницы, дробя её на
+// более мелкие запросы (count/10 вплоть до 1). Так теряются только реально
+// неоткрывающиеся одиночные записи, а не весь блок в ~100 прогонов. Сервер
+// informatics режет count по 100 и поддерживает офсеты, поэтому страница page при
+// размере count покрывает ровно те же прогоны, что sub-страницы меньшего размера.
+// Возвращает число безвозвратно потерянных одиночных записей.
+func (c *InformaticsAPIClient) salvageFailedRunsPage(ctx context.Context, accountID string, count, page int, out *[]informaticsRun) int {
+	if count <= 1 {
+		return 1 // одиночная запись не открывается — теряем только её
+	}
+	finer := count / 10
+	if finer < 1 {
+		finer = 1
+	}
+	ratio := count / finer
+	firstSub := (page-1)*ratio + 1
+	lastSub := page * ratio
+
+	lost := 0
+	for sub := firstSub; sub <= lastSub; sub++ {
+		resp, err := c.fetchRunsPageSizedWithRelogin(ctx, accountID, finer, sub)
+		if err != nil {
+			if ctx.Err() != nil {
+				return lost
+			}
+			lost += c.salvageFailedRunsPage(ctx, accountID, finer, sub, out)
+			continue
+		}
+		appendNewInformaticsRuns(out, resp.Data, 0, false)
+	}
+	return lost
 }
 
 func appendNewInformaticsRuns(out *[]informaticsRun, runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool) (staleReached bool) {
@@ -760,6 +815,10 @@ func (c *InformaticsAPIClient) loginLocked(ctx context.Context) error {
 }
 
 func (c *InformaticsAPIClient) fetchRunsPage(ctx context.Context, accountID string, page int) (informaticsRunsResponse, error) {
+	return c.fetchRunsPageSized(ctx, accountID, informaticsRunsPageSize, page)
+}
+
+func (c *InformaticsAPIClient) fetchRunsPageSized(ctx context.Context, accountID string, count, page int) (informaticsRunsResponse, error) {
 	u, err := url.Parse(c.baseURL + "/py/problem/0/filter-runs")
 	if err != nil {
 		return informaticsRunsResponse{}, err
@@ -768,7 +827,7 @@ func (c *InformaticsAPIClient) fetchRunsPage(ctx context.Context, accountID stri
 	q := u.Query()
 	q.Set("problem_id", "0")
 	q.Set("user_id", accountID)
-	q.Set("count", informaticsRunsPageSize)
+	q.Set("count", strconv.Itoa(count))
 	q.Set("page", strconv.Itoa(page))
 	q.Set("from_timestamp", "-1")
 	q.Set("to_timestamp", "-1")

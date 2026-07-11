@@ -10,11 +10,27 @@
       <button type="submit" class="admin-btn">Сгенерировать все таблицы</button>
     </form>
     <button type="button" id="admin-intake-prepare" class="admin-btn">Редактировать анкеты для merge</button>
-    <form method="post" action="/api/admin/actions/reset-cache" onsubmit="return confirm('Сбросить кеш informatics и codeforces? Ближайшая генерация перечитает все посылки этих источников с нуля (дольше обычного).');">
-      <button type="submit" class="admin-btn admin-btn--secondary">Сбросить кеш (informatics/cf)</button>
+    <form method="post" action="/api/admin/actions/reset-cache" class="cache-reset-form" onsubmit="return confirm('Сбросить кеш informatics/codeforces для выбранных аккаунтов? Они перечитаются при ближайшей генерации.');">
+      <label>За период:
+        <select name="period">
+          <option value="all" selected>всё время</option>
+          <option value="week">неделю</option>
+          <option value="month">месяц</option>
+          <option value="year">год</option>
+        </select>
+      </label>
+      <label>Кого:
+        <select name="scope" onchange="this.form.querySelector('.cache-reset-target').style.display = this.value === 'all' ? 'none' : '';">
+          <option value="all" selected>всех</option>
+          <option value="student">ученика</option>
+          <option value="group">группу</option>
+        </select>
+      </label>
+      <input type="text" name="target" class="cache-reset-target" placeholder="id ученика или slug группы" style="display:none;" />
+      <button type="submit" class="admin-btn admin-btn--secondary">Сбросить кеш</button>
     </form>
   </div>
-  <p class="empty-hint">Сброс кеша удаляет водяные знаки informatics/codeforces — полезно, если посылки застряли из-за старого состояния. После сброса нажмите «Сгенерировать».</p>
+  <p class="empty-hint">Сброс кеша informatics/codeforces: выбранные аккаунты перечитаются с нуля. «За неделю/месяц/год» трогает только аккаунты с активностью за этот срок; «ученика/группу» — только их аккаунты. После сброса нажмите «Сгенерировать».</p>
 </section>
 
 <section class="admin-block">

@@ -20,6 +20,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
+	"standings-edu/internal/source"
 	"standings-edu/internal/studentintake"
 )
 
@@ -302,41 +303,144 @@ func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
-// AdminActionResetCache удаляет файлы инкрементального состояния informatics и
-// codeforces (водяные знаки run_id/submission_id). После сброса ближайшая
-// генерация перечитает все посылки этих источников с нуля.
+// AdminActionResetCache сбрасывает кеш informatics/codeforces. Параметры формы:
+// period (week|month|year|all) — за какой срок сбросить (для week/month/year
+// трогаются только аккаунты с активностью за этот период); scope (all|student|
+// group) и target (id ученика / slug группы) — чьи аккаунты. Сброшенные аккаунты
+// перечитаются с нуля при ближайшей генерации.
 func (h *Handlers) AdminActionResetCache(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	period := strings.TrimSpace(r.FormValue("period"))
+	scope := strings.TrimSpace(r.FormValue("scope"))
+	target := strings.TrimSpace(r.FormValue("target"))
 	result := h.runAdminAction("reset_cache", func() AdminActionResult {
-		return h.executeResetCacheAction()
+		return h.executeResetCacheAction(period, scope, target)
 	})
 	h.setAdminResult(result)
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
-func (h *Handlers) executeResetCacheAction() AdminActionResult {
+var cacheResetPeriodLabels = map[string]string{
+	"week":  "неделя",
+	"month": "месяц",
+	"year":  "год",
+	"all":   "всё время",
+}
+
+func (h *Handlers) executeResetCacheAction(period, scope, target string) AdminActionResult {
 	started := time.Now()
-	files := []string{
-		filepath.Join(h.admin.cfg.GeneratedDir, "cache", "informatics_runs_state.json"),
-		filepath.Join(h.admin.cfg.GeneratedDir, "cache", "codeforces_user_status_state.json"),
+
+	if period == "" {
+		period = "all"
 	}
+	var since time.Time
+	switch period {
+	case "week":
+		since = time.Now().AddDate(0, 0, -7)
+	case "month":
+		since = time.Now().AddDate(0, -1, 0)
+	case "year":
+		since = time.Now().AddDate(-1, 0, 0)
+	case "all":
+		since = time.Time{}
+	default:
+		return newAdminResult("reset_cache", false, -1, started, "", []string{"неизвестный период: " + period})
+	}
+
+	// nil-списки означают «все аккаунты»; для ученика/группы — только их аккаунты.
+	var infAccounts, cfAccounts []string
+	var scopeDesc string
+	if scope == "" {
+		scope = "all"
+	}
+	switch scope {
+	case "all":
+		scopeDesc = "все аккаунты"
+	case "student":
+		if target == "" {
+			return newAdminResult("reset_cache", false, -1, started, "", []string{"укажите id ученика"})
+		}
+		inf, cf, err := h.collectSiteAccounts(map[string]struct{}{target: {}})
+		if err != nil {
+			return newAdminResult("reset_cache", false, -1, started, "", []string{err.Error()})
+		}
+		infAccounts, cfAccounts = inf, cf
+		scopeDesc = "ученик " + target
+	case "group":
+		if target == "" {
+			return newAdminResult("reset_cache", false, -1, started, "", []string{"укажите slug группы"})
+		}
+		gf, ok, err := h.readGroupFile(target)
+		if err != nil {
+			return newAdminResult("reset_cache", false, -1, started, "", []string{err.Error()})
+		}
+		if !ok {
+			return newAdminResult("reset_cache", false, -1, started, "", []string{"группа не найдена: " + target})
+		}
+		ids := make(map[string]struct{}, len(gf.StudentIDs))
+		for _, id := range gf.StudentIDs {
+			ids[id] = struct{}{}
+		}
+		inf, cf, err := h.collectSiteAccounts(ids)
+		if err != nil {
+			return newAdminResult("reset_cache", false, -1, started, "", []string{err.Error()})
+		}
+		infAccounts, cfAccounts = inf, cf
+		scopeDesc = "группа " + target
+	default:
+		return newAdminResult("reset_cache", false, -1, started, "", []string{"неизвестная цель: " + scope})
+	}
+
+	infPath := filepath.Join(h.admin.cfg.GeneratedDir, "cache", "informatics_runs_state.json")
+	cfPath := filepath.Join(h.admin.cfg.GeneratedDir, "cache", "codeforces_user_status_state.json")
 
 	var output bytes.Buffer
 	var errorsList []string
-	removed := 0
-	for _, f := range files {
-		switch err := os.Remove(f); {
-		case err == nil:
-			removed++
-			fmt.Fprintf(&output, "удалён %s\n", f)
-		case errors.Is(err, os.ErrNotExist):
-			fmt.Fprintf(&output, "нет файла (уже сброшен) %s\n", f)
-		default:
-			errorsList = append(errorsList, fmt.Sprintf("%s: %v", f, err))
-		}
+	infN, err := source.ClearInformaticsCache(infPath, infAccounts, since)
+	if err != nil {
+		errorsList = append(errorsList, "informatics: "+err.Error())
 	}
-	fmt.Fprintf(&output, "сброшено файлов кеша: %d из %d", removed, len(files))
+	cfN, err := source.ClearCodeforcesCache(cfPath, cfAccounts, since)
+	if err != nil {
+		errorsList = append(errorsList, "codeforces: "+err.Error())
+	}
+
+	fmt.Fprintf(&output, "сброс кеша (%s, период: %s): informatics — %d аккаунтов, codeforces — %d аккаунтов",
+		scopeDesc, cacheResetPeriodLabels[period], infN, cfN)
 
 	return newAdminResult("reset_cache", len(errorsList) == 0, 0, started, output.String(), errorsList)
+}
+
+// collectSiteAccounts возвращает account_id учеников (из фильтра studentIDs;
+// nil — все) по сайтам informatics и codeforces. Пустые срезы (не nil) означают
+// «у выбранных учеников таких аккаунтов нет».
+func (h *Handlers) collectSiteAccounts(studentIDs map[string]struct{}) (informatics, codeforces []string, err error) {
+	students, err := studentintake.LoadStudentsFile(h.dataPath("students.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	informatics = []string{}
+	codeforces = []string{}
+	for _, s := range students {
+		if studentIDs != nil {
+			if _, ok := studentIDs[s.ID]; !ok {
+				continue
+			}
+		}
+		for _, a := range s.Accounts {
+			id := strings.TrimSpace(a.AccountID)
+			if id == "" {
+				continue
+			}
+			switch domain.NormalizeSite(a.Site) {
+			case "informatics":
+				informatics = append(informatics, id)
+			case "codeforces":
+				codeforces = append(codeforces, id)
+			}
+		}
+	}
+	return informatics, codeforces, nil
 }
 
 func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {

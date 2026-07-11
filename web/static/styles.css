@@ -757,6 +757,19 @@ button.summary-link-btn {
   gap: 0.7rem;
 }
 
+.cache-reset-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cache-reset-form label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 .admin-btn {
   display: inline-flex;
   align-items: center;

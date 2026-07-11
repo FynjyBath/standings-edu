@@ -23,6 +23,31 @@ func TestNormalizeTaskURLInformaticsMirrors(t *testing.T) {
 	// acmp канонизируется отдельным тестом ниже.
 }
 
+// Видимые informatics-ссылки переписываются под хост из base_url: msk→mccme и
+// наоборот, независимо от того, как их вставили; фрагмент/query сохраняются.
+func TestRewriteInformaticsHost(t *testing.T) {
+	// base_url = mccme → любые informatics-ссылки на mccme.
+	got := RewriteInformaticsHost("https://informatics.msk.ru/mod/statements/view.php?chapterid=5#2", "https://informatics.mccme.ru")
+	if got != "https://informatics.mccme.ru/mod/statements/view.php?chapterid=5#2" {
+		t.Fatalf("msk→mccme: %q", got)
+	}
+	// base_url = msk → на msk (в т.ч. www.mccme).
+	got = RewriteInformaticsHost("https://www.informatics.mccme.ru/mod/statements/view.php?chapterid=7#1", "https://informatics.msk.ru")
+	if got != "https://informatics.msk.ru/mod/statements/view.php?chapterid=7#1" {
+		t.Fatalf("mccme→msk: %q", got)
+	}
+	// Не-informatics ссылку не трогаем.
+	cf := "https://codeforces.com/problemset/problem/1/A"
+	if got := RewriteInformaticsHost(cf, "https://informatics.msk.ru"); got != cf {
+		t.Fatalf("non-informatics must be unchanged: %q", got)
+	}
+	// Пустой/битый base_url — без изменений.
+	inf := "https://informatics.mccme.ru/x?y=1#1"
+	if got := RewriteInformaticsHost(inf, ""); got != inf {
+		t.Fatalf("empty base → unchanged: %q", got)
+	}
+}
+
 // Ссылки на задачу acmp.ru сводятся к одному normalized_url по id_task, как бы
 // их ни записали: /index.asp против /, порядок query, регистр main, схема, www,
 // фрагмент. Иначе задача, добавленная в контест «браузерной» ссылкой

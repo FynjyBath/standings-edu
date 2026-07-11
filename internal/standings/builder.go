@@ -717,6 +717,20 @@ type taskColumn struct {
 	useRealScores bool   // для обычной IOI-задачи
 }
 
+// informaticsBaseURL — настроенный base_url informatics (для переписывания хоста
+// видимых ссылок). Пусто — informatics не зарегистрирован.
+func (b *Builder) informaticsBaseURL() string {
+	client, ok := b.sources.Site("informatics")
+	if !ok || client == nil {
+		return ""
+	}
+	provider, ok := client.(interface{ BaseURL() string })
+	if !ok {
+		return ""
+	}
+	return provider.BaseURL()
+}
+
 // linkableAccounts — account_id ученика по сайтам, для которых умеем строить
 // ссылку на список его посылок по задаче. Пока только informatics (её user_id).
 // Не включаем остальные сайты, чтобы не публиковать лишние идентификаторы.
@@ -760,13 +774,23 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		frozen = true
 	}
 
+	// Хост, под который переписываем все видимые informatics-ссылки (task URL,
+	// материалы) — из base_url кредов informatics. Пусто — informatics не
+	// настроен, ссылки остаются как введены.
+	informaticsBase := b.informaticsBaseURL()
+
+	materials := domain.NormalizeContestMaterials(contest.Materials)
+	for i := range materials {
+		materials[i].URL = domain.RewriteInformaticsHost(materials[i].URL, informaticsBase)
+	}
+
 	out := domain.GeneratedContestStandings{
 		ID:               contest.ID,
 		Title:            contest.Title,
 		ScoreSystem:      contest.ScoreSystem.Normalized(),
 		ContestType:      domain.ContestTypeTasks,
 		TableNames:       contest.TableNames,
-		Materials:        domain.NormalizeContestMaterials(contest.Materials),
+		Materials:        materials,
 		StartTime:        contest.StartTime,
 		EndTime:          contest.EndTime,
 		SummaryTotalOnly: contest.SummaryTotalOnly,
@@ -798,7 +822,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			normalized := domain.NormalizeTaskURL(rawURL)
 			task := domain.GeneratedTask{
 				Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
-				URL:           strings.TrimSpace(rawURL),
+				URL:           domain.RewriteInformaticsHost(rawURL, informaticsBase),
 				NormalizedURL: normalized,
 			}
 			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)

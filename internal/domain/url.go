@@ -7,6 +7,36 @@ import (
 	"strings"
 )
 
+// informaticsHosts — все хосты informatics (основной и старое зеркало mccme).
+func isInformaticsHost(host string) bool {
+	switch strings.ToLower(host) {
+	case "informatics.msk.ru", "www.informatics.msk.ru",
+		"informatics.mccme.ru", "www.informatics.mccme.ru":
+		return true
+	}
+	return false
+}
+
+// RewriteInformaticsHost меняет хост informatics-URL на хост из baseURL (обычно
+// base_url кредов), чтобы любые вставленные ссылки (msk/mccme) в итоге вели на
+// настроенное зеркало. Не-informatics ссылки, пустой/битый baseURL не трогает.
+func RewriteInformaticsHost(rawURL, baseURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return rawURL
+	}
+	base, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || base.Host == "" {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || !isInformaticsHost(u.Hostname()) {
+		return rawURL
+	}
+	u.Host = base.Host
+	return u.String()
+}
+
 func NormalizeTaskURL(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {

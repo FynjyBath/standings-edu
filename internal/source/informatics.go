@@ -191,6 +191,12 @@ func (c *InformaticsAPIClient) SupportsTaskScores() bool {
 	return true
 }
 
+// BaseURL — настроенный адрес informatics (из base_url кредов). Билд по нему
+// переписывает хост всех видимых informatics-ссылок на выбранное зеркало.
+func (c *InformaticsAPIClient) BaseURL() string {
+	return c.baseURL
+}
+
 func (c *InformaticsAPIClient) MatchTaskURL(taskURL string) bool {
 	u, err := url.Parse(strings.TrimSpace(taskURL))
 	if err != nil {

@@ -95,11 +95,32 @@
     });
     function applyTabColor(th, contest) {
       var names = tableNamesOf(contest);
-      if (!names.length) return;
-      var hue = tabHue[names[0]]; // цвет по «главной» (первой) табличке контеста
-      if (hue === undefined) return;
-      th.style.setProperty("--tab-hue", String(hue));
-      th.classList.add("has-tab-color");
+      // Собираем цвета всех табличек контеста (без повторов, в порядке контеста).
+      var hues = [];
+      var knownNames = [];
+      var seen = Object.create(null);
+      names.forEach(function (n) {
+        var h = tabHue[n];
+        if (h === undefined || seen[h]) return;
+        seen[h] = true;
+        hues.push(h);
+        knownNames.push(n);
+      });
+      if (!hues.length) return;
+
+      if (hues.length === 1) {
+        // Одна табличка — сплошной оттенок (тема учитывается в CSS).
+        th.style.setProperty("--tab-hue", String(hues[0]));
+        th.classList.add("has-tab-color");
+        return;
+      }
+
+      // Несколько табличек — плавная смесь их цветов, чтобы видеть принадлежность
+      // сразу к нескольким. Оверлей поверх обычного фона шапки.
+      var stops = hues.map(function (h) { return "hsl(" + h + " 62% 52% / 0.42)"; });
+      th.style.backgroundImage = "linear-gradient(100deg, " + stops.join(", ") + ")";
+      th.classList.add("has-tab-mix");
+      th.title = (th.title ? th.title + " · " : "") + "таблички: " + knownNames.join(", ");
     }
 
     function contestsForTab(tab) {

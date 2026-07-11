@@ -523,18 +523,27 @@ func inferInformaticsScore(run informaticsRun) int {
 	return 0
 }
 
-// ejudge run status: 0 = OK, 8 = RUN_ACCEPTED («Зачтено»/«Принято»).
-// Оба означают, что задача решена, и должны трактоваться одинаково.
+// Коды вердиктов ejudge (значения поля status в API; informatics — тот же ejudge).
+// Значения см. в справке ejudge (filter_expr), константы RUN_*.
 const (
-	informaticsStatusOK       = 0
-	informaticsStatusAccepted = 8
+	informaticsStatusOK            = 0  // RUN_OK — полный OK
+	informaticsStatusAccepted      = 8  // RUN_ACCEPTED — «Зачтено» (не полный OK)
+	informaticsStatusPendingReview = 16 // RUN_PENDING_REVIEW — «Ожидает подтверждения»
 )
 
+// isInformaticsSolvedStatus — задача засчитана (зелёный плюс): полный OK (0),
+// «зачтено» (8) и «ожидает подтверждения» (16). Последний — посылка прошла
+// тесты и ждёт ручного подтверждения; показываем как решённую.
 func isInformaticsSolvedStatus(ejudgeStatus int) bool {
-	return ejudgeStatus == informaticsStatusOK || ejudgeStatus == informaticsStatusAccepted
+	switch ejudgeStatus {
+	case informaticsStatusOK, informaticsStatusAccepted, informaticsStatusPendingReview:
+		return true
+	}
+	return false
 }
 
-// isInformaticsAcceptedStatus — «зачтено» (RUN_ACCEPTED=8), не полный OK.
+// isInformaticsAcceptedStatus — «зачтено» (RUN_ACCEPTED=8), не полный OK: только
+// у него жёлтая рамка. У OK и «ожидает подтверждения» (16) рамки нет.
 func isInformaticsAcceptedStatus(ejudgeStatus int) bool {
 	return ejudgeStatus == informaticsStatusAccepted
 }

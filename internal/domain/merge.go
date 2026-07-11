@@ -238,11 +238,21 @@ func mergeSolvedSummaries(members []GeneratedGroupStandings) ([]string, []Genera
 		}
 	}
 
+	SortSolvedSummary(rows)
+	return sites, rows
+}
+
+// SortSolvedSummary упорядочивает доску почёта по видимой колонке «Сумма»
+// (SolvedCountOnPageSites) по убыванию; при равенстве — по глобально решённым и
+// затем по имени. Так порядок совпадает с числами в таблице.
+func SortSolvedSummary(rows []GeneratedGroupSolvedSummaryRow) {
 	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].SolvedCountOnPageSites != rows[j].SolvedCountOnPageSites {
+			return rows[i].SolvedCountOnPageSites > rows[j].SolvedCountOnPageSites
+		}
 		if rows[i].TotalSolvedCount != rows[j].TotalSolvedCount {
 			return rows[i].TotalSolvedCount > rows[j].TotalSolvedCount
 		}
 		return strings.ToLower(rows[i].PublicName) < strings.ToLower(rows[j].PublicName)
 	})
-	return sites, rows
 }

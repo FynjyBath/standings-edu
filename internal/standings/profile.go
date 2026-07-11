@@ -176,11 +176,13 @@ func roundOne(v float64) float64 {
 // доске почёта (решено) и по оценкам, если настроены. Место — стандартный ранг
 // (1 + число строго выше), ничьи делят место.
 func addGroupPositions(profiles map[string]*domain.GeneratedStudentProfile, group domain.GroupDefinition, std domain.GeneratedGroupStandings) {
+	// Место на доске почёта — по той же «Сумме» (решено на сайтах страницы), что
+	// и порядок в самой доске, иначе место не совпадёт с позицией в таблице.
 	honorByStudent := make(map[string]int, len(std.SolvedSummary))
 	honorCounts := make([]int, 0, len(std.SolvedSummary))
 	for _, row := range std.SolvedSummary {
-		honorByStudent[row.StudentID] = row.TotalSolvedCount
-		honorCounts = append(honorCounts, row.TotalSolvedCount)
+		honorByStudent[row.StudentID] = row.SolvedCountOnPageSites
+		honorCounts = append(honorCounts, row.SolvedCountOnPageSites)
 	}
 	honorTotal := len(std.SolvedSummary)
 

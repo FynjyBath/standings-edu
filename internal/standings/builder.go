@@ -491,12 +491,7 @@ func (b *Builder) buildGroupSolvedSummary(
 		rows = append(rows, row)
 	}
 
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].TotalSolvedCount != rows[j].TotalSolvedCount {
-			return rows[i].TotalSolvedCount > rows[j].TotalSolvedCount
-		}
-		return strings.ToLower(rows[i].PublicName) < strings.ToLower(rows[j].PublicName)
-	})
+	domain.SortSolvedSummary(rows)
 
 	return sites, rows
 }

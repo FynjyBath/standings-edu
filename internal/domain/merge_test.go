@@ -171,3 +171,19 @@ func TestMergeSolvedSummary(t *testing.T) {
 		t.Fatalf("summary order/rows wrong: %+v", m.SolvedSummary)
 	}
 }
+
+// Доска почёта сортируется по видимой «Сумме» (SolvedCountOnPageSites), а не по
+// глобальному total: ученик с большим глобальным, но малым on-page — ниже.
+func TestSortSolvedSummaryByOnPage(t *testing.T) {
+	rows := []GeneratedGroupSolvedSummaryRow{
+		{StudentID: "a", PublicName: "Аня", TotalSolvedCount: 100, SolvedCountOnPageSites: 2},
+		{StudentID: "b", PublicName: "Боря", TotalSolvedCount: 5, SolvedCountOnPageSites: 9},
+		{StudentID: "c", PublicName: "Вера", TotalSolvedCount: 50, SolvedCountOnPageSites: 9},
+	}
+	SortSolvedSummary(rows)
+	// По on-page: Боря/Вера (9) выше Ани (2); среди 9 — Вера (total 50) выше Бори (5).
+	order := []string{rows[0].StudentID, rows[1].StudentID, rows[2].StudentID}
+	if order[0] != "c" || order[1] != "b" || order[2] != "a" {
+		t.Fatalf("order = %v, want [c b a]", order)
+	}
+}

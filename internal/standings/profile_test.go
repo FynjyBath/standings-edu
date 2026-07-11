@@ -124,9 +124,9 @@ func TestAddGroupPositions(t *testing.T) {
 	final := func(v float64) *float64 { return &v }
 	std := domain.GeneratedGroupStandings{
 		SolvedSummary: []domain.GeneratedGroupSolvedSummaryRow{
-			{StudentID: "a", TotalSolvedCount: 10},
-			{StudentID: "b", TotalSolvedCount: 10},
-			{StudentID: "c", TotalSolvedCount: 3},
+			{StudentID: "a", TotalSolvedCount: 10, SolvedCountOnPageSites: 10},
+			{StudentID: "b", TotalSolvedCount: 10, SolvedCountOnPageSites: 10},
+			{StudentID: "c", TotalSolvedCount: 3, SolvedCountOnPageSites: 3},
 		},
 		Grades: &domain.GeneratedGrades{Rows: []domain.GeneratedGradeRow{
 			{StudentID: "a", Final: final(9)},

@@ -10,7 +10,11 @@
       <button type="submit" class="admin-btn">Сгенерировать все таблицы</button>
     </form>
     <button type="button" id="admin-intake-prepare" class="admin-btn">Редактировать анкеты для merge</button>
+    <form method="post" action="/api/admin/actions/reset-cache" onsubmit="return confirm('Сбросить кеш informatics и codeforces? Ближайшая генерация перечитает все посылки этих источников с нуля (дольше обычного).');">
+      <button type="submit" class="admin-btn admin-btn--secondary">Сбросить кеш (informatics/cf)</button>
+    </form>
   </div>
+  <p class="empty-hint">Сброс кеша удаляет водяные знаки informatics/codeforces — полезно, если посылки застряли из-за старого состояния. После сброса нажмите «Сгенерировать».</p>
 </section>
 
 <section class="admin-block">

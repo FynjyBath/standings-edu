@@ -34,6 +34,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/contests/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminContestSave)))
 	mux.HandleFunc("POST /api/admin/contests/delete", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminContestDelete)))
 	mux.HandleFunc("POST /api/admin/actions/generate", handlers.AdminAuth(handlers.AdminActionGenerate))
+	mux.HandleFunc("POST /api/admin/actions/reset-cache", handlers.AdminAuth(handlers.AdminActionResetCache))
 	mux.HandleFunc("POST /api/admin/actions/intake/prepare", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminIntakeStagingPrepare)))
 	mux.HandleFunc("POST /api/admin/actions/intake/dry-run", handlers.AdminAuth(handlers.AdminIntakeMergeDryRun))
 	mux.HandleFunc("POST /api/admin/actions/intake/merge", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminIntakeStagingMerge)))

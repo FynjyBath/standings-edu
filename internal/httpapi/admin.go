@@ -302,6 +302,43 @@ func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
+// AdminActionResetCache удаляет файлы инкрементального состояния informatics и
+// codeforces (водяные знаки run_id/submission_id). После сброса ближайшая
+// генерация перечитает все посылки этих источников с нуля.
+func (h *Handlers) AdminActionResetCache(w http.ResponseWriter, r *http.Request) {
+	result := h.runAdminAction("reset_cache", func() AdminActionResult {
+		return h.executeResetCacheAction()
+	})
+	h.setAdminResult(result)
+	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
+}
+
+func (h *Handlers) executeResetCacheAction() AdminActionResult {
+	started := time.Now()
+	files := []string{
+		filepath.Join(h.admin.cfg.GeneratedDir, "cache", "informatics_runs_state.json"),
+		filepath.Join(h.admin.cfg.GeneratedDir, "cache", "codeforces_user_status_state.json"),
+	}
+
+	var output bytes.Buffer
+	var errorsList []string
+	removed := 0
+	for _, f := range files {
+		switch err := os.Remove(f); {
+		case err == nil:
+			removed++
+			fmt.Fprintf(&output, "удалён %s\n", f)
+		case errors.Is(err, os.ErrNotExist):
+			fmt.Fprintf(&output, "нет файла (уже сброшен) %s\n", f)
+		default:
+			errorsList = append(errorsList, fmt.Sprintf("%s: %v", f, err))
+		}
+	}
+	fmt.Fprintf(&output, "сброшено файлов кеша: %d из %d", removed, len(files))
+
+	return newAdminResult("reset_cache", len(errorsList) == 0, 0, started, output.String(), errorsList)
+}
+
 func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		result := newAdminResult(

@@ -1,0 +1,48 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Экспорт данных</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    <a class="summary-link-btn" href="/standings/admin/import">Импорт →</a>
+  </p>
+  <p class="empty-hint">Скачивает JSON-бандл выбранных групп вместе с их учениками и глобальными контестами, на которые они ссылаются. Группы-участницы объединённых групп добавляются автоматически. Секреты сайтов (креды informatics/codeforces/ejudge, админ-логин) и кеш НЕ экспортируются.</p>
+</section>
+
+<section class="admin-block">
+  <h2>Что экспортировать</h2>
+  <form method="post" action="/api/admin/export/download">
+    {{if .Groups}}
+    <p class="empty-hint">Отметьте группы. Если не отметить ни одной — экспортируются <strong>все</strong>.</p>
+    <p><label><input type="checkbox" id="export-all" /> <strong>выбрать все</strong></label></p>
+    <ul class="admin-groups-list">
+      {{range .Groups}}
+      <li>
+        <label style="flex-direction:row;align-items:center;gap:0.5rem;">
+          <input type="checkbox" class="export-group" name="group" value="{{.Slug}}" style="width:auto;" />
+          <span>{{.Title}} <span class="grade-weight">({{.Slug}}){{if .IsCombined}} · объединённая{{end}}</span></span>
+        </label>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="empty-hint">Групп пока нет.</p>
+    {{end}}
+    <div class="admin-editor-tools" style="margin-top:0.8rem;flex-wrap:wrap;gap:0.6rem;">
+      <label style="display:flex;align-items:center;gap:0.4rem;">
+        <input type="checkbox" name="include_tokens" value="1" checked style="width:auto;" />
+        включить токены жюри
+      </label>
+      <button type="submit" class="admin-btn">Скачать бандл</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  (function () {
+    var all = document.getElementById("export-all");
+    if (all) all.addEventListener("change", function () {
+      document.querySelectorAll(".export-group").forEach(function (cb) { cb.checked = all.checked; });
+    });
+  })();
+</script>
+{{end}}

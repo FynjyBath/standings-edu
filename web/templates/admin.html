@@ -10,6 +10,8 @@
       <button type="submit" class="admin-btn">Сгенерировать все таблицы</button>
     </form>
     <button type="button" id="admin-intake-prepare" class="admin-btn">Редактировать анкеты для merge</button>
+    <a class="admin-btn admin-btn--secondary" href="/standings/admin/export">Экспорт</a>
+    <a class="admin-btn admin-btn--secondary" href="/standings/admin/import">Импорт</a>
     <form method="post" action="/api/admin/actions/reset-cache" class="cache-reset-form" onsubmit="return confirm('Сбросить кеш informatics/codeforces для выбранных аккаунтов? Они перечитаются при ближайшей генерации.');">
       <label>За период:
         <select name="period">

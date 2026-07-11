@@ -1,0 +1,21 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Импорт данных</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    <a class="summary-link-btn" href="/standings/admin/export">Экспорт →</a>
+  </p>
+  <p class="empty-hint">Загрузите бандл, полученный на другом сервере кнопкой «Экспорт». Импорт только <strong>дописывает</strong> новое и ничего не перезаписывает: новые ученики и контесты добавляются, у существующих групп дополняется состав и список контестов (в конец). Повторный импорт того же файла безопасен. После импорта нажмите «Сгенерировать».</p>
+</section>
+
+<section class="admin-block">
+  <h2>Загрузить бандл</h2>
+  <form method="post" action="/api/admin/import/apply" enctype="multipart/form-data">
+    <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.6rem;align-items:center;">
+      <input type="file" name="bundle" accept=".json,application/json" required />
+      <button type="submit" class="admin-btn">Импортировать</button>
+    </div>
+  </form>
+  <p class="empty-hint">Что произойдёт: ученики сливаются как при merge анкет (по ФИО, с доливкой аккаунтов и групп); глобальные контесты добавляются по id; для каждой группы создаётся скелет (если её нет) и в её состав добавляются недостающие ученики и контесты. Итог покажется на главной странице админки.</p>
+</section>
+{{end}}

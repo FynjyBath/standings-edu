@@ -3,10 +3,11 @@
 // (учеников, контесты, состав групп) и никогда не перезаписывает и не удаляет
 // существующее, поэтому повторный импорт того же бандла безопасен (no-op).
 //
-// Ученики собираются той же логикой, что и merge анкет (studentintake.
-// MergeStudents + AddStudentsToGroups): сопоставление по ФИО, доливка аккаунтов
-// и групп, а состав group.json заполняется финальными ID — так ссылки остаются
-// согласованными даже если ID ученика на серверах отличались.
+// Для каждой группы можно отдельно выбирать, брать её участников и/или контесты
+// (Selection) — и на экспорте, и на импорте. Ученики собираются той же логикой,
+// что и merge анкет (studentintake.MergeStudents + AddStudentsToGroups):
+// сопоставление по ФИО, доливка аккаунтов и групп, а состав group.json
+// заполняется финальными ID — ссылки остаются согласованными.
 package migrate
 
 import (
@@ -27,8 +28,39 @@ import (
 // BundleVersion — версия формата бандла.
 const BundleVersion = 1
 
-// Bundle — переносимый набор: группы + их ученики + глобальные контесты, на
-// которые ссылаются группы.
+// Selection задаёт, для каких групп брать участников и/или контесты. Нулевое
+// значение (обе карты nil) означает «всё»: все группы, и участники, и контесты.
+// Непустая карта — включать только те слаги, что в ней стоят true.
+type Selection struct {
+	Participants map[string]bool
+	Contests     map[string]bool
+}
+
+func (s Selection) all() bool { return s.Participants == nil && s.Contests == nil }
+
+func (s Selection) wantParticipants(slug string) bool {
+	if s.all() {
+		return true
+	}
+	return s.Participants[slug]
+}
+
+func (s Selection) wantContests(slug string) bool {
+	if s.all() {
+		return true
+	}
+	return s.Contests[slug]
+}
+
+// includesGroup — группа вообще участвует (есть хоть один включённый аспект).
+func (s Selection) includesGroup(slug string) bool {
+	if s.all() {
+		return true
+	}
+	return s.Participants[slug] || s.Contests[slug]
+}
+
+// Bundle — переносимый набор: группы + их ученики + глобальные контесты.
 type Bundle struct {
 	Version    int               `json:"version"`
 	ExportedAt time.Time         `json:"exported_at"`
@@ -62,68 +94,120 @@ type GroupReport struct {
 	MembersAdded  int
 }
 
-// BuildBundle собирает бандл из data-директории. groupSlugs пуст → все группы.
-// Группы-участницы объединённых групп добавляются автоматически (рекурсивно).
-// includeTokens=false вырезает group_secret_token из group.json.
-func BuildBundle(dataDir string, groupSlugs []string, includeTokens bool) (*Bundle, error) {
+// BuildBundle собирает бандл из data-директории по выбору sel. Группы-участницы
+// объединённых групп добавляются автоматически и целиком. includeTokens=false
+// вырезает group_secret_token из group.json.
+func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, error) {
 	groupsDir := filepath.Join(dataDir, "groups")
 
-	want := make(map[string]struct{})
-	if len(groupSlugs) == 0 {
+	// Эффективные флаги по каждой группе (участники/контесты).
+	effP := make(map[string]bool)
+	effC := make(map[string]bool)
+	seed := make([]string, 0)
+	if sel.all() {
 		entries, err := os.ReadDir(groupsDir)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 		for _, e := range entries {
 			if e.IsDir() && domain.IsValidSlug(e.Name()) {
-				want[e.Name()] = struct{}{}
+				seed = append(seed, e.Name())
+				effP[e.Name()] = true
+				effC[e.Name()] = true
 			}
 		}
 	} else {
-		for _, s := range groupSlugs {
-			s = strings.TrimSpace(s)
-			if domain.IsValidSlug(s) {
-				want[s] = struct{}{}
+		for slug, v := range sel.Participants {
+			if v && domain.IsValidSlug(slug) {
+				effP[slug] = true
+			}
+		}
+		for slug, v := range sel.Contests {
+			if v && domain.IsValidSlug(slug) {
+				effC[slug] = true
+			}
+		}
+		for slug := range effP {
+			seed = append(seed, slug)
+		}
+		for slug := range effC {
+			if !effP[slug] {
+				seed = append(seed, slug)
 			}
 		}
 	}
-	expandMemberGroups(groupsDir, want)
+
+	// Обходим выбранные группы и добавляем участниц объединённых — целиком.
+	order := make([]string, 0)
+	inOrder := make(map[string]bool)
+	sort.Strings(seed)
+	queue := append([]string{}, seed...)
+	for len(queue) > 0 {
+		slug := queue[0]
+		queue = queue[1:]
+		if inOrder[slug] {
+			continue
+		}
+		inOrder[slug] = true
+		order = append(order, slug)
+		raw, err := os.ReadFile(filepath.Join(groupsDir, slug, "group.json"))
+		if err != nil {
+			continue
+		}
+		var gf domain.GroupFile
+		if json.Unmarshal(raw, &gf) != nil {
+			continue
+		}
+		for _, m := range gf.MemberGroups {
+			m = strings.TrimSpace(m)
+			if !domain.IsValidSlug(m) || inOrder[m] {
+				continue
+			}
+			effP[m] = true // авто-участница объединённой группы — целиком
+			effC[m] = true
+			queue = append(queue, m)
+		}
+	}
+	sort.Strings(order)
 
 	bundle := &Bundle{Version: BundleVersion, ExportedAt: time.Now().UTC()}
-	// Для каждого ученика — в каких экспортируемых группах он состоит (по
-	// group.json.student_ids). Это станет student.Groups, из которого импорт
-	// восстановит состав групп.
 	groupsByStudent := make(map[string][]string)
 	contestIDs := make(map[string]struct{})
 
-	for _, slug := range sortedKeys(want) {
-		groupRaw, err := os.ReadFile(filepath.Join(groupsDir, slug, "group.json"))
+	for _, slug := range order {
+		origRaw, err := os.ReadFile(filepath.Join(groupsDir, slug, "group.json"))
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				continue // участница отсутствует — пропускаем
+				continue
 			}
 			return nil, err
 		}
-		groupRaw = maybeStripToken(groupRaw, includeTokens)
+		groupRaw := maybeStripToken(origRaw, includeTokens)
 
 		var gf domain.GroupFile
-		_ = json.Unmarshal(groupRaw, &gf)
-		for _, sid := range gf.StudentIDs {
-			if sid = strings.TrimSpace(sid); sid != "" {
-				groupsByStudent[sid] = append(groupsByStudent[sid], slug)
+		_ = json.Unmarshal(origRaw, &gf)
+		if effP[slug] {
+			for _, sid := range gf.StudentIDs {
+				if sid = strings.TrimSpace(sid); sid != "" {
+					groupsByStudent[sid] = append(groupsByStudent[sid], slug)
+				}
 			}
+		} else {
+			groupRaw = stripKey(groupRaw, "student_ids") // состав не выгружаем
 		}
 
 		var groupContests []json.RawMessage
-		if err := fileutil.ReadJSON(filepath.Join(groupsDir, slug, "contests.json"), &groupContests); err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				return nil, err
+		if effC[slug] {
+			if err := fileutil.ReadJSON(filepath.Join(groupsDir, slug, "contests.json"), &groupContests); err != nil {
+				if !errors.Is(err, os.ErrNotExist) {
+					return nil, err
+				}
+				groupContests = nil
 			}
-			groupContests = nil
-		}
-		for _, e := range groupContests {
-			if id := rawStringField(e, "id"); id != "" {
-				contestIDs[id] = struct{}{}
+			for _, e := range groupContests {
+				if id := rawStringField(e, "id"); id != "" {
+					contestIDs[id] = struct{}{}
+				}
 			}
 		}
 
@@ -134,15 +218,13 @@ func BuildBundle(dataDir string, groupSlugs []string, includeTokens bool) (*Bund
 		})
 	}
 
-	// Ученики выбранных групп: берём из students.json и проставляем Groups —
-	// членство в экспортируемых группах.
+	// Ученики выбранных (по участникам) групп с проставленным членством.
 	var allStudents []domain.Student
 	if err := fileutil.ReadJSON(filepath.Join(dataDir, "students.json"), &allStudents); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	for _, s := range allStudents {
-		id := strings.TrimSpace(s.ID)
-		slugs, ok := groupsByStudent[id]
+		slugs, ok := groupsByStudent[strings.TrimSpace(s.ID)]
 		if !ok {
 			continue
 		}
@@ -151,7 +233,7 @@ func BuildBundle(dataDir string, groupSlugs []string, includeTokens bool) (*Bund
 		bundle.Students = append(bundle.Students, s)
 	}
 
-	// Глобальные контесты, на которые ссылаются группы.
+	// Глобальные контесты, на которые ссылаются группы (у которых берём контесты).
 	var allContests []json.RawMessage
 	if err := fileutil.ReadJSON(filepath.Join(dataDir, "contests.json"), &allContests); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -167,20 +249,31 @@ func BuildBundle(dataDir string, groupSlugs []string, includeTokens bool) (*Bund
 	return bundle, nil
 }
 
-// ImportBundle дописывает бандл в data-директорию. Существующее не перезаписывается.
-func ImportBundle(dataDir string, b *Bundle) (*Report, error) {
+// ImportBundle дописывает бандл в data-директорию по выбору sel. Существующее не
+// перезаписывается.
+func ImportBundle(dataDir string, b *Bundle, sel Selection) (*Report, error) {
 	if b == nil {
 		return nil, fmt.Errorf("пустой бандл")
 	}
 	rep := &Report{}
 
-	// 1) Ученики — как при merge анкет.
+	// 1) Ученики — как при merge анкет; членство фильтруем по выбранным группам.
 	students := make([]domain.Student, 0, len(b.Students))
 	for _, s := range b.Students {
 		if strings.TrimSpace(s.FullName) == "" {
 			rep.Warnings = append(rep.Warnings, "пропущен ученик без ФИО (id="+s.ID+")")
 			continue
 		}
+		kept := make([]string, 0, len(s.Groups))
+		for _, g := range s.Groups {
+			if sel.wantParticipants(strings.TrimSpace(g)) {
+				kept = append(kept, g)
+			}
+		}
+		if len(kept) == 0 {
+			continue // ни одна его группа не выбрана по участникам
+		}
+		s.Groups = kept
 		students = append(students, s)
 	}
 	var merged []domain.Student
@@ -202,13 +295,31 @@ func ImportBundle(dataDir string, b *Bundle) (*Report, error) {
 		}
 	}
 
-	// 2) Глобальные контесты.
-	if err := importGlobalContests(dataDir, b.Contests, rep); err != nil {
+	// 2) Глобальные контесты — только те, что нужны группам с выбранными контестами.
+	wantedContest := make(map[string]struct{})
+	for _, bg := range b.Groups {
+		if !sel.wantContests(strings.TrimSpace(bg.Slug)) {
+			continue
+		}
+		for _, c := range bg.Contests {
+			if id := rawStringField(c, "id"); id != "" {
+				wantedContest[id] = struct{}{}
+			}
+		}
+	}
+	contests := make([]json.RawMessage, 0, len(b.Contests))
+	for _, c := range b.Contests {
+		if id := rawStringField(c, "id"); id != "" {
+			if _, ok := wantedContest[id]; ok {
+				contests = append(contests, c)
+			}
+		}
+	}
+	if err := importGlobalContests(dataDir, contests, rep); err != nil {
 		return nil, err
 	}
 
-	// 3) Группы: настройки, объединения, контесты. Состав (student_ids) НЕ трогаем
-	// здесь — его заполнит AddStudentsToGroups из student.Groups.
+	// 3) Группы: настройки/объединения/контесты. Состав заполнит AddStudentsToGroups.
 	preCount := make(map[string]int)
 	for _, bg := range b.Groups {
 		slug := strings.TrimSpace(bg.Slug)
@@ -216,8 +327,12 @@ func ImportBundle(dataDir string, b *Bundle) (*Report, error) {
 			rep.Warnings = append(rep.Warnings, "пропущена группа с некорректным slug: "+bg.Slug)
 			continue
 		}
+		isCombined := bundleGroupIsCombined(bg)
+		if !sel.wantParticipants(slug) && !sel.wantContests(slug) && !isCombined {
+			continue // группа полностью снята с импорта
+		}
 		preCount[slug] = groupStudentCount(dataDir, slug)
-		if err := importGroupSettings(dataDir, slug, bg, rep); err != nil {
+		if err := importGroupSettings(dataDir, slug, bg, sel.wantContests(slug), rep); err != nil {
 			return nil, err
 		}
 	}
@@ -229,7 +344,7 @@ func ImportBundle(dataDir string, b *Bundle) (*Report, error) {
 		}
 	}
 
-	// 5) Сколько учеников добавилось в каждую группу (диф до/после шага 4).
+	// 5) Сколько учеников добавилось в каждую группу.
 	for i := range rep.Groups {
 		slug := rep.Groups[i].Slug
 		rep.Groups[i].StudentsAdded = groupStudentCount(dataDir, slug) - preCount[slug]
@@ -271,7 +386,7 @@ func importGlobalContests(dataDir string, contests []json.RawMessage, rep *Repor
 	return fileutil.WriteJSON(path, existing, 0o644)
 }
 
-func importGroupSettings(dataDir, slug string, bg BundleGroup, rep *Report) error {
+func importGroupSettings(dataDir, slug string, bg BundleGroup, importContests bool, rep *Report) error {
 	gr := GroupReport{Slug: slug}
 	dir := filepath.Join(dataDir, "groups", slug)
 	groupPath := filepath.Join(dir, "group.json")
@@ -280,7 +395,7 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, rep *Report) erro
 	existingRaw, err := os.ReadFile(groupPath)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		// Новая группа — создаём. student_ids вычистим: состав добавит
+		// Новая группа — создаём. student_ids вычищаем: состав добавит
 		// AddStudentsToGroups финальными ID.
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -288,9 +403,9 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, rep *Report) erro
 		if err := writeRawPretty(groupPath, stripKey(bg.Group, "student_ids")); err != nil {
 			return err
 		}
-		contests := bg.Contests
-		if contests == nil {
-			contests = []json.RawMessage{}
+		contests := []json.RawMessage{}
+		if importContests && bg.Contests != nil {
+			contests = bg.Contests
 		}
 		if err := fileutil.WriteJSON(contestsPath, contests, 0o644); err != nil {
 			return err
@@ -305,8 +420,8 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, rep *Report) erro
 		return err
 
 	default:
-		// Существующая группа — дописываем объединение/скрытые контесты и
-		// контесты; название/токен/оценки/состав не трогаем.
+		// Существующая группа — дописываем объединение/скрытые контесты; контесты
+		// по флагу. Название/токен/оценки/состав не трогаем.
 		var m map[string]json.RawMessage
 		if err := json.Unmarshal(existingRaw, &m); err != nil {
 			rep.Warnings = append(rep.Warnings, "группа "+slug+": не разобрать group.json, пропущена")
@@ -320,33 +435,35 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, rep *Report) erro
 			return err
 		}
 
-		var existingC []json.RawMessage
-		if err := fileutil.ReadJSON(contestsPath, &existingC); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		have := make(map[string]struct{}, len(existingC))
-		for _, c := range existingC {
-			if id := rawStringField(c, "id"); id != "" {
+		if importContests {
+			var existingC []json.RawMessage
+			if err := fileutil.ReadJSON(contestsPath, &existingC); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			have := make(map[string]struct{}, len(existingC))
+			for _, c := range existingC {
+				if id := rawStringField(c, "id"); id != "" {
+					have[id] = struct{}{}
+				}
+			}
+			for _, c := range bg.Contests {
+				id := rawStringField(c, "id")
+				if id == "" {
+					continue
+				}
+				if _, ok := have[id]; ok {
+					continue
+				}
+				existingC = append(existingC, c)
 				have[id] = struct{}{}
+				gr.ContestsAdded++
 			}
-		}
-		for _, c := range bg.Contests {
-			id := rawStringField(c, "id")
-			if id == "" {
-				continue
+			if existingC == nil {
+				existingC = []json.RawMessage{}
 			}
-			if _, ok := have[id]; ok {
-				continue
+			if err := fileutil.WriteJSON(contestsPath, existingC, 0o644); err != nil {
+				return err
 			}
-			existingC = append(existingC, c)
-			have[id] = struct{}{}
-			gr.ContestsAdded++
-		}
-		if existingC == nil {
-			existingC = []json.RawMessage{}
-		}
-		if err := fileutil.WriteJSON(contestsPath, existingC, 0o644); err != nil {
-			return err
 		}
 	}
 
@@ -355,6 +472,14 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, rep *Report) erro
 }
 
 // --- вспомогательное ---
+
+func bundleGroupIsCombined(bg BundleGroup) bool {
+	var gf domain.GroupFile
+	if json.Unmarshal(bg.Group, &gf) != nil {
+		return false
+	}
+	return len(gf.MemberGroups) > 0
+}
 
 func groupStudentCount(dataDir, slug string) int {
 	b, err := os.ReadFile(filepath.Join(dataDir, "groups", slug, "group.json"))
@@ -409,8 +534,7 @@ func stripKey(raw json.RawMessage, key string) json.RawMessage {
 }
 
 // mergeStringArrayKey дописывает в строковый массив m[key] новые значения из
-// incoming (без дублей, сохраняя порядок). Возвращает число добавленных. Пустой
-// incoming ключ не трогает.
+// incoming (без дублей, сохраняя порядок). Возвращает число добавленных.
 func mergeStringArrayKey(m map[string]json.RawMessage, key string, incoming []string) int {
 	if len(incoming) == 0 {
 		return 0
@@ -456,39 +580,4 @@ func writeRawPretty(path string, raw json.RawMessage) error {
 		return err
 	}
 	return fileutil.WriteJSON(path, v, 0o644)
-}
-
-func expandMemberGroups(groupsDir string, want map[string]struct{}) {
-	queue := sortedKeys(want)
-	for len(queue) > 0 {
-		slug := queue[0]
-		queue = queue[1:]
-		raw, err := os.ReadFile(filepath.Join(groupsDir, slug, "group.json"))
-		if err != nil {
-			continue
-		}
-		var gf domain.GroupFile
-		if json.Unmarshal(raw, &gf) != nil {
-			continue
-		}
-		for _, m := range gf.MemberGroups {
-			m = strings.TrimSpace(m)
-			if !domain.IsValidSlug(m) {
-				continue
-			}
-			if _, ok := want[m]; !ok {
-				want[m] = struct{}{}
-				queue = append(queue, m)
-			}
-		}
-	}
-}
-
-func sortedKeys(m map[string]struct{}) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

@@ -19,6 +19,18 @@ type AdminExportPageData struct {
 	Groups    []AdminGroupLink
 }
 
+// slugSetFromForm превращает список слагов из формы в множество валидных slug→true.
+func slugSetFromForm(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if domain.IsValidSlug(v) {
+			set[v] = true
+		}
+	}
+	return set
+}
+
 type AdminImportPageData struct {
 	PageTitle string
 	Footer    FooterInfo
@@ -57,16 +69,13 @@ func (h *Handlers) AdminExportDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var slugs []string
-	for _, s := range r.Form["group"] {
-		s = strings.TrimSpace(s)
-		if domain.IsValidSlug(s) {
-			slugs = append(slugs, s)
-		}
+	sel := migrate.Selection{
+		Participants: slugSetFromForm(r.Form["participants"]),
+		Contests:     slugSetFromForm(r.Form["contests"]),
 	}
 	includeTokens := r.FormValue("include_tokens") != ""
 
-	bundle, err := migrate.BuildBundle(h.admin.cfg.DataDir, slugs, includeTokens)
+	bundle, err := migrate.BuildBundle(h.admin.cfg.DataDir, sel, includeTokens)
 	if err != nil {
 		h.logger.Printf("ERROR export build bundle: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -130,7 +139,18 @@ func (h *Handlers) executeImportAction(r *http.Request) AdminActionResult {
 			[]string{fmt.Sprintf("неподдерживаемая версия бандла: %d (нужна %d)", bundle.Version, migrate.BundleVersion)})
 	}
 
-	rep, err := migrate.ImportBundle(h.admin.cfg.DataDir, &bundle)
+	// Выбор участников/контестов по группам приходит из формы (клиент строит
+	// чекбоксы, прочитав файл). Если формой ничего не задано (has_selection не
+	// выставлен) — импортируем всё.
+	var sel migrate.Selection
+	if r.FormValue("has_selection") == "1" {
+		sel = migrate.Selection{
+			Participants: slugSetFromForm(r.Form["import_participants"]),
+			Contests:     slugSetFromForm(r.Form["import_contests"]),
+		}
+	}
+
+	rep, err := migrate.ImportBundle(h.admin.cfg.DataDir, &bundle, sel)
 	if err != nil {
 		return newAdminResult("import", false, -1, started, "", []string{err.Error()})
 	}

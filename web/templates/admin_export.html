@@ -5,25 +5,34 @@
     <a class="summary-link-btn" href="/standings/admin">← В админку</a>
     <a class="summary-link-btn" href="/standings/admin/import">Импорт →</a>
   </p>
-  <p class="empty-hint">Скачивает JSON-бандл выбранных групп вместе с их учениками и глобальными контестами, на которые они ссылаются. Группы-участницы объединённых групп добавляются автоматически. Секреты сайтов (креды informatics/codeforces/ejudge, админ-логин) и кеш НЕ экспортируются.</p>
+  <p class="empty-hint">Скачивает JSON-бандл выбранных групп. У каждой группы отдельно отмечаются <strong>участники</strong> и <strong>контесты</strong>. Группы-участницы объединённых групп добавляются автоматически и целиком. Секреты сайтов (креды informatics/codeforces/ejudge, админ-логин) и кеш НЕ экспортируются.</p>
 </section>
 
 <section class="admin-block">
   <h2>Что экспортировать</h2>
   <form method="post" action="/api/admin/export/download">
     {{if .Groups}}
-    <p class="empty-hint">Отметьте группы. Если не отметить ни одной — экспортируются <strong>все</strong>.</p>
-    <p><label><input type="checkbox" id="export-all" /> <strong>выбрать все</strong></label></p>
-    <ul class="admin-groups-list">
-      {{range .Groups}}
-      <li>
-        <label style="flex-direction:row;align-items:center;gap:0.5rem;">
-          <input type="checkbox" class="export-group" name="group" value="{{.Slug}}" style="width:auto;" />
-          <span>{{.Title}} <span class="grade-weight">({{.Slug}}){{if .IsCombined}} · объединённая{{end}}</span></span>
-        </label>
-      </li>
-      {{end}}
-    </ul>
+    <div class="admin-editor-tools" style="margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap;">
+      <button type="button" class="admin-btn admin-btn--secondary" data-check="all">Отметить всё</button>
+      <button type="button" class="admin-btn admin-btn--secondary" data-check="none">Снять всё</button>
+    </div>
+    <table class="standings-table data-table migrate-select">
+      <thead><tr><th>Группа</th><th class="count-col">участники</th><th class="count-col">контесты</th></tr></thead>
+      <tbody>
+        {{range .Groups}}
+        <tr>
+          <td>{{.Title}} <span class="grade-weight">({{.Slug}}){{if .IsCombined}} · объединённая{{end}}</span></td>
+          <td class="count-col">
+            {{if .IsCombined}}<span class="grade-weight">—</span>{{else}}<input type="checkbox" name="participants" value="{{.Slug}}" checked />{{end}}
+          </td>
+          <td class="count-col">
+            {{if .IsCombined}}<input type="checkbox" name="contests" value="{{.Slug}}" checked title="включить объединённую группу в бандл" />{{else}}<input type="checkbox" name="contests" value="{{.Slug}}" checked />{{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <p class="empty-hint">У объединённой группы своих участников/контестов нет — отметка включает саму группу в бандл (её участницы придут автоматически).</p>
     {{else}}
     <p class="empty-hint">Групп пока нет.</p>
     {{end}}
@@ -39,9 +48,11 @@
 
 <script>
   (function () {
-    var all = document.getElementById("export-all");
-    if (all) all.addEventListener("change", function () {
-      document.querySelectorAll(".export-group").forEach(function (cb) { cb.checked = all.checked; });
+    document.querySelectorAll("[data-check]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var on = btn.dataset.check === "all";
+        document.querySelectorAll(".migrate-select input[type=checkbox]").forEach(function (cb) { cb.checked = on; });
+      });
     });
   })();
 </script>

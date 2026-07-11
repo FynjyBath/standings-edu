@@ -5,17 +5,119 @@
     <a class="summary-link-btn" href="/standings/admin">← В админку</a>
     <a class="summary-link-btn" href="/standings/admin/export">Экспорт →</a>
   </p>
-  <p class="empty-hint">Загрузите бандл, полученный на другом сервере кнопкой «Экспорт». Импорт только <strong>дописывает</strong> новое и ничего не перезаписывает: новые ученики и контесты добавляются, у существующих групп дополняется состав и список контестов (в конец). Повторный импорт того же файла безопасен. После импорта нажмите «Сгенерировать».</p>
+  <p class="empty-hint">Загрузите бандл, полученный кнопкой «Экспорт». Импорт только <strong>дописывает</strong> новое и ничего не перезаписывает: новые ученики и контесты добавляются, у существующих групп дополняется состав и список контестов (в конец). Повторный импорт того же файла безопасен. После импорта нажмите «Сгенерировать».</p>
 </section>
 
 <section class="admin-block">
   <h2>Загрузить бандл</h2>
-  <form method="post" action="/api/admin/import/apply" enctype="multipart/form-data">
+  <form method="post" action="/api/admin/import/apply" enctype="multipart/form-data" id="import-form">
     <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.6rem;align-items:center;">
-      <input type="file" name="bundle" accept=".json,application/json" required />
-      <button type="submit" class="admin-btn">Импортировать</button>
+      <input type="file" name="bundle" id="import-file" accept=".json,application/json" required />
+      <button type="submit" class="admin-btn" id="import-submit">Импортировать</button>
+    </div>
+    <p class="empty-hint" id="import-status" style="display:none;"></p>
+    <div id="import-groups" style="margin-top:0.8rem;display:none;">
+      <p class="empty-hint">Отметьте, что импортировать по каждой группе:</p>
+      <table class="standings-table data-table migrate-select">
+        <thead><tr><th>Группа</th><th class="count-col">участники</th><th class="count-col">контесты</th></tr></thead>
+        <tbody id="import-groups-body"></tbody>
+      </table>
     </div>
   </form>
-  <p class="empty-hint">Что произойдёт: ученики сливаются как при merge анкет (по ФИО, с доливкой аккаунтов и групп); глобальные контесты добавляются по id; для каждой группы создаётся скелет (если её нет) и в её состав добавляются недостающие ученики и контесты. Итог покажется на главной странице админки.</p>
+  <p class="empty-hint">Ученики сливаются как при merge анкет (по ФИО, с доливкой аккаунтов и групп); глобальные контесты добавляются по id; у групп дополняется состав и контесты. Итог покажется на главной странице админки.</p>
 </section>
+
+<script>
+  (function () {
+    var fileInput = document.getElementById("import-file");
+    var status = document.getElementById("import-status");
+    var groupsBox = document.getElementById("import-groups");
+    var body = document.getElementById("import-groups-body");
+    var form = document.getElementById("import-form");
+    if (!fileInput) return;
+
+    function showStatus(msg, err) {
+      status.textContent = msg;
+      status.className = "empty-hint" + (err ? " admin-editor-status--error" : "");
+      status.style.display = msg ? "" : "none";
+    }
+
+    function checkbox(name, slug, checked, disabled) {
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.name = name;
+      cb.value = slug;
+      cb.checked = checked && !disabled;
+      cb.disabled = !!disabled;
+      return cb;
+    }
+
+    fileInput.addEventListener("change", function () {
+      body.textContent = "";
+      groupsBox.style.display = "none";
+      // сбрасываем маркер выбора
+      var old = form.querySelector('input[name="has_selection"]');
+      if (old) old.remove();
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) { showStatus("", false); return; }
+
+      var reader = new FileReader();
+      reader.onload = function () {
+        var bundle;
+        try { bundle = JSON.parse(reader.result); } catch (e) {
+          showStatus("Не удалось прочитать JSON: " + e.message, true);
+          return;
+        }
+        var groups = (bundle && Array.isArray(bundle.groups)) ? bundle.groups : [];
+        if (!groups.length) { showStatus("В файле нет групп.", true); return; }
+
+        // Какие группы есть у учеников (по членству) и у кого есть контесты.
+        var hasParticipants = Object.create(null);
+        (bundle.students || []).forEach(function (s) {
+          (s.groups || []).forEach(function (g) { hasParticipants[g] = true; });
+        });
+
+        var hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "has_selection";
+        hidden.value = "1";
+        form.appendChild(hidden);
+
+        groups.forEach(function (g) {
+          var slug = g.slug;
+          if (!slug) return;
+          var combined = !!(g.group && typeof g.group === "object" &&
+            Array.isArray(g.group.member_groups) && g.group.member_groups.length);
+          var partAvail = !!hasParticipants[slug];
+          var contAvail = Array.isArray(g.contests) && g.contests.length > 0;
+
+          var tr = document.createElement("tr");
+          var tdName = document.createElement("td");
+          var extra = combined ? " · объединённая" : "";
+          tdName.innerHTML = slug + "<span class='grade-weight'>" + extra + "</span>";
+          tr.appendChild(tdName);
+
+          var tdP = document.createElement("td");
+          tdP.className = "count-col";
+          if (combined) tdP.innerHTML = "<span class='grade-weight'>—</span>";
+          else tdP.appendChild(checkbox("import_participants", slug, true, !partAvail));
+          tr.appendChild(tdP);
+
+          var tdC = document.createElement("td");
+          tdC.className = "count-col";
+          if (combined) tdC.innerHTML = "<span class='grade-weight'>—</span>";
+          else tdC.appendChild(checkbox("import_contests", slug, true, !contAvail));
+          tr.appendChild(tdC);
+
+          body.appendChild(tr);
+        });
+
+        showStatus("Файл прочитан: групп — " + groups.length + ", учеников — " + ((bundle.students || []).length) + ".", false);
+        groupsBox.style.display = "";
+      };
+      reader.onerror = function () { showStatus("Ошибка чтения файла.", true); };
+      reader.readAsText(f);
+    });
+  })();
+</script>
 {{end}}

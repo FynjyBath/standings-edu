@@ -39,6 +39,9 @@ func contestIDs(t *testing.T, path string) []string {
 	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		t.Fatal(err)
 	}
 	var raw []json.RawMessage
@@ -52,8 +55,27 @@ func contestIDs(t *testing.T, path string) []string {
 	return out
 }
 
-// source-директория: обычная группа grp + объединённая combo(из grp), 2 ученика,
-// 2 глобальных контеста; grp ссылается на 1 контест.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// sel строит выбор: перечисленные слаги — с участниками/контестами.
+func sel(participants, contests []string) Selection {
+	s := Selection{Participants: map[string]bool{}, Contests: map[string]bool{}}
+	for _, g := range participants {
+		s.Participants[g] = true
+	}
+	for _, g := range contests {
+		s.Contests[g] = true
+	}
+	return s
+}
+
+func selBoth(slugs ...string) Selection { return sel(slugs, slugs) }
+
+// source-директория: обычная группа grp + объединённая combo(из grp), ученики,
+// глобальные контесты; grp ссылается на c1.
 func makeSource(t *testing.T) string {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "students.json"), `[
@@ -75,10 +97,18 @@ func makeSource(t *testing.T) string {
 	return dir
 }
 
+func studentIDs(bundle *Bundle) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range bundle.Students {
+		out[s.ID] = true
+	}
+	return out
+}
+
 func TestRoundTripNewTarget(t *testing.T) {
 	src := makeSource(t)
-	// Экспортируем только combo — grp должна подтянуться как участница.
-	bundle, err := BuildBundle(src, []string{"combo"}, true)
+	// Экспортируем только combo — grp должна подтянуться как участница целиком.
+	bundle, err := BuildBundle(src, selBoth("combo"), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,18 +119,15 @@ func TestRoundTripNewTarget(t *testing.T) {
 	if !slugs["combo"] || !slugs["grp"] {
 		t.Fatalf("combo и его участница grp должны быть в бандле, got %v", slugs)
 	}
-	// Ученики grp (ivanov, petrov) включены с Groups=["grp"]; sidorov — нет.
-	gotStudents := map[string]bool{}
+	got := studentIDs(bundle)
+	if !got["ivanov"] || !got["petrov"] || got["sidorov"] {
+		t.Fatalf("ученики бандла неверны: %v", got)
+	}
 	for _, s := range bundle.Students {
-		gotStudents[s.ID] = true
 		if s.ID == "ivanov" && (len(s.Groups) != 1 || s.Groups[0] != "grp") {
 			t.Fatalf("ivanov.Groups должно быть [grp], got %v", s.Groups)
 		}
 	}
-	if !gotStudents["ivanov"] || !gotStudents["petrov"] || gotStudents["sidorov"] {
-		t.Fatalf("ученики бандла неверны: %v", gotStudents)
-	}
-	// Контест c1 включён; c2/c3 — нет.
 	gotC := map[string]bool{}
 	for _, c := range bundle.Contests {
 		gotC[rawStringField(c, "id")] = true
@@ -109,9 +136,8 @@ func TestRoundTripNewTarget(t *testing.T) {
 		t.Fatalf("контесты бандла неверны: %v", gotC)
 	}
 
-	// Импорт в пустой target.
 	dst := t.TempDir()
-	rep, err := ImportBundle(dst, bundle)
+	rep, err := ImportBundle(dst, bundle, Selection{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,21 +150,135 @@ func TestRoundTripNewTarget(t *testing.T) {
 	if sids := readStrings(t, filepath.Join(dst, "groups", "grp", "group.json"), "student_ids"); len(sids) != 2 {
 		t.Fatalf("grp student_ids: %v", sids)
 	}
-	// Токен перенесён (includeTokens=true).
 	b, _ := os.ReadFile(filepath.Join(dst, "groups", "grp", "group.json"))
 	if !strings.Contains(string(b), "secret123") {
 		t.Fatal("токен должен перенестись при includeTokens=true")
 	}
 }
 
+func TestExportParticipantsOnly(t *testing.T) {
+	src := makeSource(t)
+	bundle, err := BuildBundle(src, sel([]string{"grp"}, nil), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := studentIDs(bundle)
+	if !got["ivanov"] || !got["petrov"] {
+		t.Fatalf("участники должны быть в бандле: %v", got)
+	}
+	if len(bundle.Contests) != 0 {
+		t.Fatalf("контестов быть не должно: %v", bundle.Contests)
+	}
+	for _, g := range bundle.Groups {
+		if g.Slug == "grp" && len(g.Contests) != 0 {
+			t.Fatalf("у grp контесты не должны выгружаться: %v", g.Contests)
+		}
+	}
+}
+
+func TestExportContestsOnly(t *testing.T) {
+	src := makeSource(t)
+	bundle, err := BuildBundle(src, sel(nil, []string{"grp"}), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Students) != 0 {
+		t.Fatalf("учеников быть не должно (участники не выбраны): %v", bundle.Students)
+	}
+	gotC := map[string]bool{}
+	for _, c := range bundle.Contests {
+		gotC[rawStringField(c, "id")] = true
+	}
+	if !gotC["c1"] {
+		t.Fatalf("c1 должен быть выгружен: %v", gotC)
+	}
+	// student_ids вырезаны из group.json.
+	for _, g := range bundle.Groups {
+		if g.Slug == "grp" && strings.Contains(string(g.Group), "student_ids") {
+			t.Fatal("student_ids должны быть вырезаны при экспорте только контестов")
+		}
+	}
+}
+
+func TestExportCombinedPullsMembersFully(t *testing.T) {
+	src := makeSource(t)
+	// combo только по контестам (своих нет) — участница grp должна прийти целиком.
+	bundle, err := BuildBundle(src, sel(nil, []string{"combo"}), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := studentIDs(bundle)
+	if !got["ivanov"] || !got["petrov"] {
+		t.Fatalf("участница grp должна прийти с участниками: %v", got)
+	}
+	gotC := map[string]bool{}
+	for _, c := range bundle.Contests {
+		gotC[rawStringField(c, "id")] = true
+	}
+	if !gotC["c1"] {
+		t.Fatalf("контест участницы grp должен прийти: %v", gotC)
+	}
+}
+
+func TestImportParticipantsOnly(t *testing.T) {
+	src := makeSource(t)
+	bundle, err := BuildBundle(src, selBoth("grp"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	// Импортируем только участников grp, без контестов.
+	rep, err := ImportBundle(dst, bundle, sel([]string{"grp"}, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.ContestsAdded != 0 {
+		t.Fatalf("глобальные контесты не должны импортироваться: %d", rep.ContestsAdded)
+	}
+	if sids := readStrings(t, filepath.Join(dst, "groups", "grp", "group.json"), "student_ids"); len(sids) != 2 {
+		t.Fatalf("участники должны добавиться: %v", sids)
+	}
+	if ids := contestIDs(t, filepath.Join(dst, "groups", "grp", "contests.json")); len(ids) != 0 {
+		t.Fatalf("контесты не должны импортироваться: %v", ids)
+	}
+}
+
+func TestImportContestsOnly(t *testing.T) {
+	src := makeSource(t)
+	bundle, err := BuildBundle(src, selBoth("grp"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	// Только контесты grp, без участников.
+	rep, err := ImportBundle(dst, bundle, sel(nil, []string{"grp"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.StudentsAdded != 0 {
+		t.Fatalf("ученики не должны импортироваться: %d", rep.StudentsAdded)
+	}
+	if !exists(filepath.Join(dst, "students.json")) {
+		// students.json могло не создаться — это ок (учеников не импортировали)
+	}
+	if ids := contestIDs(t, filepath.Join(dst, "groups", "grp", "contests.json")); len(ids) != 1 || ids[0] != "c1" {
+		t.Fatalf("контесты должны импортироваться: %v", ids)
+	}
+	if sids := readStrings(t, filepath.Join(dst, "groups", "grp", "group.json"), "student_ids"); len(sids) != 0 {
+		t.Fatalf("участников быть не должно: %v", sids)
+	}
+	if ids := contestIDs(t, filepath.Join(dst, "contests.json")); len(ids) != 1 || ids[0] != "c1" {
+		t.Fatalf("глобальный контест должен добавиться: %v", ids)
+	}
+}
+
 func TestImportAppendsToExistingGroup(t *testing.T) {
 	src := makeSource(t)
-	bundle, err := BuildBundle(src, []string{"grp"}, true)
+	bundle, err := BuildBundle(src, selBoth("grp"), true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// target уже имеет grp с 1 учеником и другим контестом + свой токен.
 	dst := t.TempDir()
 	write(t, filepath.Join(dst, "students.json"),
 		`[{"id":"ivanov","full_name":"Иванов","public_name":"Иванов","accounts":[{"site":"acmp","account_id":"777"}]}]`)
@@ -147,27 +287,23 @@ func TestImportAppendsToExistingGroup(t *testing.T) {
 		`{"title":"Старое название","student_ids":["ivanov"],"group_secret_token":"KEEP-ME"}`)
 	write(t, filepath.Join(dst, "groups", "grp", "contests.json"), `[{"id":"old_contest","update":true}]`)
 
-	rep, err := ImportBundle(dst, bundle)
+	rep, err := ImportBundle(dst, bundle, Selection{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// student_ids: ivanov (был) + petrov (новый) — без дублей, в конец.
 	sids := readStrings(t, filepath.Join(dst, "groups", "grp", "group.json"), "student_ids")
 	if len(sids) != 2 || sids[0] != "ivanov" || sids[1] != "petrov" {
 		t.Fatalf("student_ids должны дописаться: %v", sids)
 	}
-	// contests: old_contest (был) + c1 (новый) в конце.
 	ids := contestIDs(t, filepath.Join(dst, "groups", "grp", "contests.json"))
 	if len(ids) != 2 || ids[0] != "old_contest" || ids[1] != "c1" {
 		t.Fatalf("контесты должны дописаться в конец: %v", ids)
 	}
-	// Название и токен target сохранены (не перезаписаны).
 	b, _ := os.ReadFile(filepath.Join(dst, "groups", "grp", "group.json"))
 	if !strings.Contains(string(b), "Старое название") || !strings.Contains(string(b), "KEEP-ME") {
 		t.Fatalf("title/token target должны сохраниться: %s", b)
 	}
-	// Ученик ivanov: аккаунты слиты (acmp + codeforces).
 	var students []domain.Student
 	sb, _ := os.ReadFile(filepath.Join(dst, "students.json"))
 	json.Unmarshal(sb, &students)
@@ -184,8 +320,8 @@ func TestImportAppendsToExistingGroup(t *testing.T) {
 		t.Fatalf("отчёт учеников: added=%d updated=%d", rep.StudentsAdded, rep.StudentsUpdated)
 	}
 
-	// Повторный импорт — ничего не добавляется.
-	rep2, err := ImportBundle(dst, bundle)
+	// Повторный импорт — no-op.
+	rep2, err := ImportBundle(dst, bundle, Selection{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +335,7 @@ func TestImportAppendsToExistingGroup(t *testing.T) {
 
 func TestExportStripToken(t *testing.T) {
 	src := makeSource(t)
-	bundle, err := BuildBundle(src, []string{"grp"}, false)
+	bundle, err := BuildBundle(src, selBoth("grp"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,19 +346,34 @@ func TestExportStripToken(t *testing.T) {
 	}
 }
 
+func TestExportAllWhenSelectionEmpty(t *testing.T) {
+	src := makeSource(t)
+	bundle, err := BuildBundle(src, Selection{}, true) // nil-карты → всё
+	if err != nil {
+		t.Fatal(err)
+	}
+	slugs := map[string]bool{}
+	for _, g := range bundle.Groups {
+		slugs[g.Slug] = true
+	}
+	if !slugs["grp"] || !slugs["combo"] {
+		t.Fatalf("при пустом выборе экспортируются все группы: %v", slugs)
+	}
+}
+
 func TestImportRejectsBadSlug(t *testing.T) {
 	dst := t.TempDir()
 	b := &Bundle{Version: BundleVersion, Groups: []BundleGroup{
 		{Slug: "../evil", Group: json.RawMessage(`{"title":"x"}`)},
 	}}
-	rep, err := ImportBundle(dst, b)
+	rep, err := ImportBundle(dst, b, Selection{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rep.Warnings) == 0 {
 		t.Fatal("некорректный slug должен дать предупреждение")
 	}
-	if _, err := os.Stat(filepath.Join(dst, "groups")); err == nil {
+	if exists(filepath.Join(dst, "groups")) {
 		t.Fatal("ничего не должно быть записано для битого slug")
 	}
 }

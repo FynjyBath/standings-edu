@@ -554,7 +554,7 @@ button.summary-link-btn {
 }
 
 /* data-table — списки/записи (админка, профиль участника): текст слева, числа
-   по центру, ширина по контенту (не растягивается, нет липкой первой колонки).
+   по центру, ширина по контенту (не растягивается).
    В отличие от матричных таблиц standings/сводной, где всё по центру. */
 .standings-table.data-table {
   width: auto;
@@ -571,9 +571,23 @@ button.summary-link-btn {
   text-align: center;
 }
 
+/* Первый столбец списка (название/идентификатор строки) закрепляем при
+   горизонтальной прокрутке — как левый столбец матричных таблиц. */
+.standings-table.data-table th:first-child,
+.standings-table.data-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--sticky);
+  z-index: 1;
+}
+
+.standings-table.data-table thead th:first-child {
+  z-index: 5; /* угол: выше и липкой шапки, и липкого столбца */
+  background: color-mix(in srgb, var(--sticky) 64%, var(--table-head) 36%);
+}
+
 .standings-table.data-table .student-col,
 .standings-table.data-table .student-name {
-  position: static;
   min-width: 0;
 }
 

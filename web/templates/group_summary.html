@@ -93,6 +93,21 @@
     tabOrder.forEach(function (name, i) {
       tabHue[name] = Math.round((210 + i * GOLDEN_ANGLE) % 360);
     });
+    // Круговое среднее оттенков — «сумма цветов» табличек одним тоном (blue+red →
+    // фиолетовый и т.п.). Сатурация/светлота берутся из CSS, поэтому фон выходит
+    // однотонным, без градиента, и в теме учитывается автоматически.
+    function meanHue(hues) {
+      var x = 0, y = 0;
+      hues.forEach(function (h) {
+        var r = h * Math.PI / 180;
+        x += Math.cos(r);
+        y += Math.sin(r);
+      });
+      var a = Math.atan2(y, x) * 180 / Math.PI;
+      if (a < 0) a += 360;
+      return Math.round(a);
+    }
+
     function applyTabColor(th, contest) {
       var names = tableNamesOf(contest);
       // Собираем цвета всех табличек контеста (без повторов, в порядке контеста).
@@ -108,19 +123,12 @@
       });
       if (!hues.length) return;
 
-      if (hues.length === 1) {
-        // Одна табличка — сплошной оттенок (тема учитывается в CSS).
-        th.style.setProperty("--tab-hue", String(hues[0]));
-        th.classList.add("has-tab-color");
-        return;
+      var hue = hues.length === 1 ? hues[0] : meanHue(hues);
+      th.style.setProperty("--tab-hue", String(hue));
+      th.classList.add("has-tab-color");
+      if (hues.length > 1) {
+        th.title = (th.title ? th.title + " · " : "") + "таблички: " + knownNames.join(", ");
       }
-
-      // Несколько табличек — плавная смесь их цветов, чтобы видеть принадлежность
-      // сразу к нескольким. Оверлей поверх обычного фона шапки.
-      var stops = hues.map(function (h) { return "hsl(" + h + " 62% 52% / 0.42)"; });
-      th.style.backgroundImage = "linear-gradient(100deg, " + stops.join(", ") + ")";
-      th.classList.add("has-tab-mix");
-      th.title = (th.title ? th.title + " · " : "") + "таблички: " + knownNames.join(", ");
     }
 
     function contestsForTab(tab) {

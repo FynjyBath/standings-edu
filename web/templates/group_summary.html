@@ -85,6 +85,23 @@
     });
     var tabs = [ALL_TAB].concat(tabOrder);
 
+    // Каждой табличке (table_name) — свой стабильный оттенок (золотой угол даёт
+    // максимально различимые цвета при любом их числе). В сводной подсвечиваем
+    // фон названия контеста цветом его таблички, чтобы различать источники.
+    var GOLDEN_ANGLE = 137.508;
+    var tabHue = Object.create(null);
+    tabOrder.forEach(function (name, i) {
+      tabHue[name] = Math.round((210 + i * GOLDEN_ANGLE) % 360);
+    });
+    function applyTabColor(th, contest) {
+      var names = tableNamesOf(contest);
+      if (!names.length) return;
+      var hue = tabHue[names[0]]; // цвет по «главной» (первой) табличке контеста
+      if (hue === undefined) return;
+      th.style.setProperty("--tab-hue", String(hue));
+      th.classList.add("has-tab-color");
+    }
+
     function contestsForTab(tab) {
       if (tab === ALL_TAB) {
         return allContests;
@@ -212,6 +229,7 @@
           } else {
             setContestHeader(single, contestTitle, contest.id);
           }
+          applyTabColor(single, contest);
           trTop.appendChild(single);
           return;
         }
@@ -222,6 +240,7 @@
         top.className = "subcontest-head";
         top.colSpan = tasks.length;
         setContestHeader(top, contestTitle, contest.id);
+        applyTabColor(top, contest);
         trTop.appendChild(top);
 
         contestSubcontests(contest).forEach(function (subcontest) {
@@ -409,6 +428,10 @@
         btn.className = "summary-link-btn";
         btn.dataset.tab = tab;
         btn.textContent = tab;
+        if (tab !== ALL_TAB && tabHue[tab] !== undefined) {
+          btn.style.setProperty("--tab-hue", String(tabHue[tab]));
+          btn.classList.add("summary-tab-colored");
+        }
         btn.addEventListener("click", function () { selectTab(tab); });
         tabsRoot.appendChild(btn);
         tabButtons.push(btn);

@@ -288,6 +288,17 @@ button.summary-link-btn {
   color: #ffffff;
 }
 
+/* Вкладка-табличка: цветной маркер + лёгкий фон её цвета (легенда к подсветке
+   названий контестов в сводной). --tab-hue задаётся из JS. */
+.summary-tab-colored {
+  border-left: 5px solid hsl(var(--tab-hue) 60% 50%);
+  background: hsl(var(--tab-hue) 60% 50% / 0.1);
+}
+
+.summary-tab-colored.is-active {
+  border-left-color: hsl(var(--tab-hue) 65% 45%);
+}
+
 .page-head code {
   background: color-mix(in srgb, var(--surface-strong) 68%, transparent 32%);
   border-radius: 6px;
@@ -598,6 +609,27 @@ button.summary-link-btn {
 
 .subcontest-head {
   font-size: 0.92rem;
+}
+
+/* Сводная: фон названия контеста — цвет его таблички (table_name). Оверлей
+   поверх обычного фона шапки, чтобы различать контесты из разных табличек.
+   --tab-hue проставляется из JS. */
+.summary-table .subcontest-head.has-tab-color {
+  background-image: linear-gradient(hsl(var(--tab-hue) 60% 50% / 0.32), hsl(var(--tab-hue) 60% 50% / 0.32));
+}
+
+@media (prefers-color-scheme: dark) {
+  .summary-table .subcontest-head.has-tab-color {
+    background-image: linear-gradient(hsl(var(--tab-hue) 70% 62% / 0.34), hsl(var(--tab-hue) 70% 62% / 0.34));
+  }
+}
+
+:root[data-theme="light"] .summary-table .subcontest-head.has-tab-color {
+  background-image: linear-gradient(hsl(var(--tab-hue) 60% 50% / 0.32), hsl(var(--tab-hue) 60% 50% / 0.32));
+}
+
+:root[data-theme="dark"] .summary-table .subcontest-head.has-tab-color {
+  background-image: linear-gradient(hsl(var(--tab-hue) 70% 62% / 0.34), hsl(var(--tab-hue) 70% 62% / 0.34));
 }
 
 .task-col {

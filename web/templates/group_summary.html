@@ -509,10 +509,6 @@
         btn.className = "summary-link-btn";
         btn.dataset.tab = tab;
         btn.textContent = tab;
-        if (tab !== ALL_TAB && tabHue[tab] !== undefined) {
-          btn.style.setProperty("--tab-hue", String(tabHue[tab]));
-          btn.classList.add("summary-tab-colored");
-        }
         btn.addEventListener("click", function () { selectTab(tab); });
         tabsRoot.appendChild(btn);
         tabButtons.push(btn);

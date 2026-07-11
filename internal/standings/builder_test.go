@@ -321,3 +321,24 @@ func TestBuildTaskContestAcceptedMark(t *testing.T) {
 		t.Fatalf("windowed accepted marks wrong: %+v", row.Accepted)
 	}
 }
+
+// singleTaskLink: одна ссылка на все подконтесты → она и возвращается; несколько
+// или ноль — ok=false.
+func TestSingleTaskLink(t *testing.T) {
+	one := domain.Contest{Subcontests: []domain.Subcontest{
+		{Tasks: []string{"https://informatics.msk.ru/mod/statements/view.php?id=52798"}},
+	}}
+	if link, ok := singleTaskLink(one); !ok || link != "https://informatics.msk.ru/mod/statements/view.php?id=52798" {
+		t.Fatalf("одна ссылка: ok=%v link=%q", ok, link)
+	}
+	many := domain.Contest{Subcontests: []domain.Subcontest{
+		{Tasks: []string{"a", "b"}},
+	}}
+	if _, ok := singleTaskLink(many); ok {
+		t.Fatal("несколько ссылок → ok должно быть false")
+	}
+	none := domain.Contest{Subcontests: []domain.Subcontest{{Tasks: []string{"  "}}}}
+	if _, ok := singleTaskLink(none); ok {
+		t.Fatal("пустые ссылки → ok должно быть false")
+	}
+}

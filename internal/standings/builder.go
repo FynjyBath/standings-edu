@@ -717,6 +717,26 @@ type taskColumn struct {
 	useRealScores bool   // для обычной IOI-задачи
 }
 
+// singleTaskLink возвращает единственную ссылку-задачу контеста (по всем
+// подконтестам), если она ровно одна. Это и есть «контест добавлен одной
+// ссылкой» (например informatics-сборник, разворачивающийся в задачи).
+func singleTaskLink(contest domain.Contest) (string, bool) {
+	found := ""
+	count := 0
+	for _, sc := range contest.Subcontests {
+		for _, t := range sc.Tasks {
+			if t = strings.TrimSpace(t); t != "" {
+				count++
+				if count > 1 {
+					return "", false
+				}
+				found = t
+			}
+		}
+	}
+	return found, count == 1
+}
+
 // informaticsBaseURL — настроенный base_url informatics (для переписывания хоста
 // видимых ссылок). Пусто — informatics не зарегистрирован.
 func (b *Builder) informaticsBaseURL() string {
@@ -802,6 +822,13 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	}
 	if frozen {
 		out.FrozenAt = contest.FreezeTime
+	}
+	// Контест «только сумма», добавленный ровно одной informatics-ссылкой: по ней
+	// в сводной колонке суммы дадим ссылку на все посылки ученика по контесту.
+	if out.SummaryTotalOnly {
+		if single, ok := singleTaskLink(contest); ok && domain.IsInformaticsURL(single) {
+			out.SourceURL = domain.RewriteInformaticsHost(single, informaticsBase)
+		}
 	}
 	// Штраф за задачу без баллов — только для табличек с баллами.
 	zeroPenalty := 0

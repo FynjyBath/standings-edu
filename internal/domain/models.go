@@ -535,6 +535,11 @@ type GeneratedContestStandings struct {
 	Hidden bool `json:"hidden,omitempty"`
 	// ShortName — краткое название (для колонки «только сумма» в сводной).
 	ShortName string `json:"short_name,omitempty"`
+	// SourceURL — исходная одиночная ссылка контеста, если он добавлен ровно
+	// одной informatics-ссылкой (сборник/глава). По ней в колонке «только сумма»
+	// строится ссылка на все посылки ученика по контесту. Пусто — контест из
+	// нескольких ссылок или не informatics.
+	SourceURL string `json:"source_url,omitempty"`
 	// FrozenAt — таблица заморожена: в неё вошли только посылки до этого момента.
 	// nil — таблица полная.
 	FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
@@ -562,6 +567,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		SummaryTotal bool                  `json:"summary_total_only,omitempty"`
 		Hidden       bool                  `json:"hidden,omitempty"`
 		ShortName    string                `json:"short_name,omitempty"`
+		SourceURL    string                `json:"source_url,omitempty"`
 		FrozenAt     *time.Time            `json:"frozen_at,omitempty"`
 		Subcontests  []GeneratedSubcontest `json:"subcontests"`
 		Tasks        []GeneratedTask       `json:"tasks"`
@@ -587,6 +593,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		SummaryTotalOnly: raw.SummaryTotal,
 		Hidden:           raw.Hidden,
 		ShortName:        raw.ShortName,
+		SourceURL:        raw.SourceURL,
 		FrozenAt:         raw.FrozenAt,
 		Subcontests:      raw.Subcontests,
 		Tasks:            raw.Tasks,

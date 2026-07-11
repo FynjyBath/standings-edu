@@ -7,6 +7,15 @@ import (
 	"strings"
 )
 
+// IsInformaticsURL — ссылка ведёт на informatics (основной домен или зеркало).
+func IsInformaticsURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	return isInformaticsHost(u.Hostname())
+}
+
 // informaticsHosts — все хосты informatics (основной и старое зеркало mccme).
 func isInformaticsHost(host string) bool {
 	switch strings.ToLower(host) {

@@ -369,6 +369,24 @@
               totalTd.style.setProperty("--total-hue", String(Math.round(120 * ratio)));
               totalTd.style.setProperty("--total-alpha", "0.45");
             }
+
+            // Контест из одной ссылки → ячейка суммы ведёт на все посылки ученика
+            // по контесту (если есть посылка и сайт поддерживается).
+            if (hasActivity && totalTd.textContent && contest.source_url) {
+              var contestURL = submissionURL(contest.source_url, row && row.accounts);
+              if (contestURL) {
+                var ca = document.createElement("a");
+                ca.className = "cell-link";
+                ca.href = contestURL;
+                ca.target = "_blank";
+                ca.rel = "noopener noreferrer";
+                ca.title = "Посылки ученика по контесту";
+                ca.textContent = totalTd.textContent;
+                totalTd.textContent = "";
+                totalTd.appendChild(ca);
+              }
+            }
+
             cells.push(totalTd);
             return;
           }

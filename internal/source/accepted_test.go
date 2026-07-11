@@ -37,9 +37,9 @@ func TestInformaticsAcceptedFold(t *testing.T) {
 	}
 }
 
-// «Ожидает подтверждения» (RUN_PENDING_REVIEW=16): решено (зелёный плюс), но без
-// жёлтой рамки; «зачтено» (8) — решено и с рамкой; WA (5) — не решено.
-func TestInformaticsPendingReviewFold(t *testing.T) {
+// informatics: OK (0) — решено без рамки; «зачтено» (8) — решено с жёлтой рамкой;
+// «ожидает подтверждения» (16) на информатиксе не засчитываем; WA (5) — не решено.
+func TestInformaticsFoldStatuses(t *testing.T) {
 	build := func(id int) string {
 		return "https://informatics.msk.ru/mod/statements/view.php?chapterid=" + itoa(id) + "#1"
 	}
@@ -50,9 +50,9 @@ func TestInformaticsPendingReviewFold(t *testing.T) {
 		wantAccept bool
 	}{
 		{"ok", 0, true, false},
-		{"accepted", 8, true, true},
-		{"pending review", 16, true, false},
-		{"pending (queued)", 11, false, false}, // транзиентный — не записываем
+		{"accepted (зачтено)", 8, true, true},
+		{"pending review", 16, false, false}, // informatics: не решено
+		{"pending (queued)", 11, false, false},
 		{"wrong answer", 5, false, false},
 	}
 	for _, tc := range cases {
@@ -93,4 +93,40 @@ func itoa(n int) string {
 		s = "-" + s
 	}
 	return s
+}
+
+// Провайдер-специфичная трактовка рамки: informatics — рамка у «зачтено» (8),
+// OK её перебивает; ejudge — рамка у OK (0), «ожидает подтверждения» (16) без
+// рамки, но засчитывается как решено.
+func TestBorderStatusPerProvider(t *testing.T) {
+	// informatics
+	if !isInformaticsBorderStatus(8) || isInformaticsBorderStatus(0) || isInformaticsBorderStatus(16) {
+		t.Fatal("informatics: рамка только у 8 (зачтено)")
+	}
+	if !isInformaticsSuppressStatus(0) || isInformaticsSuppressStatus(8) {
+		t.Fatal("informatics: перебивает рамку только OK (0)")
+	}
+	for _, s := range []int{0, 8} {
+		if !isInformaticsSolvedStatus(s) {
+			t.Fatalf("informatics: %d должно быть решено", s)
+		}
+	}
+	if isInformaticsSolvedStatus(16) {
+		t.Fatal("informatics: 16 не засчитываем")
+	}
+
+	// ejudge
+	if !isEjudgeBorderStatus(0) || isEjudgeBorderStatus(8) || isEjudgeBorderStatus(16) {
+		t.Fatal("ejudge: рамка только у OK (0)")
+	}
+	for _, s := range []int{0, 8, 16} {
+		if !isEjudgeSolvedStatus(s) {
+			t.Fatalf("ejudge: %d должно быть решено", s)
+		}
+	}
+	for _, s := range []int{5, 11, 7} {
+		if isEjudgeSolvedStatus(s) {
+			t.Fatalf("ejudge: %d не должно быть решено", s)
+		}
+	}
 }

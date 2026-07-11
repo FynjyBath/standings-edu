@@ -342,3 +342,41 @@ func TestSingleTaskLink(t *testing.T) {
 		t.Fatal("пустые ссылки → ok должно быть false")
 	}
 }
+
+// Рамка в окне контеста провайдер-специфична. informatics (suppressBorder=true):
+// «зачтено» с рамкой, полный OK перебивает рамку. ejudge (suppressBorder=false):
+// OK с рамкой, «ожидает подтверждения» без; OK+ожидает → рамка остаётся.
+func TestWindowedTaskResultBorder(t *testing.T) {
+	start := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	at := start.Add(30 * time.Minute)
+	sub := func(border bool) source.TimedSubmission {
+		return source.TimedSubmission{At: at, Solved: true, Accepted: border}
+	}
+	border := func(subs []source.TimedSubmission, suppress bool) bool {
+		_, _, _, _, acc, _ := windowedTaskResult(subs, start, end, false, false, suppress)
+		return acc
+	}
+
+	// informatics: Accepted=зачтено(8), OK=неAccepted.
+	if !border([]source.TimedSubmission{sub(true)}, true) {
+		t.Fatal("informatics: зачтено → рамка")
+	}
+	if border([]source.TimedSubmission{sub(false)}, true) {
+		t.Fatal("informatics: OK → без рамки")
+	}
+	if border([]source.TimedSubmission{sub(true), sub(false)}, true) {
+		t.Fatal("informatics: зачтено+OK → OK перебивает, без рамки")
+	}
+
+	// ejudge: Accepted=OK(0), ожидает=неAccepted; ничего не перебивает OK.
+	if !border([]source.TimedSubmission{sub(true)}, false) {
+		t.Fatal("ejudge: OK → рамка")
+	}
+	if border([]source.TimedSubmission{sub(false)}, false) {
+		t.Fatal("ejudge: ожидает подтверждения → без рамки")
+	}
+	if !border([]source.TimedSubmission{sub(true), sub(false)}, false) {
+		t.Fatal("ejudge: OK+ожидает → рамка остаётся")
+	}
+}

@@ -224,14 +224,14 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 			}
 			a.attempted = true
 			solved := isEjudgeSolvedStatus(run.Status)
-			accepted := solved && isEjudgeAcceptedStatus(run.Status)
+			border := isEjudgeBorderStatus(run.Status)
 			if solved {
 				a.solved = true
-				if accepted {
+				if border {
 					a.acceptedSolved = true
-				} else {
-					a.okSolved = true
 				}
+				// У ejudge ничего не «перебивает» OK, поэтому okSolved не ставим:
+				// рамка показывается всегда, когда есть OK (см. isEjudgeBorderStatus).
 			}
 			score := domain.ClampScore(run.Score)
 			if !a.hasScore || score > a.score {
@@ -244,7 +244,7 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 					At:       time.Unix(run.RunTime, 0).UTC(),
 					Solved:   solved,
 					Score:    &submissionScore,
-					Accepted: accepted,
+					Accepted: border,
 				})
 			}
 		}
@@ -450,8 +450,23 @@ func (c *EjudgeClient) callAPI(ctx context.Context, method string, q url.Values,
 	return nil
 }
 
-// Статусы ejudge совпадают с informatics (informatics — тоже ejudge): 0 — OK,
-// 8 — «зачтено»; незавершённые — 11 (в очереди) и транзиентные 96..99.
-func isEjudgeSolvedStatus(status int) bool   { return isInformaticsSolvedStatus(status) }
-func isEjudgePendingStatus(status int) bool  { return isInformaticsPendingStatus(status) }
-func isEjudgeAcceptedStatus(status int) bool { return isInformaticsAcceptedStatus(status) }
+// Коды вердиктов у ejudge те же, что у informatics (это тот же движок), но
+// трактовка рамки другая. На ejudge (kod-u):
+//   - OK (0) — «зачтено» преподавателем → зелёный плюс + жёлтая рамка;
+//   - «ожидает подтверждения» (RUN_PENDING_REVIEW=16) и «зачтено на проверку»
+//     (RUN_ACCEPTED=8) — прошло тесты → зелёный плюс без рамки.
+//
+// Незавершённые (11 в очереди, 96..99 выполняется/компилируется) — не учитываем.
+func isEjudgeSolvedStatus(status int) bool {
+	switch status {
+	case informaticsStatusOK, informaticsStatusAccepted, informaticsStatusPendingReview:
+		return true
+	}
+	return false
+}
+
+// isEjudgeBorderStatus — жёлтая рамка у ejudge только на полном OK (0). Ничего
+// его не «перебивает», поэтому suppress-статуса у ejudge нет.
+func isEjudgeBorderStatus(status int) bool { return status == informaticsStatusOK }
+
+func isEjudgePendingStatus(status int) bool { return isInformaticsPendingStatus(status) }

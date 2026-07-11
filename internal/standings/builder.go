@@ -1002,7 +1002,11 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			// скрывается полностью). Нет данных о времени (ACMP) — падаем на
 			// обычную логику (всё время).
 			if windowActive {
-				if st, mainSc, practSc, up, acc, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI, frozen); hasData {
+				// У ejudge рамку даёт сам OK и ничто его не перебивает; у
+				// informatics/остальных полный OK снимает рамку «зачтено».
+				_, isEjudge := domain.ParseEjudgeTaskURL(col.normalizedURL)
+				suppressBorder := !isEjudge
+				if st, mainSc, practSc, up, acc, hasData := windowedTaskResult(combined.timed[col.normalizedURL], windowStart, windowEnd, isIOI, frozen, suppressBorder); hasData {
 					row.Statuses[i] = st
 					if st == domain.TaskStatusSolved {
 						row.SolvedCount++
@@ -1112,7 +1116,10 @@ func assignTaskContestPlaces(rows []domain.GeneratedRow, isIOI bool) {
 // только если он строго больше основного. frozen — таблица заморожена: end
 // здесь момент заморозки, и всё после него (включая дорешку) игнорируется
 // полностью, чтобы результаты не протекали до разморозки.
-func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool, frozen bool) (status string, mainScore, practiceScore *int, upsolved bool, accepted bool, hasData bool) {
+// suppressBorder=true (informatics): жёлтая рамка «зачтено» снимается, если есть
+// полный OK (solved без Accepted). suppressBorder=false (ejudge): рамку даёт сам
+// Accepted-вердикт (OK), и ничто его не перебивает.
+func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, isIOI bool, frozen bool, suppressBorder bool) (status string, mainScore, practiceScore *int, upsolved bool, accepted bool, hasData bool) {
 	if len(timed) == 0 {
 		return domain.TaskStatusNone, nil, nil, false, false, false
 	}
@@ -1120,6 +1127,7 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 	inSolved, inAttempted := false, false
 	afterSolved, afterAttempted := false, false
 	inOKSolved, afterOKSolved := false, false
+	inBorder, afterBorder := false, false
 	inBest, inHas := 0, false
 	afterBest, afterHas := 0, false
 
@@ -1138,7 +1146,9 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 			inAttempted = true
 			if sub.Solved {
 				inSolved = true
-				if !sub.Accepted {
+				if sub.Accepted {
+					inBorder = true
+				} else {
 					inOKSolved = true
 				}
 			}
@@ -1149,7 +1159,9 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 			afterAttempted = true
 			if sub.Solved {
 				afterSolved = true
-				if !sub.Accepted {
+				if sub.Accepted {
+					afterBorder = true
+				} else {
 					afterOKSolved = true
 				}
 			}
@@ -1159,12 +1171,12 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 		}
 	}
 
-	// «Зачтено»: решено, но без полного OK (у отображаемого решения — основного
-	// в окне, иначе дорешки).
+	// Рамка: есть вердикт-рамка (Accepted) и (для informatics) его не перебил
+	// полный OK. У отображаемого решения — основного в окне, иначе дорешки.
 	if inSolved {
-		accepted = !inOKSolved
+		accepted = inBorder && !(suppressBorder && inOKSolved)
 	} else if afterSolved {
-		accepted = !afterOKSolved
+		accepted = afterBorder && !(suppressBorder && afterOKSolved)
 	}
 
 	// Статус и базовая пометка дорешки — по факту решения/попытки.

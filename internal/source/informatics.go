@@ -454,12 +454,13 @@ func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTask
 	agg := aggByTask[taskURL]
 	agg.attempted = true
 	solved := isInformaticsSolvedStatus(run.EjudgeStatus)
-	accepted := solved && isInformaticsAcceptedStatus(run.EjudgeStatus)
+	border := isInformaticsBorderStatus(run.EjudgeStatus)
 	if solved {
 		agg.solved = true
-		if accepted {
+		if border {
 			agg.acceptedSolved = true
-		} else {
+		}
+		if isInformaticsSuppressStatus(run.EjudgeStatus) {
 			agg.okSolved = true
 		}
 	}
@@ -472,7 +473,7 @@ func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTask
 
 	if at, ok := parseInformaticsTime(run.CreateTime); ok {
 		submissionScore := score
-		agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore, Accepted: accepted})
+		agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore, Accepted: border})
 	}
 
 	aggByTask[taskURL] = agg
@@ -531,21 +532,19 @@ const (
 	informaticsStatusPendingReview = 16 // RUN_PENDING_REVIEW — «Ожидает подтверждения»
 )
 
-// isInformaticsSolvedStatus — задача засчитана (зелёный плюс): полный OK (0),
-// «зачтено» (8) и «ожидает подтверждения» (16). Последний — посылка прошла
-// тесты и ждёт ручного подтверждения; показываем как решённую.
+// informatics: решено (зелёный плюс) — полный OK (0) и «зачтено» (8).
 func isInformaticsSolvedStatus(ejudgeStatus int) bool {
-	switch ejudgeStatus {
-	case informaticsStatusOK, informaticsStatusAccepted, informaticsStatusPendingReview:
-		return true
-	}
-	return false
+	return ejudgeStatus == informaticsStatusOK || ejudgeStatus == informaticsStatusAccepted
 }
 
-// isInformaticsAcceptedStatus — «зачтено» (RUN_ACCEPTED=8), не полный OK: только
-// у него жёлтая рамка. У OK и «ожидает подтверждения» (16) рамки нет.
-func isInformaticsAcceptedStatus(ejudgeStatus int) bool {
+// informatics: жёлтая рамка — у «зачтено» (RUN_ACCEPTED=8), не полный OK.
+func isInformaticsBorderStatus(ejudgeStatus int) bool {
 	return ejudgeStatus == informaticsStatusAccepted
+}
+
+// informatics: полный OK (0) «перебивает» зачтено — тогда рамки нет.
+func isInformaticsSuppressStatus(ejudgeStatus int) bool {
+	return ejudgeStatus == informaticsStatusOK
 }
 
 func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, state informaticsAccountState) {

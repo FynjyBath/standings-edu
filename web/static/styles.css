@@ -477,7 +477,10 @@ button.summary-link-btn {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  /* Ограничиваем высоту, чтобы прокрутка шла внутри таблицы: тогда и левые
+     колонки (left:0), и шапка (thead, top:0) остаются закреплёнными. */
+  max-height: calc(100vh - 4.5rem);
   border-radius: 12px;
 }
 
@@ -505,6 +508,14 @@ button.summary-link-btn {
 
 .standings-table thead tr:first-child th {
   border-top: 1px solid color-mix(in srgb, var(--line) 56%, transparent 44%);
+}
+
+/* Закрепляем шапку по вертикали. Sticky на всём thead держит обе строки
+   (названия под-контестов + буквы задач) как единый блок. */
+.standings-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 
 .standings-table thead th {

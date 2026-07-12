@@ -16,6 +16,7 @@
         <tr>
           <th class="student-col">Ученик</th>
           <th class="count-col">Решено</th>
+          <th class="count-col">Сегодня</th>
           <th class="count-col">Посылок</th>
           <th class="count-col">За 7 дней</th>
           <th class="count-col">За 30 дней</th>
@@ -29,13 +30,14 @@
           <td class="student-name"><a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a></td>
           {{if .HasProfile}}
           <td class="solved-count">{{.Stats.TotalSolved}}</td>
+          <td class="solved-count">{{.Stats.SolvedToday}}</td>
           <td class="solved-count">{{.Stats.TotalSubmissions}}</td>
           <td class="solved-count">{{.Stats.Submissions7d}}</td>
           <td class="solved-count">{{.Stats.Submissions30d}}</td>
           <td class="solved-count">{{.Stats.ActiveDays}}</td>
           <td>{{with contestGeneratedAt .Stats.LastActivity}}{{.}}{{else}}—{{end}}</td>
           {{else}}
-          <td class="solved-count" colspan="6"><span class="grade-weight">профиль появится после генерации</span></td>
+          <td class="solved-count" colspan="7"><span class="grade-weight">профиль появится после генерации</span></td>
           {{end}}
         </tr>
         {{end}}

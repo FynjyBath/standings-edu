@@ -20,8 +20,9 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.6rem;">
     <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.TotalSolved}}</span><span style="font-size:0.82rem;color:var(--muted);">решено задач</span></div>
     <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.TotalSubmissions}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок (со временем)</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions7d}}</span><span style="font-size:0.82rem;color:var(--muted);">за 7 дней</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions30d}}</span><span style="font-size:0.82rem;color:var(--muted);">за 30 дней</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.SolvedToday}}</span><span style="font-size:0.82rem;color:var(--muted);">решено сегодня</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions7d}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок за 7 дней</span></div>
+    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions30d}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок за 30 дней</span></div>
     <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.ActiveDays}}</span><span style="font-size:0.82rem;color:var(--muted);">активных дней</span></div>
     <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.05rem;font-weight:700;line-height:1.2;color:var(--accent-strong);">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span style="font-size:0.82rem;color:var(--muted);">последняя активность</span></div>
   </div>
@@ -107,7 +108,7 @@
         <tr>
           <td>{{submissionTime .At}}</td>
           <td>{{siteName .Site}}</td>
-          <td><a href="{{.TaskURL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a></td>
+          <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer"{{if $sub}} title="Посылки ученика по задаче"{{end}}>{{.Label}}</a></td>
           <td>{{if .Solved}}<span style="color:var(--solved-text);font-weight:700;">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="grade-weight">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
         </tr>
         {{end}}

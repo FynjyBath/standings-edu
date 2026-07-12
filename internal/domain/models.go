@@ -780,6 +780,7 @@ type StudentActivityStats struct {
 	TotalSolved        int        `json:"total_solved"`
 	TotalAttempted     int        `json:"total_attempted"`
 	TotalSubmissions   int        `json:"total_submissions"`
+	SolvedToday        int        `json:"solved_today"`
 	Submissions7d      int        `json:"submissions_7d"`
 	Submissions30d     int        `json:"submissions_30d"`
 	ActiveDays         int        `json:"active_days"`

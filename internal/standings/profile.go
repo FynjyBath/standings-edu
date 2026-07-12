@@ -111,6 +111,7 @@ func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuse
 	// Метрики скорости: по задачам, решённым на сайтах со временем. Для каждой
 	// задачи — число посылок до первого «принято» (i+1); первая попытка = i==0.
 	sumAttempts := 0
+	todayMSK := now.In(moscowZone).Format("2006-01-02")
 	for _, subs := range st.timed {
 		ordered := append([]source.TimedSubmission(nil), subs...)
 		sort.Slice(ordered, func(i, j int) bool { return ordered[i].At.Before(ordered[j].At) })
@@ -120,6 +121,10 @@ func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuse
 				sumAttempts += i + 1
 				if i == 0 {
 					profile.Stats.FirstTrySolved++
+				}
+				// Задача, решённая впервые сегодня (по календарю MSK).
+				if sub.At.In(moscowZone).Format("2006-01-02") == todayMSK {
+					profile.Stats.SolvedToday++
 				}
 				break
 			}

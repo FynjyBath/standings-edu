@@ -60,6 +60,10 @@ func TestBuildStudentProfile(t *testing.T) {
 	if p.Stats.SolvedWithTimes != 3 || p.Stats.FirstTrySolved != 2 {
 		t.Fatalf("speed counts wrong: %+v", p.Stats)
 	}
+	// Решено сегодня (MSK): только inf3 решён за час до now; CF — ~2 дня назад.
+	if p.Stats.SolvedToday != 1 {
+		t.Fatalf("solved today wrong: %d (want 1)", p.Stats.SolvedToday)
+	}
 	if p.Stats.AvgAttemptsToSolve != 1.3 { // (2+1+1)/3 = 1.33 -> 1.3
 		t.Fatalf("avg attempts wrong: %v", p.Stats.AvgAttemptsToSolve)
 	}

@@ -125,3 +125,23 @@ func TestContestWindowText(t *testing.T) {
 		t.Fatalf("no start must be empty: %q", got)
 	}
 }
+
+func TestSubmissionLink(t *testing.T) {
+	accs := []domain.Account{
+		{Site: "codeforces", AccountID: "tourist"},
+		{Site: "informatics", AccountID: "849280"},
+	}
+	got := submissionLink("https://informatics.msk.ru/mod/statements/view.php?chapterid=160#1", accs)
+	want := "https://informatics.msk.ru/mod/statements/view.php?chapterid=160&submit&user_id=849280#1"
+	if got != want {
+		t.Fatalf("informatics link:\n got %q\nwant %q", got, want)
+	}
+	// Другой сайт → пусто (fallback на задачу делает шаблон).
+	if got := submissionLink("https://codeforces.com/problemset/problem/1/A", accs); got != "" {
+		t.Fatalf("codeforces → empty, got %q", got)
+	}
+	// Нет informatics-аккаунта → пусто.
+	if got := submissionLink("https://informatics.msk.ru/x#1", []domain.Account{{Site: "acmp", AccountID: "1"}}); got != "" {
+		t.Fatalf("no informatics acc → empty, got %q", got)
+	}
+}

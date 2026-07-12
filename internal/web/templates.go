@@ -49,6 +49,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"grade2Text":              grade2Text,
 			"numText":                 numText,
 			"submissionTime":          submissionTime,
+			"submissionLink":          submissionLink,
 			"siteName":                siteName,
 			"dayLabel":                dayLabel,
 			"sub":                     func(a, b int) int { return a - b },
@@ -172,6 +173,27 @@ func submissionURL(taskURL string, accounts map[string]string) string {
 		return u.String()
 	}
 	return ""
+}
+
+// submissionLink — ссылка на посылки ученика по задаче для профиля: собирает
+// карту сайт→account_id из аккаунтов ученика и зовёт submissionURL. Пусто —
+// сайт не поддерживается или нет аккаунта.
+func submissionLink(taskURL string, accounts []domain.Account) string {
+	if len(accounts) == 0 {
+		return ""
+	}
+	m := make(map[string]string, len(accounts))
+	for _, a := range accounts {
+		site := domain.NormalizeSite(a.Site)
+		id := strings.TrimSpace(a.AccountID)
+		if site == "" || id == "" {
+			continue
+		}
+		if _, ok := m[site]; !ok {
+			m[site] = id
+		}
+	}
+	return submissionURL(taskURL, m)
 }
 
 func numText(v float64) string {

@@ -109,8 +109,8 @@
             {{if .Subcontests}}
               {{range .Subcontests}}
                 {{range .Tasks}}
-                <th class="task-col">
-                  {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}
+                <th class="task-col{{if .Hidden}} task-hidden{{end}}"{{if .Hidden}} title="Скрытая задача — видна только по токену"{{end}}>
+                  {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}{{if .Hidden}} 🔒{{end}}
                 </th>
                 {{end}}
               {{end}}

@@ -589,7 +589,14 @@ func (b *Builder) expandCodeforcesContestRefs(ctx context.Context, data *domain.
 // без сборника). nil в значении — развернуть не удалось (задачи пропускаются).
 // В отличие от Codeforces отдельная таблица не строится: результаты берутся из
 // уже собранных посылок ученика по обычному сопоставлению URL.
-func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[int][]string {
+// expandedInformaticsProblem — развёрнутая задача сборника informatics: ссылка на
+// задачу и признак скрытой (затемнённой) задачи, чтобы сервер убрал её у учеников.
+type expandedInformaticsProblem struct {
+	URL    string
+	Hidden bool
+}
+
+func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[int][]expandedInformaticsProblem {
 	ids := make([]int, 0)
 	rawByID := make(map[int]string)
 	seen := make(map[int]struct{})
@@ -608,7 +615,7 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 		return nil
 	}
 
-	out := make(map[int][]string, len(ids))
+	out := make(map[int][]expandedInformaticsProblem, len(ids))
 	for _, sid := range ids {
 		_, client, ok := b.sources.ResolveSiteByTaskURL(rawByID[sid])
 		expander, canExpand := client.(source.StatementExpander)
@@ -623,14 +630,17 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 			out[sid] = nil
 			continue
 		}
-		urls := make([]string, 0, len(problems))
+		refs := make([]expandedInformaticsProblem, 0, len(problems))
 		for _, problem := range problems {
 			if problem.ChapterID <= 0 {
 				continue
 			}
-			urls = append(urls, fmt.Sprintf("https://informatics.msk.ru/mod/statements/view.php?chapterid=%d#1", problem.ChapterID))
+			refs = append(refs, expandedInformaticsProblem{
+				URL:    fmt.Sprintf("https://informatics.msk.ru/mod/statements/view.php?chapterid=%d#1", problem.ChapterID),
+				Hidden: problem.Hidden,
+			})
 		}
-		out[sid] = urls
+		out[sid] = refs
 	}
 	return out
 }
@@ -770,7 +780,7 @@ func linkableAccounts(accounts []domain.Account) map[string]string {
 	return out
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]string, ejudgeRefs map[string][]string) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]string) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	var windowStart, windowEnd time.Time
@@ -840,12 +850,13 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		}
 		// addNormalTask добавляет обычную задачу-колонку по её ссылке (результат
 		// берётся из посылок ученика по сопоставлению normalized_url).
-		addNormalTask := func(rawURL string) {
+		addNormalTask := func(rawURL string, hidden bool) {
 			normalized := domain.NormalizeTaskURL(rawURL)
 			task := domain.GeneratedTask{
 				Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
 				URL:           domain.RewriteInformaticsHost(rawURL, informaticsBase),
 				NormalizedURL: normalized,
+				Hidden:        hidden,
 			}
 			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
 			out.Tasks = append(out.Tasks, task)
@@ -885,8 +896,8 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			// Сборник informatics: разворачиваем в отдельные задачи-колонки
 			// (ссылка на саму задачу, без сборника). Каждая — обычная задача.
 			if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
-				for _, problemURL := range statementRefs[sid] {
-					addNormalTask(problemURL)
+				for _, problem := range statementRefs[sid] {
+					addNormalTask(problem.URL, problem.Hidden)
 				}
 				continue
 			}
@@ -894,12 +905,12 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			// Контест ejudge (contest_id без prob_id): разворачиваем в задачи.
 			if parsed, ok := domain.ParseEjudgeTaskURL(rawTaskURL); ok && parsed.ProbID == 0 {
 				for _, problemURL := range ejudgeRefs[domain.NormalizeTaskURL(rawTaskURL)] {
-					addNormalTask(problemURL)
+					addNormalTask(problemURL, false)
 				}
 				continue
 			}
 
-			addNormalTask(rawTaskURL)
+			addNormalTask(rawTaskURL, false)
 		}
 		generatedSubcontest.TaskCount = len(generatedSubcontest.Tasks)
 		out.Subcontests = append(out.Subcontests, generatedSubcontest)

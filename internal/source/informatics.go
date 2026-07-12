@@ -894,6 +894,9 @@ func (c *InformaticsAPIClient) buildTaskURL(problemID int) string {
 type InformaticsStatementProblem struct {
 	ChapterID int
 	Title     string
+	// Hidden — задача скрыта в сборнике (в оглавлении затемнена, класс
+	// dimmed_text). Ученикам не показывается, по токену жюри — показывается.
+	Hidden bool
 }
 
 // ParseInformaticsStatementID распознаёт ссылку на СБОРНИК informatics —
@@ -937,6 +940,8 @@ var (
 	informaticsActiveProblemRe = regexp.MustCompile(`(?is)problem_data[^>]*problem_id=['"](\d+)['"]`)
 	informaticsTagRe           = regexp.MustCompile(`(?is)<[^>]+>`)
 	informaticsWSRe            = regexp.MustCompile(`\s+`)
+	// Скрытая (затемнённая) задача сборника — название в <span class="dimmed_text">.
+	informaticsHiddenProblemRe = regexp.MustCompile(`(?i)dimmed_text`)
 )
 
 // FetchStatementProblems разворачивает сборник informatics (id) в упорядоченный
@@ -998,6 +1003,10 @@ func parseInformaticsStatementProblems(body []byte) ([]InformaticsStatementProbl
 	seen := make(map[int]struct{}, len(items))
 	for _, item := range items {
 		li := item[1]
+		// Скрытая задача сборника: в оглавлении её название затемнено
+		// (<span class="dimmed_text">x …</span>). Помечаем — на публичном виде её
+		// вырежет сервер, а по токену жюри задача остаётся видимой.
+		hidden := informaticsHiddenProblemRe.Match(li)
 		chapterID := 0
 		if m := informaticsChapterHrefRe.FindSubmatch(li); m != nil {
 			chapterID, _ = strconv.Atoi(string(m[1]))
@@ -1017,6 +1026,7 @@ func parseInformaticsStatementProblems(body []byte) ([]InformaticsStatementProbl
 		out = append(out, InformaticsStatementProblem{
 			ChapterID: chapterID,
 			Title:     strings.TrimSpace(title),
+			Hidden:    hidden,
 		})
 	}
 	return out, nil

@@ -475,6 +475,9 @@ type GeneratedTask struct {
 	Label         string `json:"label"`
 	URL           string `json:"url"`
 	NormalizedURL string `json:"normalized_url"`
+	// Hidden — задача скрыта в источнике (напр. затемнена в сборнике informatics).
+	// Сервер вырезает такие колонки из публичного вида, но отдаёт по токену жюри.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 type GeneratedSubcontest struct {
@@ -667,6 +670,141 @@ func (s *GeneratedGroupStandings) StripHiddenContests() {
 		}
 	}
 	s.Contests = kept
+}
+
+// StripHiddenTasks убирает из публичного ответа скрытые задачи-колонки
+// (GeneratedTask.Hidden) — их видно только по токену жюри. Для каждого контеста
+// вырезаются колонки из Tasks и Subcontests, у каждой строки — соответствующие
+// элементы параллельных массивов (Statuses/Scores/…), а счётчики решённых и
+// сумма баллов уменьшаются на вклад скрытых задач, чтобы числа сходились с
+// видимыми колонками. Оставшиеся задачи перенумеровываются (A, B, C…).
+//
+// Строки (Rows) в отдаваемой из кэша копии разделяются с оригиналом
+// (CloneForServe их не копирует), поэтому здесь для затронутых контестов строки
+// и их массивы пересобираются заново, без мутации общих срезов. Место (Place) и
+// штраф (Penalty) не пересчитываются: скрытые задачи ученикам недоступны, их
+// вклад в ранжирование в обычной ситуации нулевой.
+func (s *GeneratedGroupStandings) StripHiddenTasks() {
+	for ci := range s.Contests {
+		c := &s.Contests[ci]
+
+		hasHidden := false
+		for _, t := range c.Tasks {
+			if t.Hidden {
+				hasHidden = true
+				break
+			}
+		}
+		if !hasHidden {
+			continue
+		}
+
+		// keep[i] — оставить ли глобальную колонку i (в порядке Tasks/строк).
+		keep := make([]bool, len(c.Tasks))
+		for i, t := range c.Tasks {
+			keep[i] = !t.Hidden
+		}
+
+		// Пересобираем подконтесты и плоский список Tasks с перенумерацией.
+		newTasks := make([]GeneratedTask, 0, len(c.Tasks))
+		gi := 0
+		for si := range c.Subcontests {
+			sub := c.Subcontests[si]
+			newSub := make([]GeneratedTask, 0, len(sub.Tasks))
+			for _, t := range sub.Tasks {
+				if !t.Hidden {
+					t.Label = AlphabetLabel(len(newSub))
+					newSub = append(newSub, t)
+				}
+				gi++
+			}
+			c.Subcontests[si].Tasks = newSub
+			c.Subcontests[si].TaskCount = len(newSub)
+			newTasks = append(newTasks, newSub...)
+		}
+		c.Tasks = newTasks
+
+		// Пересобираем строки заново (общий с кэшем срез не мутируем).
+		newRows := make([]GeneratedRow, len(c.Rows))
+		for ri := range c.Rows {
+			newRows[ri] = stripRowHiddenTasks(c.Rows[ri], keep)
+		}
+		c.Rows = newRows
+	}
+}
+
+// stripRowHiddenTasks возвращает копию строки без скрытых колонок: параллельные
+// массивы фильтруются по keep, а SolvedCount/TotalScore уменьшаются на вклад
+// удалённых задач.
+func stripRowHiddenTasks(row GeneratedRow, keep []bool) GeneratedRow {
+	out := row // копия заголовочных полей; срезы переприсвоим ниже
+
+	pickStr := func(src []string) []string {
+		if src == nil {
+			return nil
+		}
+		dst := make([]string, 0, len(src))
+		for i, v := range src {
+			if i < len(keep) && keep[i] {
+				dst = append(dst, v)
+			}
+		}
+		return dst
+	}
+	pickIntPtr := func(src []*int) []*int {
+		if src == nil {
+			return nil
+		}
+		dst := make([]*int, 0, len(src))
+		for i, v := range src {
+			if i < len(keep) && keep[i] {
+				dst = append(dst, v)
+			}
+		}
+		return dst
+	}
+	pickBool := func(src []bool) []bool {
+		if src == nil {
+			return nil
+		}
+		dst := make([]bool, 0, len(src))
+		for i, v := range src {
+			if i < len(keep) && keep[i] {
+				dst = append(dst, v)
+			}
+		}
+		return dst
+	}
+
+	// Вычитаем вклад скрытых задач до фильтрации (по исходным индексам).
+	for i := range row.Statuses {
+		if i < len(keep) && keep[i] {
+			continue
+		}
+		if row.Statuses[i] == TaskStatusSolved && out.SolvedCount > 0 {
+			out.SolvedCount--
+		}
+		if i < len(row.Scores) {
+			contribution := 0
+			if row.Scores[i] != nil {
+				contribution = *row.Scores[i]
+			}
+			if i < len(row.PracticeScores) && row.PracticeScores[i] != nil && *row.PracticeScores[i] > contribution {
+				contribution = *row.PracticeScores[i]
+			}
+			out.TotalScore -= contribution
+		}
+	}
+	if out.TotalScore < 0 {
+		out.TotalScore = 0
+	}
+
+	out.Statuses = pickStr(row.Statuses)
+	out.Scores = pickIntPtr(row.Scores)
+	out.PracticeScores = pickIntPtr(row.PracticeScores)
+	out.Upsolved = pickBool(row.Upsolved)
+	out.Accepted = pickBool(row.Accepted)
+	return out
 }
 
 // CloneForServe возвращает копию, которую безопасно отдавать из кэша: серверные

@@ -63,3 +63,33 @@ func TestParseInformaticsStatementProblems(t *testing.T) {
 		t.Errorf("linked title = %q", problems[1].Title)
 	}
 }
+
+// Скрытые (затемнённые) задачи сборника — с классом dimmed_text — попадают в
+// список, но помечаются Hidden (сервер уберёт их у учеников, оставит по токену).
+func TestParseInformaticsStatementProblemsMarksHidden(t *testing.T) {
+	html := []byte(`
+<div class="statements_toc statements_toc_alpha clearfix"><ul>
+<li><a href="view.php?id=28704&amp;chapterid=843"><b>C.</b> Простая</a></li>
+<li><a href="view.php?id=28704&amp;chapterid=203"><b>G.</b> Мячик</a></li>
+<li><a href="view.php?id=28704&amp;chapterid=844"><span class="dimmed_text">x Хитрая</span></a></li>
+<li><a href="view.php?id=28704&amp;chapterid=842"><span class="dimmed_text">x Последняя цифра</span></a></li>
+</ul></div>`)
+
+	problems, err := parseInformaticsStatementProblems(html)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	want := []struct {
+		id     int
+		hidden bool
+	}{{843, false}, {203, false}, {844, true}, {842, true}}
+	if len(problems) != len(want) {
+		t.Fatalf("got %d problems, want %d: %+v", len(problems), len(want), problems)
+	}
+	for i, w := range want {
+		if problems[i].ChapterID != w.id || problems[i].Hidden != w.hidden {
+			t.Errorf("problem[%d] = {id=%d hidden=%v}, want {id=%d hidden=%v}",
+				i, problems[i].ChapterID, problems[i].Hidden, w.id, w.hidden)
+		}
+	}
+}

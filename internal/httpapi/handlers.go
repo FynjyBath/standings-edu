@@ -175,8 +175,8 @@ func (h *Handlers) mergeCombinedMembers(slug string, gf domain.GroupFile, visiti
 // applyFreezeView решает, какую версию замороженных таблиц отдавать: с верным
 // group_secret_token (?token=…) — полную (просмотр жюри), иначе — публичную
 // замороженную, вырезая полные варианты из ответа. Также по тому же токену
-// показываются скрытые (Hidden) контесты, а без него — вырезаются. Возвращает
-// true при токенном просмотре.
+// показываются скрытые (Hidden) контесты и скрытые задачи-колонки, а без него —
+// вырезаются. Возвращает true при токенном просмотре.
 func (h *Handlers) applyFreezeView(standings *domain.GeneratedGroupStandings, slug string, r *http.Request) bool {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if token != "" && h.groupTokenValid(slug, token) {
@@ -185,6 +185,7 @@ func (h *Handlers) applyFreezeView(standings *domain.GeneratedGroupStandings, sl
 	}
 	standings.StripFullRows()
 	standings.StripHiddenContests()
+	standings.StripHiddenTasks()
 	return false
 }
 

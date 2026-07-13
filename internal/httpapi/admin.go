@@ -1082,6 +1082,7 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 		}
 		rows = append(rows, AdminManualGradeRow{StudentID: studentID, PublicName: publicName, Values: values})
 	}
+	sortManualGradeRows(rows)
 
 	// Конфиг оценок как есть (или пустой каркас) — для формы-конструктора столбцов.
 	cfg := groupFile.Grades
@@ -1155,6 +1156,18 @@ func (h *Handlers) groupTableNames(slug string) []string {
 		}
 	}
 	return out
+}
+
+// sortManualGradeRows сортирует строки таблиц ручного заполнения по имени
+// ученика (без учёта регистра, ё=е) — так удобнее искать при вводе. Порядок
+// в самих таблицах standings не меняется.
+func sortManualGradeRows(rows []AdminManualGradeRow) {
+	norm := func(s string) string {
+		return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "ё", "е")
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return norm(rows[i].PublicName) < norm(rows[j].PublicName)
+	})
 }
 
 func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) {

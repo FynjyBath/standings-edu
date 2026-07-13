@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -303,6 +304,7 @@ func (h *Handlers) JuryGradesPage(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, AdminManualGradeRow{StudentID: studentID, PublicName: publicName, Values: values})
 	}
+	sortManualGradeRows(rows)
 
 	page := JuryGradesPageData{
 		PageTitle:  "Оценки (жюри) — " + title,
@@ -400,6 +402,8 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, JuryKonduitRow{Name: name, Vals: make([]string, len(labels))})
 	}
+	// Для удобства заполнения строки — по алфавиту ФИО.
+	sort.SliceStable(rows, func(i, j int) bool { return normName(rows[i].Name) < normName(rows[j].Name) })
 
 	labelsBlob, err := json.Marshal(labels)
 	if err != nil {

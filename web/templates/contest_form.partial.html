@@ -266,16 +266,21 @@
       }
       head.appendChild(document.createElement("th"));
       manualGridBody().innerHTML = "";
+      var normName = function (s) { return (s || "").toLowerCase().replace(/ё/g, "е").trim(); };
       var seen = {};
+      var all = [];
       parsed.rows.forEach(function (r) {
-        seen[r[0].toLowerCase().replace(/ё/g, "е")] = true;
-        manualAddRow(r[0], r.slice(1));
+        seen[normName(r[0])] = true;
+        all.push({ name: r[0], vals: r.slice(1) });
       });
       // Ученики группы, которых ещё нет в таблице, — пустыми строками.
       manualStudents.forEach(function (s) {
-        if (!seen[s.name.toLowerCase().replace(/ё/g, "е")]) manualAddRow(s.name, []);
+        if (!seen[normName(s.name)]) all.push({ name: s.name, vals: [] });
       });
-      if (!parsed.rows.length && !manualStudents.length) manualAddRow("", []);
+      // Для удобства заполнения — по алфавиту ФИО.
+      all.sort(function (a, b) { return normName(a.name) < normName(b.name) ? -1 : normName(a.name) > normName(b.name) ? 1 : 0; });
+      all.forEach(function (r) { manualAddRow(r.name, r.vals); });
+      if (!all.length) manualAddRow("", []);
     }
     function manualSetMode(mode) {
       manualMode = mode;

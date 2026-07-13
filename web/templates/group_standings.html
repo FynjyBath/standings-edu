@@ -36,7 +36,25 @@
     {{end}}
     <span id="jury-status" class="admin-editor-status"></span>
   </div>
-  <p class="empty-hint">Панель жюри: добавление уже созданных контестов (сверху списка) и порядок — стрелками у контестов. Таблицы обновятся после ближайшей генерации.</p>
+  <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
+    <label style="display:flex;align-items:center;gap:0.4rem;">
+      <span>Новый кондуит:</span>
+      <input type="text" id="jury-konduit-title" placeholder="Название" style="max-width:14rem;" />
+    </label>
+    <label style="display:flex;align-items:center;gap:0.4rem;">
+      <span>задач:</span>
+      <input type="number" id="jury-konduit-count" min="1" max="200" step="1" value="10" style="max-width:4.5rem;" />
+    </label>
+    <button type="button" id="jury-konduit-create" class="admin-btn admin-btn--secondary" title="Создаёт таблицу ручного ввода оценок (кондуит) и сразу открывает её редактор.">Создать кондуит</button>
+  </div>
+  {{if .JuryNewKonduits}}
+  <p class="empty-hint">Новые кондуиты (появятся в таблицах после генерации, заполнять можно уже сейчас):
+    {{range .JuryNewKonduits}}
+    <a class="summary-link-btn" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}&token={{$.Token}}">✏️ {{.Title}}</a>
+    {{end}}
+  </p>
+  {{end}}
+  <p class="empty-hint">Панель жюри: добавление уже созданных контестов (сверху списка), создание кондуитов и порядок — стрелками у контестов. Таблицы обновятся после ближайшей генерации.</p>
   {{end}}
 </section>
 
@@ -215,6 +233,20 @@
           .then(function () { location.reload(); })
           .catch(function (err) { setStatus(err.message, true); });
       });
+    });
+    // Создание кондуита: название + число задач; после создания сразу редактор.
+    var konduitBtn = document.getElementById("jury-konduit-create");
+    if (konduitBtn) konduitBtn.addEventListener("click", function () {
+      var title = (document.getElementById("jury-konduit-title").value || "").trim();
+      var count = parseInt(document.getElementById("jury-konduit-count").value, 10);
+      if (!title) { setStatus("Укажите название кондуита", true); return; }
+      if (isNaN(count) || count < 1) { setStatus("Укажите число задач", true); return; }
+      setStatus("Создание…", false);
+      post("/api/jury/group/konduit/create", { slug: slug, token: token, title: title, task_count: count })
+        .then(function (p) {
+          location.href = "/standings/" + encodeURIComponent(slug) + "/jury-konduit?id=" + encodeURIComponent(p.id) + "&token=" + encodeURIComponent(token);
+        })
+        .catch(function (err) { setStatus(err.message, true); });
     });
   })();
 </script>

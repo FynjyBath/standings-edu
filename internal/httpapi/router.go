@@ -56,6 +56,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/jury/group/contests/move", handlers.SerializeDataWrite(handlers.JuryContestMove))
 	mux.HandleFunc("POST /api/jury/group/grades/save", handlers.SerializeDataWrite(handlers.JuryGradesSave))
 	mux.HandleFunc("POST /api/jury/group/konduit/save", handlers.SerializeDataWrite(handlers.JuryKonduitSave))
+	mux.HandleFunc("POST /api/jury/group/konduit/create", handlers.SerializeDataWrite(handlers.JuryKonduitCreate))
 	mux.HandleFunc("GET /standings/{group_name}/jury-grades", handlers.JuryGradesPage)
 	mux.HandleFunc("GET /standings/{group_name}/jury-konduit", handlers.JuryKonduitPage)
 	mux.HandleFunc("GET /standings", handlers.IndexPage)

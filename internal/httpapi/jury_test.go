@@ -264,6 +264,58 @@ func TestJuryKonduitSharedAcrossGroups(t *testing.T) {
 	}
 }
 
+// Создание кондуита жюри: только название и число задач; inline manual_table
+// с автоматическим id добавляется в начало списка; редактор сразу работает.
+func TestJuryKonduitCreate(t *testing.T) {
+	h, dataDir := juryTestSetup(t)
+
+	// Валидация.
+	if code, _ := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "token": "tok", "title": "  ", "task_count": 5}); code == http.StatusOK {
+		t.Fatal("empty title must fail")
+	}
+	if code, _ := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "token": "tok", "title": "X", "task_count": 0}); code == http.StatusOK {
+		t.Fatal("zero tasks must fail")
+	}
+	if code, _ := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "token": "BAD", "title": "X", "task_count": 5}); code != http.StatusForbidden {
+		t.Fatal("bad token must be rejected")
+	}
+
+	code, resp := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "token": "tok", "title": "Дз №3", "task_count": 5})
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("create: %d %v", code, resp)
+	}
+	id, _ := resp["id"].(string)
+	if !strings.HasPrefix(id, "konduit-") {
+		t.Fatalf("auto id expected, got %q", id)
+	}
+
+	// Запись — inline manual_table в начале списка, только нужные поля.
+	var entries []map[string]any
+	blob, _ := os.ReadFile(filepath.Join(dataDir, "groups", "g1", "contests.json"))
+	_ = json.Unmarshal(blob, &entries)
+	first := entries[0]
+	if first["id"] != id || first["provider"] != "manual_table" || first["title"] != "Дз №3" || first["score_system"] != "edu" {
+		t.Fatalf("created entry wrong: %v", first)
+	}
+	cfg := first["provider_config"].(map[string]any)
+	if cfg["task_count"].(float64) != 5 {
+		t.Fatalf("task_count wrong: %v", cfg)
+	}
+	if _, hasTable := cfg["table"]; hasTable {
+		t.Fatalf("new konduit must have no table in config: %v", cfg)
+	}
+
+	// Редактор открывается сразу: 5 колонок, ученики группы подставлены.
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1/jury-konduit?id="+id+"&token=tok", nil)
+	req.SetPathValue("group_name", "g1")
+	rec := httptest.NewRecorder()
+	h.JuryKonduitPage(rec, req)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, "Иванов Иван") || !strings.Contains(body, "Дз №3") {
+		t.Fatalf("editor must open for created konduit: code=%d", rec.Code)
+	}
+}
+
 // Ручные оценки по токену: пишутся только известные столбцы и ученики группы.
 func TestJuryGradesSave(t *testing.T) {
 	h, dataDir := juryTestSetup(t)

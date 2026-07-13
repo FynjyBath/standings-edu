@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"net/http"
 	"sort"
@@ -108,6 +111,96 @@ func (h *Handlers) JuryContestMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// JuryKonduitCreate создаёт новый кондуит группы (жюри, по токену): только
+// название и число задач. Контест всегда inline manual_table (edu, плюсики),
+// id генерируется автоматически, добавляется в начало списка. Оценки жюри
+// заполняет затем в редакторе кондуита.
+func (h *Handlers) JuryKonduitCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug      string `json:"slug"`
+		Token     string `json:"token"`
+		Title     string `json:"title"`
+		TaskCount int    `json:"task_count"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	title := strings.TrimSpace(req.Title)
+	if !h.juryAuthorized(slug, req.Token) {
+		juryDeny(w)
+		return
+	}
+	if title == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "укажите название кондуита"})
+		return
+	}
+	if req.TaskCount < 1 || req.TaskCount > 200 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "число задач должно быть от 1 до 200"})
+		return
+	}
+	if !h.juryCanManageContests(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "у объединённой группы нет своих контестов"})
+		return
+	}
+
+	entries, err := h.loadGroupContestEntries(slug)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	taken := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		taken[e.id] = struct{}{}
+	}
+	id, err := generateKonduitID(taken)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	encoded, err := json.Marshal(map[string]any{
+		"id":              id,
+		"title":           title,
+		"score_system":    "edu",
+		"source_type":     domain.ContestTypeProvider,
+		"provider":        source.ManualTableProviderID,
+		"provider_config": map[string]any{"task_count": req.TaskCount},
+		"subcontests":     []any{},
+		"update":          true,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	out := make([]json.RawMessage, 0, len(entries)+1)
+	out = append(out, encoded)
+	for _, e := range entries {
+		out = append(out, e.raw)
+	}
+	if err := h.writeGroupContestRaw(slug, out); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+// generateKonduitID — уникальный id нового кондуита: konduit-<hex>.
+func generateKonduitID(taken map[string]struct{}) (string, error) {
+	for range 20 {
+		buf := make([]byte, 4)
+		if _, err := rand.Read(buf); err != nil {
+			return "", err
+		}
+		id := "konduit-" + hex.EncodeToString(buf)
+		if _, dup := taken[id]; !dup {
+			return id, nil
+		}
+	}
+	return "", errors.New("не удалось подобрать уникальный id")
 }
 
 // JuryGradesSave сохраняет ручные оценки группы (жюри, по токену).
@@ -649,15 +742,40 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData) {
 
 	inGroup := make(map[string]struct{}, len(entries))
 	konduits := make(map[string]bool)
+	konduitTitles := make(map[string]string)
 	for _, e := range entries {
 		inGroup[e.id] = struct{}{}
-		if _, _, ok := h.juryKonduitEntryFromRaw(e); ok {
+		if obj, _, ok := h.juryKonduitEntryFromRaw(e); ok {
 			konduits[e.id] = true // inline-кондуит группы
+			var t string
+			if json.Unmarshal(obj["title"], &t) == nil && strings.TrimSpace(t) != "" {
+				konduitTitles[e.id] = strings.TrimSpace(t)
+			}
 		} else if !e.inline && globalManual[e.id] {
 			konduits[e.id] = true // ссылка на глобальный кондуит (оценки общие)
 		}
 	}
 	page.JuryKonduits = konduits
+
+	// Кондуиты, ещё не попавшие в сгенерированные таблицы (только созданы):
+	// ссылка на редактор — из панели, ведь секции контеста на странице нет.
+	generated := make(map[string]struct{}, len(page.Standings.Contests))
+	for _, c := range page.Standings.Contests {
+		generated[c.ID] = struct{}{}
+	}
+	for _, e := range entries {
+		if !konduits[e.id] {
+			continue
+		}
+		if _, ok := generated[e.id]; ok {
+			continue
+		}
+		title := konduitTitles[e.id]
+		if title == "" {
+			title = e.id
+		}
+		page.JuryNewKonduits = append(page.JuryNewKonduits, AdminGroupContestOption{ID: e.id, Title: title})
+	}
 
 	for _, c := range globals {
 		id := strings.TrimSpace(c.ID)

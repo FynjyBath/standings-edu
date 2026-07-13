@@ -695,6 +695,9 @@ type GroupPageData struct {
 	JuryAddable   []AdminGroupContestOption
 	JuryKonduits  map[string]bool
 	JuryHasGrades bool
+	// JuryNewKonduits — кондуиты группы, которых ещё нет в сгенерированных
+	// таблицах (только что созданы): ссылки на редактор показываются в панели.
+	JuryNewKonduits []AdminGroupContestOption
 }
 
 type ParticipantRow struct {

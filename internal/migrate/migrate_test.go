@@ -377,3 +377,224 @@ func TestImportRejectsBadSlug(t *testing.T) {
 		t.Fatal("ничего не должно быть записано для битого slug")
 	}
 }
+
+// readJSON читает JSON-файл в v; помечает fail при ошибке.
+func readJSONFile(t *testing.T, path string, v any) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+}
+
+// Полный экспорт → импорт на чистый сервер восстанавливает ручные оценки
+// (grades_manual.json) и таблицы кондуитов (manual_tables.json) — оба
+// глобальные и inline. Определения контестов остаются чистыми (без table).
+func TestRoundTripManualState(t *testing.T) {
+	src := t.TempDir()
+	write(t, filepath.Join(src, "students.json"),
+		`[{"id":"ivanov","full_name":"Иванов Иван","public_name":"Иванов И."}]`)
+	// Глобальный кондуит: определение чистое, таблица в отдельном файле.
+	write(t, filepath.Join(src, "contests.json"),
+		`[{"id":"gk","title":"Общий кондуит","score_system":"edu","source_type":"provider",
+		   "provider":"manual_table","provider_config":{"task_count":2}}]`)
+	write(t, filepath.Join(src, "manual_tables.json"),
+		`{"gk":"ФИО\t1\t2\nИванов Иван\t1\t+\n"}`)
+	write(t, filepath.Join(src, "groups", "grp", "group.json"),
+		`{"title":"Группа","student_ids":["ivanov"],
+		  "grades":{"columns":[{"id":"act","title":"Активность","weight":1,"type":"manual"}]}}`)
+	// Ссылка на глобальный кондуит + inline-кондуит.
+	write(t, filepath.Join(src, "groups", "grp", "contests.json"),
+		`[{"id":"gk","update":true},
+		  {"id":"ik","title":"Инлайн","score_system":"edu","source_type":"provider",
+		   "provider":"manual_table","provider_config":{"task_count":1},"update":true}]`)
+	write(t, filepath.Join(src, "groups", "grp", "manual_tables.json"),
+		`{"ik":"ФИО\t1\nИванов Иван\t1\n"}`)
+	write(t, filepath.Join(src, "groups", "grp", "grades_manual.json"),
+		`{"act":{"ivanov":8.5}}`)
+
+	bundle, err := BuildBundle(src, Selection{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Явные поля бандла заполнены; определения контестов без таблиц.
+	if bundle.ManualTables["gk"] == "" {
+		t.Fatalf("bundle.ManualTables must carry gk: %v", bundle.ManualTables)
+	}
+	for _, c := range bundle.Contests {
+		if _, table, ok := legacyTableFromContest(c); ok {
+			t.Fatalf("bundle contest defs must be clean, got table %q", table)
+		}
+	}
+
+	dst := t.TempDir()
+	rep, err := ImportBundle(dst, bundle, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Глобальная таблица кондуита восстановлена.
+	var gt map[string]string
+	readJSONFile(t, filepath.Join(dst, "manual_tables.json"), &gt)
+	if !strings.Contains(gt["gk"], "Иванов Иван") {
+		t.Fatalf("global manual table not restored: %v", gt)
+	}
+	// contests.json без таблицы в конфиге (проверяем разбором, не подстрокой).
+	var defs []json.RawMessage
+	readJSONFile(t, filepath.Join(dst, "contests.json"), &defs)
+	for _, c := range defs {
+		if _, table, ok := legacyTableFromContest(c); ok {
+			t.Fatalf("global contest def must be clean, got table %q", table)
+		}
+	}
+	// Inline-таблица группы.
+	var it map[string]string
+	readJSONFile(t, filepath.Join(dst, "groups", "grp", "manual_tables.json"), &it)
+	if !strings.Contains(it["ik"], "Иванов Иван") {
+		t.Fatalf("inline table not restored: %v", it)
+	}
+	// Ручные оценки.
+	var mg map[string]map[string]float64
+	readJSONFile(t, filepath.Join(dst, "groups", "grp", "grades_manual.json"), &mg)
+	if mg["act"]["ivanov"] != 8.5 {
+		t.Fatalf("manual grades not restored: %v", mg)
+	}
+	// Повторный импорт того же бандла — ничего не ломает, оценки те же (max).
+	if _, err := ImportBundle(dst, bundle, Selection{}); err != nil {
+		t.Fatal(err)
+	}
+	readJSONFile(t, filepath.Join(dst, "groups", "grp", "grades_manual.json"), &mg)
+	if mg["act"]["ivanov"] != 8.5 {
+		t.Fatalf("re-import changed grades: %v", mg)
+	}
+	_ = rep
+}
+
+// Слияние в существующее: оценки на целевом и в бандле склеиваются в максимум.
+func TestImportMergesManualMax(t *testing.T) {
+	// Целевой сервер: у контеста gk уже есть оценки одному ученику.
+	dst := t.TempDir()
+	write(t, filepath.Join(dst, "students.json"),
+		`[{"id":"ivanov","full_name":"Иванов Иван","public_name":"Иванов И."},
+		  {"id":"petrov","full_name":"Петров Пётр","public_name":"Петров П."}]`)
+	write(t, filepath.Join(dst, "contests.json"),
+		`[{"id":"gk","title":"К","score_system":"edu","source_type":"provider",
+		   "provider":"manual_table","provider_config":{"task_count":2}}]`)
+	write(t, filepath.Join(dst, "manual_tables.json"),
+		`{"gk":"ФИО\t1\t2\nИванов Иван\t1\t\n"}`)
+	write(t, filepath.Join(dst, "groups", "grp", "group.json"),
+		`{"title":"Г","student_ids":["ivanov","petrov"],
+		  "grades":{"columns":[{"id":"act","title":"А","weight":1,"type":"manual"}]}}`)
+	write(t, filepath.Join(dst, "groups", "grp", "contests.json"), `[{"id":"gk","update":true}]`)
+	write(t, filepath.Join(dst, "groups", "grp", "grades_manual.json"), `{"act":{"ivanov":5}}`)
+
+	// Источник: другие/лучшие оценки тем же и новым ученикам.
+	src := t.TempDir()
+	write(t, filepath.Join(src, "students.json"),
+		`[{"id":"ivanov","full_name":"Иванов Иван","public_name":"Иванов И."},
+		  {"id":"petrov","full_name":"Петров Пётр","public_name":"Петров П."}]`)
+	write(t, filepath.Join(src, "contests.json"),
+		`[{"id":"gk","title":"К","score_system":"edu","source_type":"provider",
+		   "provider":"manual_table","provider_config":{"task_count":2}}]`)
+	write(t, filepath.Join(src, "manual_tables.json"),
+		`{"gk":"ФИО\t1\t2\nИванов Иван\t\t1\nПетров Пётр\t1\t\n"}`)
+	write(t, filepath.Join(src, "groups", "grp", "group.json"),
+		`{"title":"Г","student_ids":["ivanov","petrov"],
+		  "grades":{"columns":[{"id":"act","title":"А","weight":1,"type":"manual"}]}}`)
+	write(t, filepath.Join(src, "groups", "grp", "contests.json"), `[{"id":"gk","update":true}]`)
+	write(t, filepath.Join(src, "groups", "grp", "grades_manual.json"), `{"act":{"ivanov":3,"petrov":9}}`)
+
+	bundle, err := BuildBundle(src, Selection{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportBundle(dst, bundle, Selection{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Кондуит: Иванов — max("1","")=1 и max("","1")=1; Петров добавлен.
+	var gt map[string]string
+	readJSONFile(t, filepath.Join(dst, "manual_tables.json"), &gt)
+	_, rows := splitForTest(gt["gk"])
+	if rows["Иванов Иван"][0] != "1" || rows["Иванов Иван"][1] != "1" {
+		t.Fatalf("Иванов merged wrong: %v", rows["Иванов Иван"])
+	}
+	if rows["Петров Пётр"][0] != "1" {
+		t.Fatalf("Петров not merged in: %v", rows)
+	}
+	// Ручная оценка: max(5,3)=5 у Иванова; Петрову добавлено 9.
+	var mg map[string]map[string]float64
+	readJSONFile(t, filepath.Join(dst, "groups", "grp", "grades_manual.json"), &mg)
+	if mg["act"]["ivanov"] != 5 || mg["act"]["petrov"] != 9 {
+		t.Fatalf("grades merge wrong: %v", mg)
+	}
+}
+
+// splitForTest разбирает TSV в map ФИО -> ячейки (для проверок в тестах).
+func splitForTest(tsv string) ([]string, map[string][]string) {
+	lines := strings.Split(strings.TrimRight(tsv, "\n"), "\n")
+	byName := map[string][]string{}
+	var labels []string
+	for i, ln := range lines {
+		cells := strings.Split(ln, "\t")
+		if i == 0 {
+			labels = cells[1:]
+			continue
+		}
+		byName[cells[0]] = cells[1:]
+	}
+	return labels, byName
+}
+
+// Бандл v1 (таблица кондуита внутри provider_config) импортируется корректно:
+// таблица извлекается в manual_tables.json, определение чистится.
+func TestImportLegacyV1Bundle(t *testing.T) {
+	dst := t.TempDir()
+	bundle := &Bundle{
+		Version: 1,
+		Contests: []json.RawMessage{json.RawMessage(
+			`{"id":"gk","title":"К","score_system":"edu","source_type":"provider",
+			  "provider":"manual_table","provider_config":{"task_count":1,"table":"ФИО\t1\nИванов Иван\t+\n"}}`)},
+		Groups: []BundleGroup{{
+			Slug:  "grp",
+			Group: json.RawMessage(`{"title":"Г","student_ids":[]}`),
+			Contests: []json.RawMessage{
+				json.RawMessage(`{"id":"gk","update":true}`),
+				json.RawMessage(`{"id":"ik","title":"Инлайн","score_system":"edu","source_type":"provider","provider":"manual_table","provider_config":{"task_count":1,"table":"ФИО\t1\nИванов Иван\t1\n"},"update":true}`),
+			},
+		}},
+	}
+	if _, err := ImportBundle(dst, bundle, Selection{}); err != nil {
+		t.Fatal(err)
+	}
+	// Глобальная таблица извлечена в файл.
+	var gt map[string]string
+	readJSONFile(t, filepath.Join(dst, "manual_tables.json"), &gt)
+	if !strings.Contains(gt["gk"], "Иванов Иван") {
+		t.Fatalf("legacy global table not extracted: %v", gt)
+	}
+	// Inline-таблица извлечена в файл группы.
+	var it map[string]string
+	readJSONFile(t, filepath.Join(dst, "groups", "grp", "manual_tables.json"), &it)
+	if !strings.Contains(it["ik"], "Иванов Иван") {
+		t.Fatalf("legacy inline table not extracted: %v", it)
+	}
+	// Определения контестов очищены.
+	var gdefs []json.RawMessage
+	readJSONFile(t, filepath.Join(dst, "contests.json"), &gdefs)
+	for _, c := range gdefs {
+		if _, table, ok := legacyTableFromContest(c); ok {
+			t.Fatalf("global def not cleaned: %q", table)
+		}
+	}
+	var cdefs []json.RawMessage
+	readJSONFile(t, filepath.Join(dst, "groups", "grp", "contests.json"), &cdefs)
+	for _, c := range cdefs {
+		if _, table, ok := legacyTableFromContest(c); ok {
+			t.Fatalf("group def not cleaned: %q", table)
+		}
+	}
+}

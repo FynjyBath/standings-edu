@@ -193,3 +193,56 @@ func TestManualTableProviderBuildStandings(t *testing.T) {
 		t.Fatalf("sort: %v, %v", out.Rows[0].PublicName, out.Rows[1].PublicName)
 	}
 }
+
+func TestMergeManualTablesMax(t *testing.T) {
+	// Разные ученики, пересечение по одному — максимум по ячейкам.
+	a := "ФИО\t1\t2\t3\nИванов Иван\t1\t\t+\nПетров Пётр\t\t1\t\n"
+	b := "ФИО\t1\t2\t3\nИванов Иван\t\t1\t2\nСидоров С\t1\t1\t1\n"
+	got := MergeManualTablesMax(a, b)
+	_, rows := SplitManualTable(got, 0)
+	byName := map[string][]string{}
+	for _, r := range rows {
+		byName[r[0]] = r[1:]
+	}
+	// Иванов: max("1","") , max("","1") , max("+","2")=2
+	if v := byName["Иванов Иван"]; v[0] != "1" || v[1] != "1" || v[2] != "2" {
+		t.Fatalf("Иванов merge: %v", v)
+	}
+	if _, ok := byName["Петров Пётр"]; !ok {
+		t.Fatal("строка только из A должна остаться")
+	}
+	if _, ok := byName["Сидоров С"]; !ok {
+		t.Fatal("строка только из B должна остаться")
+	}
+	// Идемпотентность: повторное слияние того же результата ничего не меняет.
+	if again := MergeManualTablesMax(got, got); again != got {
+		t.Fatalf("merge не идемпотентен:\n%q\n%q", got, again)
+	}
+	// Слияние с пустой таблицей — нормализованная копия непустой (идемпотентно).
+	if MergeManualTablesMax(got, "") != got {
+		t.Fatal("слияние с пустой должно вернуть ту же таблицу")
+	}
+	if MergeManualTablesMax("", "") != "" {
+		t.Fatal("две пустые → пусто")
+	}
+}
+
+func TestManualCellMax(t *testing.T) {
+	cases := []struct{ a, b, want string }{
+		{"", "1", "1"},
+		{"1", "", "1"},
+		{"", "", ""},
+		{"1", "2", "2"},
+		{"2", "1", "2"},
+		{"+", "1", "+"}, // равный ранг (1) → первая
+		{"+", "5", "5"}, // 5 > 1
+		{"", "0", "0"},  // записанный ноль лучше пустоты
+		{"0", "±", "0"}, // равный ранг 0 → первая
+		{"±", "", "±"},  // попытка лучше пустоты
+	}
+	for _, c := range cases {
+		if got := manualCellMax(c.a, c.b); got != c.want {
+			t.Errorf("manualCellMax(%q,%q)=%q want %q", c.a, c.b, got, c.want)
+		}
+	}
+}

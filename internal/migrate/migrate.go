@@ -26,8 +26,11 @@ import (
 	"standings-edu/internal/studentintake"
 )
 
-// BundleVersion — версия формата бандла.
-const BundleVersion = 1
+// BundleVersion — версия формата бандла. v2 добавил явные поля manual_tables
+// (оценки кондуитов) и manual_grades (ручные оценки столбцов); v1-бандлы
+// (таблицы кондуитов были внутри provider_config) читаются как раньше через
+// извлечение таблицы из конфига при импорте.
+const BundleVersion = 2
 
 // Selection задаёт, для каких групп брать участников и/или контесты. Нулевое
 // значение (обе карты nil) означает «всё»: все группы, и участники, и контесты.
@@ -67,7 +70,10 @@ type Bundle struct {
 	ExportedAt time.Time         `json:"exported_at"`
 	Students   []domain.Student  `json:"students,omitempty"`
 	Contests   []json.RawMessage `json:"contests,omitempty"`
-	Groups     []BundleGroup     `json:"groups"`
+	// ManualTables — оценки глобальных кондуитов: contest_id -> TSV-таблица
+	// (из data/manual_tables.json). Хранятся отдельно от определений контестов.
+	ManualTables map[string]string `json:"manual_tables,omitempty"`
+	Groups       []BundleGroup     `json:"groups"`
 }
 
 // BundleGroup — одна группа: её group.json и записи contests.json (как есть).
@@ -75,6 +81,11 @@ type BundleGroup struct {
 	Slug     string            `json:"slug"`
 	Group    json.RawMessage   `json:"group"`
 	Contests []json.RawMessage `json:"contests,omitempty"`
+	// ManualTables — оценки inline-кондуитов группы (contest_id -> TSV).
+	ManualTables map[string]string `json:"manual_tables,omitempty"`
+	// ManualGrades — ручные оценки столбцов группы (grades_manual.json):
+	// column_id -> student_id -> оценка.
+	ManualGrades map[string]map[string]float64 `json:"manual_grades,omitempty"`
 }
 
 // Report — итог импорта для показа пользователю.
@@ -93,6 +104,8 @@ type GroupReport struct {
 	StudentsAdded int
 	ContestsAdded int
 	MembersAdded  int
+	// GradesAdded — сколько новых ячеек ручных оценок (столбец,ученик) добавлено.
+	GradesAdded int
 }
 
 // BuildBundle собирает бандл из data-директории по выбору sel. Группы-участницы
@@ -197,30 +210,32 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 			groupRaw = stripKey(groupRaw, "student_ids") // состав не выгружаем
 		}
 
-		var groupContests []json.RawMessage
+		bg := BundleGroup{Slug: slug, Group: json.RawMessage(groupRaw)}
 		if effC[slug] {
-			if err := fileutil.ReadJSON(filepath.Join(groupsDir, slug, "contests.json"), &groupContests); err != nil {
+			if err := fileutil.ReadJSON(filepath.Join(groupsDir, slug, "contests.json"), &bg.Contests); err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
 					return nil, err
 				}
-				groupContests = nil
+				bg.Contests = nil
 			}
-			// Таблицы inline-кондуитов подставляются обратно в определение —
-			// бандл самодостаточен (на диске они лежат отдельно, в manual_tables.json).
-			groupTables := loadManualTablesQuiet(filepath.Join(groupsDir, slug, source.ManualTablesFileName))
-			for i, e := range groupContests {
-				groupContests[i] = injectManualTableRaw(e, groupTables)
+			for _, e := range bg.Contests {
 				if id := rawStringField(e, "id"); id != "" {
 					contestIDs[id] = struct{}{}
 				}
 			}
+			// Оценки inline-кондуитов группы (отдельный файл, не в конфиге).
+			if t := loadManualTablesQuiet(filepath.Join(groupsDir, slug, source.ManualTablesFileName)); len(t) > 0 {
+				bg.ManualTables = t
+			}
+		}
+		// Ручные оценки столбцов — при экспорте участников группы.
+		if effP[slug] {
+			if g := loadManualGradesQuiet(filepath.Join(groupsDir, slug, "grades_manual.json")); len(g) > 0 {
+				bg.ManualGrades = g
+			}
 		}
 
-		bundle.Groups = append(bundle.Groups, BundleGroup{
-			Slug:     slug,
-			Group:    json.RawMessage(groupRaw),
-			Contests: groupContests,
-		})
+		bundle.Groups = append(bundle.Groups, bg)
 	}
 
 	// Ученики выбранных (по участникам) групп с проставленным членством.
@@ -245,10 +260,19 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 	}
 	globalTables := loadManualTablesQuiet(filepath.Join(dataDir, source.ManualTablesFileName))
 	for _, c := range allContests {
-		if id := rawStringField(c, "id"); id != "" {
-			if _, ok := contestIDs[id]; ok {
-				bundle.Contests = append(bundle.Contests, injectManualTableRaw(c, globalTables))
+		id := rawStringField(c, "id")
+		if id == "" {
+			continue
+		}
+		if _, ok := contestIDs[id]; !ok {
+			continue
+		}
+		bundle.Contests = append(bundle.Contests, c) // определение без оценок
+		if t, ok := globalTables[id]; ok {
+			if bundle.ManualTables == nil {
+				bundle.ManualTables = map[string]string{}
 			}
+			bundle.ManualTables[id] = t
 		}
 	}
 
@@ -265,19 +289,38 @@ func loadManualTablesQuiet(path string) map[string]string {
 	return tables
 }
 
-// injectManualTableRaw подставляет таблицу кондуита обратно в raw-определение
-// контеста для экспорта: бандл несёт оценки с собой, а импорт на другом сервере
-// работает через легаси-fallback (таблица в provider_config) и переложит её в
-// manual_tables.json при первом сохранении. Не-кондуиты возвращаются как есть.
-func injectManualTableRaw(raw json.RawMessage, tables map[string]string) json.RawMessage {
+// loadManualGradesQuiet читает grades_manual.json (col -> student -> оценка);
+// нет файла — пустая карта.
+func loadManualGradesQuiet(path string) map[string]map[string]float64 {
+	grades := map[string]map[string]float64{}
+	if err := fileutil.ReadJSON(path, &grades); err != nil {
+		return map[string]map[string]float64{}
+	}
+	return grades
+}
+
+// legacyTableFromContest извлекает таблицу кондуита, оставшуюся в provider_config
+// (бандлы v1). Возвращает (id, таблица, true) для кондуита с непустой таблицей.
+func legacyTableFromContest(raw json.RawMessage) (string, string, bool) {
 	id := rawStringField(raw, "id")
-	if id == "" {
-		return raw
+	if id == "" || rawStringField(raw, "provider") != source.ManualTableProviderID {
+		return "", "", false
 	}
-	table, ok := tables[id]
-	if !ok {
-		return raw
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return "", "", false
 	}
+	_, table, had, err := source.StripManualTable(m["provider_config"])
+	if err != nil || !had || strings.TrimSpace(table) == "" {
+		return "", "", false
+	}
+	return id, table, true
+}
+
+// stripLegacyTable убирает таблицу из provider_config кондуита (чистое
+// определение; оценки хранятся в manual_tables.json). Гарантирует task_count,
+// чтобы пустой конфиг оставался валидным. Не-кондуит/без таблицы — как есть.
+func stripLegacyTable(raw json.RawMessage) json.RawMessage {
 	if rawStringField(raw, "provider") != source.ManualTableProviderID {
 		return raw
 	}
@@ -285,14 +328,81 @@ func injectManualTableRaw(raw json.RawMessage, tables map[string]string) json.Ra
 	if json.Unmarshal(raw, &m) != nil {
 		return raw
 	}
-	cfg, err := source.InjectManualTable(m["provider_config"], table)
+	cfg, table, had, err := source.StripManualTable(m["provider_config"])
 	if err != nil {
 		return raw
+	}
+	if had {
+		var mm map[string]any
+		_ = json.Unmarshal(cfg, &mm)
+		if mm == nil {
+			mm = map[string]any{}
+		}
+		if v, ok := mm["task_count"].(float64); !ok || v < 1 {
+			labels, _ := source.SplitManualTable(table, 0)
+			mm["task_count"] = len(labels)
+		}
+		cfg, err = json.Marshal(mm)
+		if err != nil {
+			return raw
+		}
 	}
 	m["provider_config"] = cfg
 	out, err := json.Marshal(m)
 	if err != nil {
 		return raw
+	}
+	return out
+}
+
+// mergeManualTablesIntoFile объединяет таблицы кондуитов в файл (max по ячейкам),
+// создавая его при необходимости.
+func mergeManualTablesIntoFile(path string, incoming map[string]string) error {
+	if len(incoming) == 0 {
+		return nil
+	}
+	existing := loadManualTablesQuiet(path)
+	for id, t := range incoming {
+		existing[id] = source.MergeManualTablesMax(existing[id], t)
+	}
+	return fileutil.WriteJSON(path, existing, 0o644)
+}
+
+// mergeManualGradesIntoFile объединяет ручные оценки столбцов в файл, беря по
+// каждой ячейке максимум. Возвращает число новых (столбец,ученик).
+func mergeManualGradesIntoFile(path string, incoming map[string]map[string]float64) (int, error) {
+	if len(incoming) == 0 {
+		return 0, nil
+	}
+	existing := loadManualGradesQuiet(path)
+	added := 0
+	for col, byStud := range incoming {
+		if existing[col] == nil {
+			existing[col] = map[string]float64{}
+		}
+		for sid, v := range byStud {
+			if cur, ok := existing[col][sid]; !ok || v > cur {
+				if !ok {
+					added++
+				}
+				existing[col][sid] = v
+			}
+		}
+	}
+	return added, fileutil.WriteJSON(path, existing, 0o644)
+}
+
+// collectGroupManualTables собирает таблицы кондуитов группы для импорта:
+// явные из bg.ManualTables плюс легаси, оставшиеся в конфигах контестов.
+func collectManualTables(explicit map[string]string, contests []json.RawMessage) map[string]string {
+	out := map[string]string{}
+	for id, t := range explicit {
+		out[id] = t
+	}
+	for _, c := range contests {
+		if id, t, ok := legacyTableFromContest(c); ok {
+			out[id] = source.MergeManualTablesMax(out[id], t)
+		}
 	}
 	return out
 }
@@ -363,7 +473,25 @@ func ImportBundle(dataDir string, b *Bundle, sel Selection) (*Report, error) {
 			}
 		}
 	}
-	if err := importGlobalContests(dataDir, contests, rep); err != nil {
+	// Оценки глобальных кондуитов: явные из бандла (по нужным контестам) +
+	// легаси из конфигов; сливаем в глобальный manual_tables.json (max), даже
+	// если само определение контеста уже есть (тогда пропускается ниже).
+	wantedTables := map[string]string{}
+	for id, t := range b.ManualTables {
+		if _, ok := wantedContest[id]; ok {
+			wantedTables[id] = t
+		}
+	}
+	globalTables := collectManualTables(wantedTables, contests)
+	// В contests.json пишем чистые определения (без таблицы в конфиге).
+	cleanContests := make([]json.RawMessage, len(contests))
+	for i, c := range contests {
+		cleanContests[i] = stripLegacyTable(c)
+	}
+	if err := importGlobalContests(dataDir, cleanContests, rep); err != nil {
+		return nil, err
+	}
+	if err := mergeManualTablesIntoFile(filepath.Join(dataDir, source.ManualTablesFileName), globalTables); err != nil {
 		return nil, err
 	}
 
@@ -380,7 +508,7 @@ func ImportBundle(dataDir string, b *Bundle, sel Selection) (*Report, error) {
 			continue // группа полностью снята с импорта
 		}
 		preCount[slug] = groupStudentCount(dataDir, slug)
-		if err := importGroupSettings(dataDir, slug, bg, sel.wantContests(slug), rep); err != nil {
+		if err := importGroupSettings(dataDir, slug, bg, sel.wantContests(slug), sel.wantParticipants(slug), rep); err != nil {
 			return nil, err
 		}
 	}
@@ -434,11 +562,19 @@ func importGlobalContests(dataDir string, contests []json.RawMessage, rep *Repor
 	return fileutil.WriteJSON(path, existing, 0o644)
 }
 
-func importGroupSettings(dataDir, slug string, bg BundleGroup, importContests bool, rep *Report) error {
+func importGroupSettings(dataDir, slug string, bg BundleGroup, importContests, importParticipants bool, rep *Report) error {
 	gr := GroupReport{Slug: slug}
 	dir := filepath.Join(dataDir, "groups", slug)
 	groupPath := filepath.Join(dir, "group.json")
 	contestsPath := filepath.Join(dir, "contests.json")
+	tablesPath := filepath.Join(dir, source.ManualTablesFileName)
+	gradesPath := filepath.Join(dir, "grades_manual.json")
+
+	// Чистые определения контестов группы (таблицы кондуитов — отдельно).
+	cleanContests := make([]json.RawMessage, len(bg.Contests))
+	for i, c := range bg.Contests {
+		cleanContests[i] = stripLegacyTable(c)
+	}
 
 	existingRaw, err := os.ReadFile(groupPath)
 	switch {
@@ -452,8 +588,8 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, importContests bo
 			return err
 		}
 		contests := []json.RawMessage{}
-		if importContests && bg.Contests != nil {
-			contests = bg.Contests
+		if importContests && cleanContests != nil {
+			contests = cleanContests
 		}
 		if err := fileutil.WriteJSON(contestsPath, contests, 0o644); err != nil {
 			return err
@@ -494,7 +630,7 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, importContests bo
 					have[id] = struct{}{}
 				}
 			}
-			for _, c := range bg.Contests {
+			for _, c := range cleanContests {
 				id := rawStringField(c, "id")
 				if id == "" {
 					continue
@@ -513,6 +649,23 @@ func importGroupSettings(dataDir, slug string, bg BundleGroup, importContests bo
 				return err
 			}
 		}
+	}
+
+	// Оценки кондуитов группы (inline): сливаем всегда, когда переносим контесты —
+	// max по ячейкам, даже если контест уже был на целевом сервере.
+	if importContests {
+		tables := collectManualTables(bg.ManualTables, bg.Contests)
+		if err := mergeManualTablesIntoFile(tablesPath, tables); err != nil {
+			return err
+		}
+	}
+	// Ручные оценки столбцов — при переносе участников; max по ячейкам.
+	if importParticipants {
+		added, err := mergeManualGradesIntoFile(gradesPath, bg.ManualGrades)
+		if err != nil {
+			return err
+		}
+		gr.GradesAdded = added
 	}
 
 	rep.Groups = append(rep.Groups, gr)

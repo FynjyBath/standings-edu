@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -246,6 +247,124 @@ func SplitManualTable(raw string, fixedTaskCount int) (labels []string, rows [][
 		rows = append(rows, row)
 	}
 	return labels, rows
+}
+
+// MergeManualTablesMax объединяет две таблицы кондуита (TSV) в одну, беря по
+// каждой ячейке лучший результат («максимум»). Строки — объединение учеников по
+// ФИО (без учёта регистра, ё=е); колонки — по максимальной ширине, названия
+// предпочитаются осмысленные (не порядковый номер). Результат отсортирован по
+// ФИО, поэтому повторное слияние того же не меняет файл (идемпотентно). Пустой
+// результат — обе таблицы пусты.
+func MergeManualTablesMax(a, b string) string {
+	la, ra := SplitManualTable(a, 0)
+	lb, rb := SplitManualTable(b, 0)
+	cols := len(la)
+	if len(lb) > cols {
+		cols = len(lb)
+	}
+	if cols == 0 {
+		return ""
+	}
+
+	labels := make([]string, cols)
+	for i := range labels {
+		labels[i] = pickManualLabel(i, la, lb)
+	}
+
+	type mrow struct {
+		name string
+		vals []string
+	}
+	byKey := map[string]*mrow{}
+	keys := make([]string, 0)
+	fold := func(rows [][]string) {
+		for _, r := range rows {
+			key := normalizeForMatch(r[0])
+			m, ok := byKey[key]
+			if !ok {
+				m = &mrow{name: r[0], vals: make([]string, cols)}
+				byKey[key] = m
+				keys = append(keys, key)
+			}
+			for i := 0; i < cols; i++ {
+				v := ""
+				if i+1 < len(r) {
+					v = r[i+1]
+				}
+				m.vals[i] = manualCellMax(m.vals[i], v)
+			}
+		}
+	}
+	fold(ra)
+	fold(rb)
+	if len(keys) == 0 {
+		return ""
+	}
+	sort.Strings(keys)
+
+	var sb strings.Builder
+	sb.WriteString("ФИО\t" + strings.Join(labels, "\t") + "\n")
+	for _, k := range keys {
+		m := byKey[k]
+		sb.WriteString(m.name + "\t" + strings.Join(m.vals, "\t") + "\n")
+	}
+	return sb.String()
+}
+
+// pickManualLabel выбирает имя колонки i: предпочитает осмысленное (не
+// порядковый номер) из любой таблицы, иначе номер.
+func pickManualLabel(i int, la, lb []string) string {
+	ord := strconv.Itoa(i + 1)
+	a, b := "", ""
+	if i < len(la) {
+		a = la[i]
+	}
+	if i < len(lb) {
+		b = lb[i]
+	}
+	if a != "" && a != ord {
+		return a
+	}
+	if b != "" && b != ord {
+		return b
+	}
+	if a != "" {
+		return a
+	}
+	if b != "" {
+		return b
+	}
+	return ord
+}
+
+// manualCellMax возвращает «лучшую» из двух ячеек оценки: пустая уступает любой
+// записанной; при обеих записанных — с большим баллом (при равенстве — первая).
+func manualCellMax(a, b string) string {
+	ra, oka := manualCellRank(a)
+	rb, okb := manualCellRank(b)
+	switch {
+	case !okb:
+		return a
+	case !oka:
+		return b
+	case rb > ra:
+		return b
+	default:
+		return a
+	}
+}
+
+// manualCellRank — числовой ранг ячейки для сравнения: балл решённой/попытки;
+// «+» = 1, «±»/пустой балл = 0. Второе значение false — пусто (нет результата).
+func manualCellRank(s string) (float64, bool) {
+	c := parseManualCell(s)
+	if c.status == domain.TaskStatusNone {
+		return 0, false
+	}
+	if c.score != nil {
+		return float64(*c.score), true
+	}
+	return 0, true
 }
 
 // manualHeaderLabels — имена колонок: из строки-заголовка (первая ячейка —

@@ -134,9 +134,11 @@ func (h *Handlers) executeImportAction(r *http.Request) AdminActionResult {
 	if err := json.Unmarshal(body, &bundle); err != nil {
 		return newAdminResult("import", false, -1, started, "", []string{"некорректный JSON бандла: " + err.Error()})
 	}
-	if bundle.Version != migrate.BundleVersion {
+	// Принимаем текущую и более старые версии (импорт умеет читать легаси-формат
+	// с таблицами кондуитов внутри provider_config). Новее — отклоняем.
+	if bundle.Version < 1 || bundle.Version > migrate.BundleVersion {
 		return newAdminResult("import", false, -1, started, "",
-			[]string{fmt.Sprintf("неподдерживаемая версия бандла: %d (нужна %d)", bundle.Version, migrate.BundleVersion)})
+			[]string{fmt.Sprintf("неподдерживаемая версия бандла: %d (поддерживаются 1..%d)", bundle.Version, migrate.BundleVersion)})
 	}
 
 	// Выбор участников/контестов по группам приходит из формы (клиент строит
@@ -167,6 +169,9 @@ func (h *Handlers) executeImportAction(r *http.Request) AdminActionResult {
 		fmt.Fprintf(&out, "Группа %s (%s): +%d учеников, +%d контестов", g.Slug, state, g.StudentsAdded, g.ContestsAdded)
 		if g.MembersAdded > 0 {
 			fmt.Fprintf(&out, ", +%d групп в объединении", g.MembersAdded)
+		}
+		if g.GradesAdded > 0 {
+			fmt.Fprintf(&out, ", +%d ручных оценок", g.GradesAdded)
 		}
 		out.WriteString("\n")
 	}

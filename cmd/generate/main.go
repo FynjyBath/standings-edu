@@ -51,6 +51,7 @@ func main() {
 	registry.RegisterSite("acmp", source.NewACMPClient())
 	registry.RegisterProvider(source.NewCodeforcesContestProvider(cfClient))
 	registry.RegisterProvider(source.NewHTMLTableImportProvider())
+	registry.RegisterProvider(source.NewManualTableProvider())
 
 	// informatics требует логина, поэтому без файла credentials источник просто
 	// отключаем (как codeforces в anonymous-режиме), а не падаем. Если файл есть,

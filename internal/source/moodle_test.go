@@ -69,10 +69,10 @@ func TestMatchMoodleUsers(t *testing.T) {
 
 // Один инициал не должен давать совпадение (нужно полное слово-фамилия).
 func TestMoodleNameMatchScoreGuards(t *testing.T) {
-	if _, ok := moodleNameMatchScore([]string{"я.", "с."}, []string{"яна", "суреновна"}); ok {
+	if _, ok := nameMatchScore([]string{"я.", "с."}, []string{"яна", "суреновна"}); ok {
 		t.Fatal("initials-only match must be rejected")
 	}
-	if _, ok := moodleNameMatchScore([]string{"яна"}, []string{"яна", "айриян"}); ok {
+	if _, ok := nameMatchScore([]string{"яна"}, []string{"яна", "айриян"}); ok {
 		t.Fatal("single-token name must be rejected")
 	}
 }

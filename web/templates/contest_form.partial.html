@@ -58,7 +58,7 @@
   <div id="c-provider-section" style="margin-top:0.9rem;display:none;">
     <div class="admin-form-grid">
       <label><span>provider</span>
-        <select id="c-provider"><option value="codeforces_contest">codeforces_contest</option><option value="html_table_import">html_table_import</option><option value="moodle_grades">moodle_grades</option></select>
+        <select id="c-provider"><option value="codeforces_contest">codeforces_contest</option><option value="html_table_import">html_table_import</option><option value="moodle_grades">moodle_grades</option><option value="manual_table">manual_table (кондуит, ручные оценки)</option></select>
       </label>
     </div>
     <div id="c-moodle-helper" style="display:none;margin-top:0.6rem;border:1px solid var(--line);border-radius:8px;padding:0.6rem;">
@@ -74,6 +74,15 @@
           <span title="Показать всех пользователей курса/группы Moodle: сопоставленные по ФИО привязываются к ученикам, остальные — отдельными строками. Без галочки — только ученики группы.">Вся табличка (все пользователи Moodle)</span>
         </label>
       </div>
+    </div>
+    <div id="c-manual-helper" style="display:none;margin-top:0.6rem;border:1px solid var(--line);border-radius:8px;padding:0.6rem;">
+      <p class="empty-hint" style="margin:0 0 0.5rem;">Кондуит / ручные оценки: выделите таблицу в Google Таблицах или Excel и вставьте сюда (Ctrl+V). Первая колонка — ФИО, дальше оценки: пусто — не сдана, «1» или «+» — сдана, можно любые числа («0», «±» — попытка). Первая строка с названиями колонок — по желанию. score_system <strong>edu</strong> — плюсики, <strong>ioi</strong> — числа как есть.</p>
+      <textarea id="c-manual-table" class="account-list" rows="10" spellcheck="false" placeholder="ФИО	1	2	3&#10;Иванов Иван	1		1&#10;Петров Пётр		1	"></textarea>
+      <div id="c-manual-stats" class="empty-hint" style="margin-top:0.3rem;"></div>
+      <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.4rem;">
+        <input type="checkbox" id="c-manual-showall" style="width:auto;" />
+        <span title="Строки, не сопоставленные с учениками группы по ФИО, будут показаны отдельными строками с именем из таблицы. Без галочки — только ученики группы.">Показывать несопоставленные строки</span>
+      </label>
     </div>
     <label style="display:block;margin-top:0.5rem;"><span>provider_config (JSON)</span>
       <textarea id="c-provider-config" class="account-list" rows="6" spellcheck="false" placeholder='{ "contest_id": 1711, "show_unofficial": true }'></textarea>
@@ -134,14 +143,51 @@
       $("c-moodle-showall").checked = !!cfg.show_all;
       $("c-moodle-display").value = (cfg.display === "raw") ? "raw" : "percent";
     }
+    // Помощник manual_table (кондуит): большая textarea для вставки из
+    // Google Таблиц/Excel + живой счётчик распознанных строк и колонок.
+    // Сырой JSON при этом прячем — таблица в нём нечитаема.
+    function manualSyncToJSON() {
+      if ($("c-provider").value !== "manual_table") return;
+      var cfg = { table: $("c-manual-table").value || "" };
+      if ($("c-manual-showall").checked) cfg.show_all = true;
+      $("c-provider-config").value = JSON.stringify(cfg);
+      manualUpdateStats();
+    }
+    function manualFillFromJSON() {
+      var cfg = {};
+      try { cfg = JSON.parse($("c-provider-config").value || "{}") || {}; } catch (e) { cfg = {}; }
+      $("c-manual-table").value = cfg.table || "";
+      $("c-manual-showall").checked = !!cfg.show_all;
+      manualUpdateStats();
+    }
+    function manualUpdateStats() {
+      var v = $("c-manual-table").value || "";
+      var lines = v.split(/\r?\n/).filter(function (s) { return s.trim() !== ""; });
+      if (!lines.length) { $("c-manual-stats").textContent = ""; return; }
+      var cols = 0;
+      lines.forEach(function (s) { cols = Math.max(cols, s.split("\t").length); });
+      if (cols < 2) {
+        $("c-manual-stats").textContent = "⚠ Колонки не распознаны: между ФИО и оценками должна быть табуляция (вставьте таблицу копированием, не набирайте вручную).";
+        return;
+      }
+      $("c-manual-stats").textContent = "Распознано: " + lines.length + " строк, " + (cols - 1) + " колонок с оценками.";
+    }
     function toggleMoodleHelper() {
-      var on = $("c-source").value === "provider" && $("c-provider").value === "moodle_grades";
-      $("c-moodle-helper").style.display = on ? "" : "none";
-      if (on) moodleFillFromJSON();
+      var isProvider = $("c-source").value === "provider";
+      var moodleOn = isProvider && $("c-provider").value === "moodle_grades";
+      var manualOn = isProvider && $("c-provider").value === "manual_table";
+      $("c-moodle-helper").style.display = moodleOn ? "" : "none";
+      $("c-manual-helper").style.display = manualOn ? "" : "none";
+      // Для кондуита сырой JSON только мешает (таблица в нём нечитаема).
+      $("c-provider-config").parentElement.style.display = manualOn ? "none" : "";
+      if (moodleOn) moodleFillFromJSON();
+      if (manualOn) manualFillFromJSON();
     }
     $("c-provider").addEventListener("change", toggleMoodleHelper);
     ["c-moodle-url", "c-moodle-group"].forEach(function (id) { $(id).addEventListener("input", moodleSyncToJSON); });
     ["c-moodle-showall", "c-moodle-display"].forEach(function (id) { $(id).addEventListener("change", moodleSyncToJSON); });
+    $("c-manual-table").addEventListener("input", manualSyncToJSON);
+    $("c-manual-showall").addEventListener("change", manualSyncToJSON);
     $("c-provider-config").addEventListener("input", function () {
       if ($("c-moodle-helper").style.display !== "none") moodleFillFromJSON();
     });

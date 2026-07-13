@@ -124,9 +124,6 @@ body {
   background: linear-gradient(90deg, var(--header-bg) 0%, color-mix(in srgb, var(--header-bg) 72%, var(--accent) 28%) 100%);
   color: #def9cf;
   border-bottom: 2px solid var(--header-line);
-  position: sticky;
-  top: 0;
-  z-index: 20;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
 }
 

@@ -210,6 +210,52 @@ func TestMoodleGradesProviderBuildStandings(t *testing.T) {
 	}
 }
 
+// Кеш на время генерации: два контеста из одного курса делают один запрос
+// журнала оценок; повторный cmid — один запрос модуля курса.
+func TestMoodleGradesProviderCachesReport(t *testing.T) {
+	reportCalls, cmCalls := 0, 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webservice/rest/server.php", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("wsfunction") {
+		case "core_course_get_course_module":
+			cmCalls++
+			cmid := r.URL.Query().Get("cmid")
+			_, _ = w.Write([]byte(`{"cm":{"id":` + cmid + `,"course":3,"name":"Тест ` + cmid + `","modname":"quiz","instance":1}}`))
+		case "gradereport_user_get_grade_items":
+			reportCalls++
+			_, _ = w.Write([]byte(`{"usergrades":[
+				{"userid":10,"userfullname":"Яна Айриян","gradeitems":[
+					{"cmid":5,"itemtype":"mod","graderaw":10,"grademax":10},
+					{"cmid":8,"itemtype":"mod","graderaw":6,"grademax":10}]}
+			]}`))
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	provider := NewMoodleGradesProvider(NewMoodleClient(MoodleCredentials{BaseURL: srv.URL, Token: "tok"}))
+	students := []domain.Student{{ID: "airiyan", FullName: "Айриян Яна", PublicName: "Айриян Я."}}
+	build := func(cmid string) {
+		cfgJSON, _ := json.Marshal(map[string]any{"activity_url": srv.URL + "/mod/quiz/view.php?id=" + cmid})
+		_, err := provider.BuildStandings(context.Background(), ContestProviderInput{
+			Contest:  domain.Contest{ID: "c" + cmid, ScoreSystem: domain.ScoreSystemIOI, Provider: MoodleGradesProviderID, ProviderConfig: cfgJSON},
+			Students: students,
+		})
+		if err != nil {
+			t.Fatalf("build cmid=%s: %v", cmid, err)
+		}
+	}
+	build("5")
+	build("8")
+	build("5") // повторный cmid
+	if reportCalls != 1 {
+		t.Fatalf("grade report must be fetched once, got %d", reportCalls)
+	}
+	if cmCalls != 2 {
+		t.Fatalf("course module must be fetched once per cmid, got %d", cmCalls)
+	}
+}
+
 // Перелогин: на invalidtoken при наличии логина/пароля токен добывается заново.
 func TestMoodleClientRelogin(t *testing.T) {
 	calls := 0

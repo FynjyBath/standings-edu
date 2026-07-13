@@ -210,12 +210,64 @@ func truncateForError(body []byte) string {
 // ссылке на активность (тест, задание — всё, что имеет оценку). Одна активность —
 // одна колонка «задачи»: оценка ученика (по умолчанию в процентах от максимума),
 // точная оценка «X из Y» — в колонке «Статус».
+//
+// Журнал оценок курса — самый дорогой вызов (секунды на большой курс), а один
+// ответ содержит сразу все активности и всех пользователей. Поэтому отчёты и
+// модули курса кешируются на время жизни провайдера (bin/generate — одноразовый
+// процесс, устаревание кешу не грозит): N тестов из одного курса = один запрос.
 type MoodleGradesProvider struct {
 	client *MoodleClient
+
+	mu          sync.Mutex
+	cmCache     map[int]moodleCourseModule   // cmid -> модуль курса
+	reportCache map[string]moodleGradeReport // "courseid|groupid" -> журнал
 }
 
 func NewMoodleGradesProvider(client *MoodleClient) *MoodleGradesProvider {
-	return &MoodleGradesProvider{client: client}
+	return &MoodleGradesProvider{
+		client:      client,
+		cmCache:     make(map[int]moodleCourseModule),
+		reportCache: make(map[string]moodleGradeReport),
+	}
+}
+
+func (p *MoodleGradesProvider) courseModule(ctx context.Context, cmid int) (moodleCourseModule, error) {
+	p.mu.Lock()
+	cached, ok := p.cmCache[cmid]
+	p.mu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	var cm moodleCourseModule
+	if err := p.client.call(ctx, "core_course_get_course_module", url.Values{"cmid": {strconv.Itoa(cmid)}}, &cm); err != nil {
+		return moodleCourseModule{}, err
+	}
+	p.mu.Lock()
+	p.cmCache[cmid] = cm
+	p.mu.Unlock()
+	return cm, nil
+}
+
+func (p *MoodleGradesProvider) gradeReport(ctx context.Context, courseID, groupID int) (moodleGradeReport, error) {
+	key := strconv.Itoa(courseID) + "|" + strconv.Itoa(groupID)
+	p.mu.Lock()
+	cached, ok := p.reportCache[key]
+	p.mu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	params := url.Values{"courseid": {strconv.Itoa(courseID)}}
+	if groupID > 0 {
+		params.Set("groupid", strconv.Itoa(groupID))
+	}
+	var report moodleGradeReport
+	if err := p.client.call(ctx, "gradereport_user_get_grade_items", params, &report); err != nil {
+		return moodleGradeReport{}, err
+	}
+	p.mu.Lock()
+	p.reportCache[key] = report
+	p.mu.Unlock()
+	return report, nil
 }
 
 func (p *MoodleGradesProvider) ProviderID() string { return MoodleGradesProviderID }
@@ -329,8 +381,8 @@ func (p *MoodleGradesProvider) BuildStandings(ctx context.Context, input Contest
 	}
 
 	// Модуль курса: курс и человекочитаемое название активности.
-	var cm moodleCourseModule
-	if err := p.client.call(ctx, "core_course_get_course_module", url.Values{"cmid": {strconv.Itoa(cmid)}}, &cm); err != nil {
+	cm, err := p.courseModule(ctx, cmid)
+	if err != nil {
 		return domain.GeneratedContestStandings{}, err
 	}
 	if cm.CM.Course <= 0 {
@@ -343,12 +395,8 @@ func (p *MoodleGradesProvider) BuildStandings(ctx context.Context, input Contest
 	}
 
 	// Журнал оценок курса (при groupID>0 — только группа Moodle).
-	params := url.Values{"courseid": {strconv.Itoa(cm.CM.Course)}}
-	if groupID > 0 {
-		params.Set("groupid", strconv.Itoa(groupID))
-	}
-	var report moodleGradeReport
-	if err := p.client.call(ctx, "gradereport_user_get_grade_items", params, &report); err != nil {
+	report, err := p.gradeReport(ctx, cm.CM.Course, groupID)
+	if err != nil {
 		return domain.GeneratedContestStandings{}, err
 	}
 

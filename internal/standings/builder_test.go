@@ -1,6 +1,8 @@
 package standings
 
 import (
+	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"testing"
@@ -378,5 +380,30 @@ func TestWindowedTaskResultBorder(t *testing.T) {
 	}
 	if !border([]source.TimedSubmission{sub(true), sub(false)}, false) {
 		t.Fatal("ejudge: OK+ожидает → рамка остаётся")
+	}
+}
+
+// Провайдерный контест наследует флаги отображения из определения (Hidden,
+// SummaryTotalOnly, ShortName) — раньше они молча терялись.
+func TestBuildProviderContestCarriesDisplayFlags(t *testing.T) {
+	reg := source.NewRegistry()
+	reg.RegisterProvider(source.NewManualTableProvider())
+	b := NewBuilder(reg, log.New(io.Discard, "", 0), 1)
+
+	cfg := json.RawMessage(`{"table":"Иванов Иван\t1\n"}`)
+	contest := domain.Contest{
+		ID: "m1", Title: "Кондуит", ScoreSystem: domain.ScoreSystemEdu,
+		ContestType: domain.ContestTypeProvider, Provider: "manual_table",
+		ProviderConfig:   cfg,
+		Hidden:           true,
+		SummaryTotalOnly: true,
+		ShortName:        "Кнд",
+	}
+	out, err := b.buildProviderContestStandings(context.Background(), &domain.SourceData{}, domain.GroupDefinition{Slug: "g"}, contest, []domain.Student{{ID: "s1", FullName: "Иванов Иван", PublicName: "Иванов И."}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if !out.Hidden || !out.SummaryTotalOnly || out.ShortName != "Кнд" {
+		t.Fatalf("display flags lost: hidden=%v total=%v short=%q", out.Hidden, out.SummaryTotalOnly, out.ShortName)
 	}
 }

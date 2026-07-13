@@ -64,17 +64,24 @@
         {{range .Entries}}
         <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
           <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
-          <td>{{if .Inline}}inline{{else}}ссылка{{end}}</td>
+          <td>{{if .Inline}}inline{{else}}ссылка{{end}}{{if .Kind}}<div class="grade-weight">{{.Kind}}</div>{{end}}</td>
           <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
           <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="{{if .Inline}}через запятую{{else if .InhTableName}}как у контеста: {{.InhTableName}}{{else}}как у контеста{{end}}" style="min-width:11rem;" /></td>
           <td>
+            {{if .IsProvider}}
+            <span class="grade-weight" title="Окно контеста не применяется: результаты provider-контеста берутся из источника целиком.">—</span>
+            {{else}}
             <input type="datetime-local" class="c-start" step="60" data-iso="{{.StartTime}}" />
             <input type="datetime-local" class="c-end" step="60" data-iso="{{.EndTime}}" />
             {{if and (not .Inline) .InhStart}}
             <div class="grade-weight c-inh-window" data-start="{{.InhStart}}" data-end="{{.InhEnd}}">насл.: …</div>
             {{end}}
+            {{end}}
           </td>
           <td>
+            {{if .IsProvider}}
+            <span class="grade-weight" title="Заморозка не применяется к provider-контестам.">—</span>
+            {{else}}
             <select class="c-freeze-sel" data-freeze="{{.Freeze}}" title="Заморозка: скрыть результаты последней части соревнования (или всего). Пусто — как задано у контеста. Для применения перегенерируйте.">
               {{if .Inline}}
               <option value="">нет</option>
@@ -91,6 +98,7 @@
               <option value="custom">другое…</option>
             </select>
             <input type="text" class="c-freeze" value="" placeholder="45m / 2h15m" style="max-width:6rem;display:none;" title="Go-длительность: 45m, 2h15m…" />
+            {{end}}
           </td>
           <td>
             <select class="c-summarytotal" data-value="{{.SummaryTotal}}" title="В сводной — только колонка суммы, без задач.">
@@ -114,7 +122,7 @@
               <option value="1">скрыть</option>
             </select>
           </td>
-          <td><input type="number" class="c-zeropenalty" min="0" step="1" value="{{.ZeroPenalty}}" placeholder="{{if .Inline}}0{{else if .InhZeroPenalty}}насл.: {{.InhZeroPenalty}}{{else}}как у контеста{{end}}" style="max-width:6.5rem;" title="Штраф за задачу без баллов (только ioi). Пусто — как у контеста, 0 — выключить." /></td>
+          <td>{{if .IsProvider}}<span class="grade-weight" title="Штраф за ноль не применяется к provider-контестам.">—</span>{{else}}<input type="number" class="c-zeropenalty" min="0" step="1" value="{{.ZeroPenalty}}" placeholder="{{if .Inline}}0{{else if .InhZeroPenalty}}насл.: {{.InhZeroPenalty}}{{else}}как у контеста{{end}}" style="max-width:6.5rem;" title="Штраф за задачу без баллов (только ioi). Пусто — как у контеста, 0 — выключить." />{{end}}</td>
           <td style="white-space:nowrap;">
             <button type="button" class="admin-btn admin-btn--secondary c-move-up" title="Поднять выше">↑</button>
             <button type="button" class="admin-btn admin-btn--secondary c-move-down" title="Опустить ниже">↓</button>
@@ -136,7 +144,7 @@
       <span>Добавить из глобальных:</span>
       <select id="add-ref-select">
         <option value="">— выберите контест —</option>
-        {{range .AddableContests}}<option value="{{.ID}}">{{.Title}} ({{.ID}})</option>{{end}}
+        {{range .AddableContests}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
       </select>
     </label>
     <button type="button" id="add-ref-btn" class="admin-btn">Добавить ссылку</button>

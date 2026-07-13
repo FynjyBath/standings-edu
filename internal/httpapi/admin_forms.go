@@ -335,11 +335,16 @@ type AdminGroupContestEntry struct {
 	InhHidden       string // "да"/"нет"
 	Inline          bool
 	Missing         bool // ссылка на контест, которого нет в глобальном contests.json
+	// Kind — человекочитаемый вид («задачи», «Moodle», «кондуит»…); IsProvider —
+	// окно/заморозка/штраф к контесту не применяются (заменяются прочерком).
+	Kind       string
+	IsProvider bool
 }
 
 type AdminGroupContestOption struct {
 	ID    string
 	Title string
+	Kind  string // вид provider-контеста для подписи в списке; пусто — задачи
 }
 
 // groupContestEntry — разобранный элемент groups/<slug>/contests.json.
@@ -499,6 +504,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
 				inlineByID[e.id] = inlineContest
 				row.Title = strings.TrimSpace(inlineContest.Title)
+				row.Kind, row.IsProvider = contestKindLabel(inlineContest)
 			}
 			if row.Title == "" {
 				row.Title = e.id
@@ -509,6 +515,9 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 			row.Title = strings.TrimSpace(def.Title)
 			if row.Title == "" {
 				row.Title = e.id
+			}
+			if ok {
+				row.Kind, row.IsProvider = contestKindLabel(def)
 			}
 			// Наследуемые значения из определения — для подсказок «как у контеста».
 			row.InhTableName = strings.Join(def.TableNames, ", ")
@@ -548,7 +557,11 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		if t == "" {
 			t = id
 		}
-		addable = append(addable, AdminGroupContestOption{ID: id, Title: t})
+		opt := AdminGroupContestOption{ID: id, Title: t}
+		if kind, isProvider := contestKindLabel(c); isProvider {
+			opt.Kind = kind
+		}
+		addable = append(addable, opt)
 	}
 
 	inlineBlob, err := json.Marshal(inlineByID)
@@ -1194,6 +1207,29 @@ type AdminContestView struct {
 	ScoreSystem string
 }
 
+// contestKindLabel — человекочитаемый вид контеста для админских списков:
+// «задачи» или конкретный провайдер («Moodle», «кондуит»…). Второе значение —
+// это provider-контест (окно/заморозка/штраф к нему не применяются).
+func contestKindLabel(c domain.Contest) (string, bool) {
+	if c.TypeOrDefault() != domain.ContestTypeProvider {
+		return "задачи", false
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Provider)) {
+	case "codeforces_contest":
+		return "CF-контест", true
+	case "html_table_import":
+		return "HTML-импорт", true
+	case "moodle_grades":
+		return "Moodle", true
+	case "manual_table":
+		return "кондуит", true
+	case "":
+		return "provider", true
+	default:
+		return strings.TrimSpace(c.Provider), true
+	}
+}
+
 func (h *Handlers) AdminContestsPage(w http.ResponseWriter, _ *http.Request) {
 	if h.admin == nil {
 		http.Error(w, "admin is not configured", http.StatusInternalServerError)
@@ -1207,8 +1243,9 @@ func (h *Handlers) AdminContestsPage(w http.ResponseWriter, _ *http.Request) {
 	}
 	views := make([]AdminContestView, 0, len(contests))
 	for _, c := range contests {
+		kind, _ := contestKindLabel(c)
 		views = append(views, AdminContestView{
-			ID: c.ID, Title: c.Title, Type: c.TypeOrDefault(), ScoreSystem: string(c.ScoreSystem.Normalized()),
+			ID: c.ID, Title: c.Title, Type: kind, ScoreSystem: string(c.ScoreSystem.Normalized()),
 		})
 	}
 

@@ -525,6 +525,12 @@ func (b *Builder) buildProviderContestStandings(
 	standings.ContestType = domain.ContestTypeProvider
 	standings.TableNames = contest.TableNames
 	standings.Materials = domain.NormalizeContestMaterials(contest.Materials)
+	// Поведенческие флаги отображения задаются определением контеста (с учётом
+	// переопределений группы), а не провайдером — без этого «Скрыть у школьников»
+	// и «Σ в сводной» для provider-контестов молча не работали.
+	standings.SummaryTotalOnly = contest.SummaryTotalOnly
+	standings.Hidden = contest.Hidden
+	standings.ShortName = strings.TrimSpace(contest.ShortName)
 	return standings, nil
 }
 

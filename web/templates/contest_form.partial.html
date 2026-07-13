@@ -172,17 +172,33 @@
       }
       $("c-manual-stats").textContent = "Распознано: " + lines.length + " строк, " + (cols - 1) + " колонок с оценками.";
     }
+    // Примеры provider_config под выбранный провайдер.
+    var cfgPlaceholders = {
+      codeforces_contest: '{ "contest_id": 1711, "show_unofficial": true }',
+      html_table_import: '{ "page_url": "https://…", "columns": ["place", "name", "task", "task"], "auto_find": true }',
+      moodle_grades: '{ "activity_url": "https://kurs.kod-u.ru/mod/quiz/view.php?id=5" }'
+    };
     function toggleMoodleHelper() {
       var isProvider = $("c-source").value === "provider";
-      var moodleOn = isProvider && $("c-provider").value === "moodle_grades";
-      var manualOn = isProvider && $("c-provider").value === "manual_table";
+      var p = $("c-provider").value;
+      var moodleOn = isProvider && p === "moodle_grades";
+      var manualOn = isProvider && p === "manual_table";
       $("c-moodle-helper").style.display = moodleOn ? "" : "none";
       $("c-manual-helper").style.display = manualOn ? "" : "none";
       // Для кондуита сырой JSON только мешает (таблица в нём нечитаема).
       $("c-provider-config").parentElement.style.display = manualOn ? "none" : "";
+      $("c-provider-config").placeholder = cfgPlaceholders[p] || "{}";
       if (moodleOn) moodleFillFromJSON();
       if (manualOn) manualFillFromJSON();
     }
+    // Подсказка для НОВОГО контеста: у Moodle естественны баллы (ioi), у
+    // кондуита — плюсики (edu). Редактируемый контест не трогаем.
+    $("c-provider").addEventListener("change", function () {
+      if (!$("c-original-id").value) {
+        if ($("c-provider").value === "moodle_grades") $("c-score").value = "ioi";
+        if ($("c-provider").value === "manual_table") $("c-score").value = "edu";
+      }
+    });
     $("c-provider").addEventListener("change", toggleMoodleHelper);
     ["c-moodle-url", "c-moodle-group"].forEach(function (id) { $(id).addEventListener("input", moodleSyncToJSON); });
     ["c-moodle-showall", "c-moodle-display"].forEach(function (id) { $(id).addEventListener("change", moodleSyncToJSON); });

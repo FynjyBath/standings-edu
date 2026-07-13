@@ -135,23 +135,75 @@ func (h *Handlers) JuryGradesSave(w http.ResponseWriter, r *http.Request) {
 
 const maxJuryKonduitTableBytes = 512 * 1024
 
-// juryKonduitEntry находит inline-контест кондуита (manual_table) группы по id.
-// Возвращает распакованный inline-объект и его конфиг.
-func (h *Handlers) juryKonduitEntry(slug, id string) (map[string]json.RawMessage, map[string]any, bool) {
+// juryKonduit — кондуит группы, доступный жюри: inline-контест manual_table
+// (правится в contests.json группы) либо ссылка на глобальный manual_table
+// (правится в глобальном contests.json — так оценки общие для всех групп,
+// подключивших тот же контест).
+type juryKonduit struct {
+	Inline bool
+	Title  string
+	Config map[string]any
+}
+
+// resolveJuryKonduit находит кондуит по id среди контестов группы.
+func (h *Handlers) resolveJuryKonduit(slug, id string) (juryKonduit, bool) {
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
-		return nil, nil, false
+		return juryKonduit{}, false
 	}
 	for _, e := range entries {
-		if e.id == id {
-			return h.juryKonduitEntryFromRaw(e)
+		if e.id != id {
+			continue
+		}
+		if e.inline {
+			obj, cfg, ok := h.juryKonduitEntryFromRaw(e)
+			if !ok {
+				return juryKonduit{}, false
+			}
+			title := id
+			var t string
+			if json.Unmarshal(obj["title"], &t) == nil && strings.TrimSpace(t) != "" {
+				title = strings.TrimSpace(t)
+			}
+			// Таблица — из manual_tables.json группы (легаси-конфиг как fallback).
+			cfg["table"] = manualTableFor(h.groupManualTablesPath(slug), id, cfg)
+			return juryKonduit{Inline: true, Title: title, Config: cfg}, true
+		}
+		// Ссылка: глобальное определение manual_table.
+		c, ok := h.globalManualTableContest(id)
+		if !ok {
+			return juryKonduit{}, false
+		}
+		cfg := map[string]any{}
+		_ = json.Unmarshal(c.ProviderConfig, &cfg)
+		cfg["table"] = manualTableFor(h.globalManualTablesPath(), id, cfg)
+		title := strings.TrimSpace(c.Title)
+		if title == "" {
+			title = id
+		}
+		return juryKonduit{Inline: false, Title: title, Config: cfg}, true
+	}
+	return juryKonduit{}, false
+}
+
+// globalManualTableContest находит глобальный контест-кондуит по id.
+func (h *Handlers) globalManualTableContest(id string) (domain.Contest, bool) {
+	globals, err := h.loadContestsList()
+	if err != nil {
+		return domain.Contest{}, false
+	}
+	for _, c := range globals {
+		if strings.TrimSpace(c.ID) == id && strings.TrimSpace(c.Provider) == source.ManualTableProviderID {
+			return c, true
 		}
 	}
-	return nil, nil, false
+	return domain.Contest{}, false
 }
 
 // JuryKonduitSave обновляет таблицу оценок кондуита — только содержимое
-// provider_config.table (+task_count) inline-контеста manual_table этой группы.
+// provider_config.table (+task_count). Для inline-контеста — в contests.json
+// группы; для ссылки на глобальный кондуит — в глобальном contests.json (один
+// контест на несколько групп: оценки общие).
 func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Slug      string `json:"slug"`
@@ -180,8 +232,32 @@ func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	for _, e := range entries {
+		if e.id != id {
+			continue
+		}
+		var status int
+		var msg string
+		if e.inline {
+			status, msg = h.juryKonduitSaveInline(slug, id, req.Table, req.TaskCount, entries)
+		} else {
+			status, msg = h.juryKonduitSaveGlobal(slug, id, req.Table, req.TaskCount)
+		}
+		if msg != "" {
+			writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+	writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "кондуит не найден в группе"})
+}
+
+// juryKonduitSaveInline пишет таблицу inline-кондуита группы в её
+// manual_tables.json; в определении контеста обновляется только task_count
+// (легаси-таблица из provider_config при этом убирается — миграция).
+func (h *Handlers) juryKonduitSaveInline(slug, id, table string, taskCount int, entries []groupContestEntry) (int, string) {
 	out := make([]json.RawMessage, 0, len(entries))
-	updated := false
 	for _, e := range entries {
 		if e.id != id {
 			out = append(out, e.raw)
@@ -189,34 +265,132 @@ func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 		}
 		obj, cfg, ok := h.juryKonduitEntryFromRaw(e)
 		if !ok {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "это не кондуит группы (жюри правит только inline-контесты manual_table)"})
-			return
+			return http.StatusBadRequest, "это не кондуит (manual_table)"
 		}
-		cfg["table"] = req.Table
-		cfg["task_count"] = req.TaskCount
+		delete(cfg, "table")
+		cfg["task_count"] = taskCount
 		cfgBlob, err := json.Marshal(cfg)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
+			return http.StatusInternalServerError, err.Error()
 		}
 		obj["provider_config"] = cfgBlob
 		blob, err := json.Marshal(obj)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
+			return http.StatusInternalServerError, err.Error()
 		}
 		out = append(out, blob)
-		updated = true
 	}
-	if !updated {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "кондуит не найден в группе"})
-		return
+	if err := setManualTablesEntry(h.groupManualTablesPath(slug), id, table); err != nil {
+		return http.StatusInternalServerError, err.Error()
 	}
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
+}
+
+// juryKonduitSaveGlobal пишет оценки группы в общий (глобальный) кондуит.
+// Жюри редактирует только строки СВОИХ учеников: присланная таблица считается
+// полной правдой для учеников группы, а строки чужих групп из сохранённой
+// таблицы переносятся без изменений. Остальные поля контеста и конфига
+// (show_all и т.п.) не трогаются.
+func (h *Handlers) juryKonduitSaveGlobal(slug, id, table string, taskCount int) (int, string) {
+	contests, err := h.loadContestsList()
+	if err != nil {
+		return http.StatusInternalServerError, err.Error()
+	}
+	for i := range contests {
+		if strings.TrimSpace(contests[i].ID) != id {
+			continue
+		}
+		if strings.TrimSpace(contests[i].Provider) != source.ManualTableProviderID {
+			return http.StatusBadRequest, "это не кондуит (manual_table)"
+		}
+		cfg := map[string]any{}
+		if len(contests[i].ProviderConfig) > 0 {
+			_ = json.Unmarshal(contests[i].ProviderConfig, &cfg)
+		}
+		existing := manualTableFor(h.globalManualTablesPath(), id, cfg)
+		merged := mergeKonduitTables(table, existing, taskCount, h.groupStudents(slug))
+		// Таблица — в manual_tables.json; в определении только task_count
+		// (легаси-таблица из конфига убирается — миграция).
+		delete(cfg, "table")
+		cfg["task_count"] = taskCount
+		cfgBlob, err := json.Marshal(cfg)
+		if err != nil {
+			return http.StatusInternalServerError, err.Error()
+		}
+		contests[i].ProviderConfig = cfgBlob
+		if err := setManualTablesEntry(h.globalManualTablesPath(), id, merged); err != nil {
+			return http.StatusInternalServerError, err.Error()
+		}
+		if err := h.saveContests(contests); err != nil {
+			return http.StatusInternalServerError, err.Error()
+		}
+		return http.StatusOK, ""
+	}
+	return http.StatusBadRequest, "глобальный контест не найден"
+}
+
+// groupStudents — ученики группы (для фильтрации строк общего кондуита).
+func (h *Handlers) groupStudents(slug string) []domain.Student {
+	gf, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		return nil
+	}
+	byID := h.loadStudentsByID()
+	out := make([]domain.Student, 0, len(gf.StudentIDs))
+	for _, sid := range domain.NormalizeGroups(gf.StudentIDs) {
+		if s, ok := byID[sid]; ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// normKonduitName — нормализация имени строки кондуита для дедупликации.
+func normKonduitName(s string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(strings.ToLower(s), "ё", "е")), " ")
+}
+
+// mergeKonduitTables сливает присланную жюри таблицу (только ученики его
+// группы) с сохранённой общей: строки учеников группы берутся из присланной
+// (включая удаление — отсутствие строки очищает оценки), строки чужих групп
+// сохраняются как были. Заголовок — из присланной таблицы.
+func mergeKonduitTables(incoming, existing string, taskCount int, students []domain.Student) string {
+	labels, incomingRows := source.SplitManualTable(incoming, taskCount)
+	_, existingRows := source.SplitManualTable(existing, taskCount)
+
+	incomingNames := make(map[string]struct{}, len(incomingRows))
+	for _, r := range incomingRows {
+		incomingNames[normKonduitName(r[0])] = struct{}{}
+	}
+
+	// Какие строки старой таблицы принадлежат ученикам этой группы.
+	existingNames := make([]string, len(existingRows))
+	for i, r := range existingRows {
+		existingNames[i] = r[0]
+	}
+	mine := source.MatchNamesToStudents(existingNames, students)
+
+	lines := []string{"ФИО\t" + strings.Join(labels, "\t")}
+	appendRow := func(r []string) { lines = append(lines, strings.Join(r, "\t")) }
+	for _, r := range incomingRows {
+		appendRow(r)
+	}
+	for i, r := range existingRows {
+		if _, isMine := mine[i]; isMine {
+			continue // строка ученика группы: правда — в присланной таблице
+		}
+		if _, dup := incomingNames[normKonduitName(r[0])]; dup {
+			continue
+		}
+		appendRow(r)
+	}
+	if len(lines) == 1 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // juryKonduitEntryFromRaw — как juryKonduitEntry, но по уже загруженной записи.
@@ -331,6 +505,9 @@ type JuryKonduitPageData struct {
 	Labels       []string
 	LabelsJSON   template.JS
 	Rows         []JuryKonduitRow
+	// Shared — глобальный кондуит по ссылке: оценки общие для всех групп,
+	// подключивших этот контест.
+	Shared bool
 }
 
 type JuryKonduitRow struct {
@@ -349,7 +526,7 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	obj, cfg, ok := h.juryKonduitEntry(slug, id)
+	konduit, ok := h.resolveJuryKonduit(slug, id)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -364,32 +541,41 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 	if title == "" {
 		title = slug
 	}
-	contestTitle := id
-	var ct string
-	if json.Unmarshal(obj["title"], &ct) == nil && strings.TrimSpace(ct) != "" {
-		contestTitle = strings.TrimSpace(ct)
-	}
+	contestTitle := konduit.Title
 
-	table, _ := cfg["table"].(string)
+	table, _ := konduit.Config["table"].(string)
 	taskCount := 0
-	if v, ok := cfg["task_count"].(float64); ok {
+	if v, ok := konduit.Config["task_count"].(float64); ok {
 		taskCount = int(v)
 	}
 	labels, rawRows := source.SplitManualTable(table, taskCount)
 
-	normName := func(s string) string {
-		return strings.Join(strings.Fields(strings.ReplaceAll(strings.ToLower(s), "ё", "е")), " ")
+	// Общий кондуит (по ссылке): показываем только строки учеников ЭТОЙ
+	// группы — чужие группы редактируют своих, их строки не трогаются.
+	students := h.groupStudents(slug)
+	if !konduit.Inline {
+		names := make([]string, len(rawRows))
+		for i, rr := range rawRows {
+			names[i] = rr[0]
+		}
+		mine := source.MatchNamesToStudents(names, students)
+		kept := make([][]string, 0, len(mine))
+		for i, rr := range rawRows {
+			if _, ok := mine[i]; ok {
+				kept = append(kept, rr)
+			}
+		}
+		rawRows = kept
 	}
+
 	rows := make([]JuryKonduitRow, 0, len(rawRows))
 	seen := make(map[string]struct{}, len(rawRows))
 	for _, rr := range rawRows {
-		seen[normName(rr[0])] = struct{}{}
+		seen[normKonduitName(rr[0])] = struct{}{}
 		rows = append(rows, JuryKonduitRow{Name: rr[0], Vals: rr[1:]})
 	}
 	// Недостающие ученики группы — пустыми строками (полное ФИО для матчинга).
-	studentsByID := h.loadStudentsByID()
-	for _, sid := range domain.NormalizeGroups(groupFile.StudentIDs) {
-		s := studentsByID[sid]
+	for _, s := range students {
 		name := strings.TrimSpace(s.FullName)
 		if name == "" {
 			name = strings.TrimSpace(s.PublicName)
@@ -397,13 +583,13 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 		if name == "" {
 			continue
 		}
-		if _, ok := seen[normName(name)]; ok {
+		if _, ok := seen[normKonduitName(name)]; ok {
 			continue
 		}
 		rows = append(rows, JuryKonduitRow{Name: name, Vals: make([]string, len(labels))})
 	}
 	// Для удобства заполнения строки — по алфавиту ФИО.
-	sort.SliceStable(rows, func(i, j int) bool { return normName(rows[i].Name) < normName(rows[j].Name) })
+	sort.SliceStable(rows, func(i, j int) bool { return normKonduitName(rows[i].Name) < normKonduitName(rows[j].Name) })
 
 	labelsBlob, err := json.Marshal(labels)
 	if err != nil {
@@ -421,6 +607,7 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 		Labels:       labels,
 		LabelsJSON:   template.JS(labelsBlob),
 		Rows:         rows,
+		Shared:       !konduit.Inline,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "jury_konduit.html", page); err != nil {
 		h.logger.Printf("ERROR render jury konduit slug=%s id=%s err=%v", slug, id, err)
@@ -449,20 +636,29 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData) {
 	if err != nil {
 		return
 	}
+	globals, err := h.loadContestsList()
+	if err != nil {
+		return
+	}
+	globalManual := make(map[string]bool)
+	for _, c := range globals {
+		if strings.TrimSpace(c.Provider) == source.ManualTableProviderID {
+			globalManual[strings.TrimSpace(c.ID)] = true
+		}
+	}
+
 	inGroup := make(map[string]struct{}, len(entries))
 	konduits := make(map[string]bool)
 	for _, e := range entries {
 		inGroup[e.id] = struct{}{}
 		if _, _, ok := h.juryKonduitEntryFromRaw(e); ok {
-			konduits[e.id] = true
+			konduits[e.id] = true // inline-кондуит группы
+		} else if !e.inline && globalManual[e.id] {
+			konduits[e.id] = true // ссылка на глобальный кондуит (оценки общие)
 		}
 	}
 	page.JuryKonduits = konduits
 
-	globals, err := h.loadContestsList()
-	if err != nil {
-		return
-	}
 	for _, c := range globals {
 		id := strings.TrimSpace(c.ID)
 		if id == "" {

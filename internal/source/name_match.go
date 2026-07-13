@@ -6,6 +6,12 @@ import (
 	"standings-edu/internal/domain"
 )
 
+// MatchNamesToStudents — экспортированная обёртка матчера имён для других
+// пакетов (жюри-панель фильтрует строки общего кондуита по ученикам группы).
+func MatchNamesToStudents(names []string, students []domain.Student) map[int]string {
+	return matchNamesToStudents(names, students)
+}
+
 // matchNamesToStudents сопоставляет строки-имена («Имя Фамилия», «Фамилия Имя
 // Отчество» — порядок не важен) ученикам standings по ФИО. Сравнение пословное:
 // каждый токен имени должен найтись среди токенов ФИО ученика (инициал «я.»

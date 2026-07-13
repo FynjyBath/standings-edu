@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"standings-edu/internal/domain"
@@ -186,5 +187,54 @@ func writeSourceFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Таблицы кондуитов из manual_tables.json подставляются в provider_config при
+// загрузке: глобальные — из data/manual_tables.json, inline — из файла группы.
+// Запись в файле приоритетнее легаси-таблицы в конфиге.
+func TestLoadInjectsManualTables(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite := func(rel, v string) {
+		t.Helper()
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(v), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("students.json", `[{"id":"s1","full_name":"Иванов Иван"}]`)
+	mustWrite("contests.json", `[{"id":"gk","title":"К","score_system":"edu","source_type":"provider",
+		"provider":"manual_table","provider_config":{"task_count":1,"table":"legacy\t1\n"},"subcontests":[]}]`)
+	mustWrite("manual_tables.json", `{"gk":"ФИО\t1\nИванов Иван\t1\n"}`)
+	mustWrite("groups/g1/group.json", `{"title":"Г","student_ids":["s1"]}`)
+	mustWrite("groups/g1/contests.json", `[{"id":"ik","title":"Инлайн","score_system":"edu","source_type":"provider",
+		"provider":"manual_table","provider_config":{"task_count":1},"subcontests":[],"update":true}]`)
+	mustWrite("groups/g1/manual_tables.json", `{"ik":"ФИО\t1\nИванов Иван\t+\n"}`)
+
+	data, err := NewSourceLoader(dir).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Глобальный: таблица из файла (перекрывает легаси).
+	var cfg map[string]any
+	if err := json.Unmarshal(data.Contests["gk"].ProviderConfig, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if table, _ := cfg["table"].(string); !strings.Contains(table, "Иванов Иван") || strings.Contains(table, "legacy") {
+		t.Fatalf("global table not injected: %q", cfg["table"])
+	}
+	// Инлайн группы.
+	inline := data.Groups[0].Contests[0].Inline
+	if inline == nil {
+		t.Fatal("inline contest expected")
+	}
+	if err := json.Unmarshal(inline.ProviderConfig, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if table, _ := cfg["table"].(string); !strings.Contains(table, "+") {
+		t.Fatalf("inline table not injected: %q", cfg["table"])
 	}
 }

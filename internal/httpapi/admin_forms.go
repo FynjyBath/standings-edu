@@ -17,6 +17,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
+	"standings-edu/internal/source"
 	"standings-edu/internal/studentintake"
 )
 
@@ -483,6 +484,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 	rows := make([]AdminGroupContestEntry, 0, len(entries))
 	inGroup := make(map[string]struct{}, len(entries))
 	inlineByID := make(map[string]domain.Contest)
+	groupTables := loadManualTablesFile(h.groupManualTablesPath(slug))
 	for _, e := range entries {
 		if e.id == "" {
 			continue
@@ -507,6 +509,13 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		if e.inline {
 			var inlineContest domain.Contest
 			if err := json.Unmarshal(e.raw, &inlineContest); err == nil {
+				// Для формы редактирования: таблица кондуита из manual_tables.json
+				// группы подставляется обратно в конфиг.
+				if t, ok := groupTables[e.id]; ok && strings.TrimSpace(inlineContest.Provider) == source.ManualTableProviderID {
+					if cfg, err := source.InjectManualTable(inlineContest.ProviderConfig, t); err == nil {
+						inlineContest.ProviderConfig = cfg
+					}
+				}
 				inlineByID[e.id] = inlineContest
 				row.Title = strings.TrimSpace(inlineContest.Title)
 				row.Kind, row.IsProvider = contestKindLabel(inlineContest)
@@ -858,6 +867,10 @@ func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	// Таблица inline-кондуита (если была) больше не нужна.
+	if err := removeManualTablesEntry(h.groupManualTablesPath(slug), id); err != nil {
+		h.logger.Printf("WARN remove group manual table slug=%s id=%s: %v", slug, id, err)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -1143,6 +1156,18 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 	id := contest.ID
 	originalID := strings.TrimSpace(req.OriginalID)
 
+	// Кондуит: таблица оценок — в manual_tables.json группы, не в определении.
+	if originalID != "" && originalID != id {
+		if err := renameManualTablesEntry(h.groupManualTablesPath(slug), originalID, id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	}
+	if err := h.splitContestManualTable(&contest, h.groupManualTablesPath(slug)); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -1285,6 +1310,20 @@ func (h *Handlers) AdminContestsPage(w http.ResponseWriter, _ *http.Request) {
 		views = append(views, AdminContestView{
 			ID: c.ID, Title: c.Title, Type: kind, ScoreSystem: string(c.ScoreSystem.Normalized()),
 		})
+	}
+
+	// Для формы редактирования: подставляем таблицы кондуитов из
+	// manual_tables.json обратно в provider_config (на диске они раздельно).
+	globalTables := loadManualTablesFile(h.globalManualTablesPath())
+	for i := range contests {
+		if strings.TrimSpace(contests[i].Provider) != source.ManualTableProviderID {
+			continue
+		}
+		if t, ok := globalTables[strings.TrimSpace(contests[i].ID)]; ok {
+			if cfg, err := source.InjectManualTable(contests[i].ProviderConfig, t); err == nil {
+				contests[i].ProviderConfig = cfg
+			}
+		}
 	}
 
 	blob, err := json.Marshal(contests)
@@ -1444,6 +1483,19 @@ func (h *Handlers) AdminContestSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Кондуит: таблица оценок уезжает в manual_tables.json (при переименовании
+	// запись переносится под новый id), в определении остаётся только конфиг.
+	if originalID != "" && originalID != id {
+		if err := renameManualTablesEntry(h.globalManualTablesPath(), originalID, id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	}
+	if err := h.splitContestManualTable(&contest, h.globalManualTablesPath()); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
 	replaced := false
 	for i := range contests {
 		if strings.TrimSpace(contests[i].ID) == originalID && originalID != "" {
@@ -1495,6 +1547,10 @@ func (h *Handlers) AdminContestDelete(w http.ResponseWriter, r *http.Request) {
 	if err := h.saveContests(kept); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+	// Таблица кондуита (если была) больше не нужна.
+	if err := removeManualTablesEntry(h.globalManualTablesPath(), id); err != nil {
+		h.logger.Printf("WARN remove manual table for deleted contest %q: %v", id, err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

@@ -12,6 +12,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
+	"standings-edu/internal/source"
 )
 
 type SourceLoader struct {
@@ -73,6 +74,7 @@ func (l *SourceLoader) loadContests() (map[string]domain.Contest, error) {
 	if err := fileutil.ReadJSON(path, &contests); err != nil {
 		return nil, fmt.Errorf("load contests: %w", err)
 	}
+	tables := l.loadManualTables(filepath.Join(l.DataDir, source.ManualTablesFileName))
 
 	out := make(map[string]domain.Contest, len(contests))
 	for _, c := range contests {
@@ -87,9 +89,41 @@ func (l *SourceLoader) loadContests() (map[string]domain.Contest, error) {
 		if _, err := domain.ParseFreezeSpec(c.Freeze); err != nil {
 			return nil, fmt.Errorf("contest %q: %w", c.ID, err)
 		}
+		if err := injectManualTable(&c, c.ID, tables); err != nil {
+			return nil, fmt.Errorf("contest %q: %w", c.ID, err)
+		}
 		out[c.ID] = c
 	}
 	return out, nil
+}
+
+// loadManualTables читает файл таблиц кондуитов (map contest_id -> TSV).
+// Нет файла — пустая карта (оценки лежат в provider_config, старый формат).
+func (l *SourceLoader) loadManualTables(path string) map[string]string {
+	tables := map[string]string{}
+	if err := fileutil.ReadJSON(path, &tables); err != nil {
+		return map[string]string{}
+	}
+	return tables
+}
+
+// injectManualTable подставляет таблицу оценок из manual_tables.json в
+// provider_config кондуита (по id записи). Записи в файле имеют приоритет над
+// таблицей, оставшейся в конфиге (легаси-формат).
+func injectManualTable(c *domain.Contest, id string, tables map[string]string) error {
+	if c.Provider != source.ManualTableProviderID {
+		return nil
+	}
+	table, ok := tables[id]
+	if !ok {
+		return nil
+	}
+	cfg, err := source.InjectManualTable(c.ProviderConfig, table)
+	if err != nil {
+		return err
+	}
+	c.ProviderConfig = cfg
+	return nil
 }
 
 func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
@@ -118,6 +152,16 @@ func (l *SourceLoader) loadGroups() ([]domain.GroupDefinition, error) {
 		contests, err := l.loadGroupContests(filepath.Join(dir, "contests.json"))
 		if err != nil {
 			return nil, fmt.Errorf("load group contests %q: %w", slug, err)
+		}
+		// Таблицы inline-кондуитов группы лежат рядом, в manual_tables.json.
+		groupTables := l.loadManualTables(filepath.Join(dir, source.ManualTablesFileName))
+		for i := range contests {
+			if contests[i].Inline == nil {
+				continue
+			}
+			if err := injectManualTable(contests[i].Inline, contests[i].ID, groupTables); err != nil {
+				return nil, fmt.Errorf("group %q contest %q: %w", slug, contests[i].ID, err)
+			}
 		}
 
 		update := true

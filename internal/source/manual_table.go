@@ -14,6 +14,47 @@ import (
 
 const ManualTableProviderID = "manual_table"
 
+// ManualTablesFileName — файл с таблицами оценок кондуитов, лежит рядом с
+// contests.json (глобальным или группы): map contest_id -> TSV-таблица.
+// Определение контеста в contests.json остаётся без оценок; загрузчик
+// подставляет таблицу в provider_config перед генерацией. Таблица прямо в
+// provider_config (старый формат) тоже принимается — файл имеет приоритет.
+const ManualTablesFileName = "manual_tables.json"
+
+// InjectManualTable подставляет таблицу кондуита в provider_config (заменяя
+// поле table). Пустой конфиг превращается в {"table": ...}.
+func InjectManualTable(cfg json.RawMessage, table string) (json.RawMessage, error) {
+	m := map[string]any{}
+	if len(bytes.TrimSpace(cfg)) > 0 {
+		if err := json.Unmarshal(cfg, &m); err != nil {
+			return nil, fmt.Errorf("provider_config: %w", err)
+		}
+	}
+	m["table"] = table
+	return json.Marshal(m)
+}
+
+// StripManualTable убирает таблицу из provider_config (обратная операция:
+// оценки уезжают в manual_tables.json). Возвращает конфиг без поля table,
+// саму таблицу и был ли ключ table в конфиге вообще (правка сырым JSON без
+// table не должна затирать сохранённые оценки).
+func StripManualTable(cfg json.RawMessage) (json.RawMessage, string, bool, error) {
+	m := map[string]any{}
+	if len(bytes.TrimSpace(cfg)) > 0 {
+		if err := json.Unmarshal(cfg, &m); err != nil {
+			return nil, "", false, fmt.Errorf("provider_config: %w", err)
+		}
+	}
+	raw, had := m["table"]
+	table, _ := raw.(string)
+	delete(m, "table")
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, "", false, err
+	}
+	return out, table, had, nil
+}
+
 // ManualTableProvider строит таблицу контеста из вручную вставленных оценок
 // (кондуит математиков): данные лежат прямо в provider_config как текст,
 // скопированный из Google Таблиц/Excel (колонки разделены табуляцией). Первая

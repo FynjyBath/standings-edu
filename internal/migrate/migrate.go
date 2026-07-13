@@ -22,6 +22,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
+	"standings-edu/internal/source"
 	"standings-edu/internal/studentintake"
 )
 
@@ -204,7 +205,11 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 				}
 				groupContests = nil
 			}
-			for _, e := range groupContests {
+			// Таблицы inline-кондуитов подставляются обратно в определение —
+			// бандл самодостаточен (на диске они лежат отдельно, в manual_tables.json).
+			groupTables := loadManualTablesQuiet(filepath.Join(groupsDir, slug, source.ManualTablesFileName))
+			for i, e := range groupContests {
+				groupContests[i] = injectManualTableRaw(e, groupTables)
 				if id := rawStringField(e, "id"); id != "" {
 					contestIDs[id] = struct{}{}
 				}
@@ -238,15 +243,58 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 	if err := fileutil.ReadJSON(filepath.Join(dataDir, "contests.json"), &allContests); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
+	globalTables := loadManualTablesQuiet(filepath.Join(dataDir, source.ManualTablesFileName))
 	for _, c := range allContests {
 		if id := rawStringField(c, "id"); id != "" {
 			if _, ok := contestIDs[id]; ok {
-				bundle.Contests = append(bundle.Contests, c)
+				bundle.Contests = append(bundle.Contests, injectManualTableRaw(c, globalTables))
 			}
 		}
 	}
 
 	return bundle, nil
+}
+
+// loadManualTablesQuiet читает manual_tables.json (map id -> TSV); нет файла —
+// пустая карта.
+func loadManualTablesQuiet(path string) map[string]string {
+	tables := map[string]string{}
+	if err := fileutil.ReadJSON(path, &tables); err != nil {
+		return map[string]string{}
+	}
+	return tables
+}
+
+// injectManualTableRaw подставляет таблицу кондуита обратно в raw-определение
+// контеста для экспорта: бандл несёт оценки с собой, а импорт на другом сервере
+// работает через легаси-fallback (таблица в provider_config) и переложит её в
+// manual_tables.json при первом сохранении. Не-кондуиты возвращаются как есть.
+func injectManualTableRaw(raw json.RawMessage, tables map[string]string) json.RawMessage {
+	id := rawStringField(raw, "id")
+	if id == "" {
+		return raw
+	}
+	table, ok := tables[id]
+	if !ok {
+		return raw
+	}
+	if rawStringField(raw, "provider") != source.ManualTableProviderID {
+		return raw
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return raw
+	}
+	cfg, err := source.InjectManualTable(m["provider_config"], table)
+	if err != nil {
+		return raw
+	}
+	m["provider_config"] = cfg
+	out, err := json.Marshal(m)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // ImportBundle дописывает бандл в data-директорию по выбору sel. Существующее не

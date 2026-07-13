@@ -12,6 +12,12 @@ func MatchNamesToStudents(names []string, students []domain.Student) map[int]str
 	return matchNamesToStudents(names, students)
 }
 
+// NormalizeName — каноничная форма ФИО для сравнения/дедупликации (нижний
+// регистр, ё/ë→е, схлопнутые пробелы). Едина с матчером и слиянием таблиц.
+func NormalizeName(s string) string {
+	return normalizeForMatch(s)
+}
+
 // matchNamesToStudents сопоставляет строки-имена («Имя Фамилия», «Фамилия Имя
 // Отчество» — порядок не важен) ученикам standings по ФИО. Сравнение пословное:
 // каждый токен имени должен найтись среди токенов ФИО ученика (инициал «я.»

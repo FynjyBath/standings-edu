@@ -246,3 +246,35 @@ func TestManualCellMax(t *testing.T) {
 		}
 	}
 }
+
+// Слияние таблиц разной ширины и с «грязными» именами (латинская ë, NBSP,
+// лишние пробелы) — строки одного ученика склеиваются, не дублируются.
+func TestMergeManualTablesMaxNormalizationAndWidth(t *testing.T) {
+	// A: 2 колонки, имя с латинской ë; B: 3 колонки, то же имя кириллицей.
+	a := "ФИО\t1\t2\nАртëм  Иванов\t1\t\n"      // латинская ë, двойной пробел
+	b := "ФИО\t1\t2\t3\nАртём Иванов\t\t1\t+\n" // кириллическая ё
+	got := MergeManualTablesMax(a, b)
+	labels, rows := SplitManualTable(got, 0)
+	if len(labels) != 3 {
+		t.Fatalf("merged width must be 3: %v", labels)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("одинаковый ученик не должен дублироваться: %d строк\n%s", len(rows), got)
+	}
+	// max("1","")=1, max("","1")=1, max("(нет)","+")=+
+	v := rows[0][1:]
+	if v[0] != "1" || v[1] != "1" || v[2] != "+" {
+		t.Fatalf("merged cells: %v", v)
+	}
+}
+
+// NormalizeName едина: латинская ë, кириллическая ё, NBSP и регистр приводятся
+// к одному виду.
+func TestNormalizeName(t *testing.T) {
+	if NormalizeName("Артём") != NormalizeName("артëм") {
+		t.Fatal("ё и ë должны нормализоваться одинаково")
+	}
+	if NormalizeName("Иван Петров") != "иван петров" {
+		t.Fatalf("NBSP: %q", NormalizeName("Иван Петров"))
+	}
+}

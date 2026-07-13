@@ -441,9 +441,10 @@ func (h *Handlers) groupStudents(slug string) []domain.Student {
 	return out
 }
 
-// normKonduitName — нормализация имени строки кондуита для дедупликации.
+// normKonduitName — нормализация имени строки кондуита для дедупликации
+// (едина с матчером ФИО и слиянием таблиц в source).
 func normKonduitName(s string) string {
-	return strings.Join(strings.Fields(strings.ReplaceAll(strings.ToLower(s), "ё", "е")), " ")
+	return source.NormalizeName(s)
 }
 
 // mergeKonduitTables сливает присланную жюри таблицу (только ученики его

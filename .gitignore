@@ -13,3 +13,9 @@
 
 # OS / editor noise
 .DS_Store
+
+# Favicons: не отслеживаются в git — каждый сервер держит свои
+# (git pull их не заменяет). Файлы лежат в web/static локально.
+/web/static/favicon.ico
+/web/static/favicon*.png
+/web/static/apple-touch-icon.png

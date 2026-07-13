@@ -870,6 +870,8 @@ func normalizeCellText(s string) string {
 func normalizeForMatch(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = strings.ReplaceAll(s, "ё", "е")
+	// Латинская ë (U+00EB) внутри кириллических имён — частая грязь в Moodle.
+	s = strings.ReplaceAll(s, "ë", "е")
 	s = strings.ReplaceAll(s, "\u00a0", " ")
 	s = reSpace.ReplaceAllString(s, " ")
 	return strings.TrimSpace(s)

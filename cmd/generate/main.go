@@ -24,6 +24,7 @@ func main() {
 		informaticsCreds = flag.String("informatics-creds-file", "./data/credentials/informatics_credentials.json", "path to informatics credentials JSON")
 		codeforcesCreds  = flag.String("codeforces-creds-file", "./data/credentials/codeforces_credentials.json", "path to optional codeforces credentials JSON")
 		ejudgeCreds      = flag.String("ejudge-creds-file", "./data/credentials/ejudge_credentials.json", "path to optional ejudge instances JSON (array)")
+		moodleCreds      = flag.String("moodle-creds-file", "./data/credentials/moodle_credentials.json", "path to optional moodle credentials JSON (base_url + token or username/password)")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 		codeforcesState  = flag.String("codeforces-state", "", "path to persisted codeforces submission_id state file (default: <out>/cache/codeforces_user_status_state.json)")
 	)
@@ -79,6 +80,20 @@ func main() {
 		ejClient.SetLogger(logger)
 		registry.RegisterSite(ejClient.SiteName(), ejClient)
 		logger.Printf("INFO ejudge instance %q (%s) registered", cfg.EjudgeID, cfg.BaseURL)
+	}
+
+	// Moodle: провайдер таблиц из журнала оценок. Без файла кредов — просто
+	// отключён (как informatics), битый файл — ошибка конфигурации.
+	moodleCredentials, err := source.LoadMoodleCredentials(*moodleCreds)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			logger.Printf("WARN moodle credentials file %q not found; moodle_grades provider disabled", *moodleCreds)
+		} else {
+			logger.Fatalf("failed to load moodle credentials: %v", err)
+		}
+	} else {
+		registry.RegisterProvider(source.NewMoodleGradesProvider(source.NewMoodleClient(moodleCredentials)))
+		logger.Printf("INFO moodle_grades provider registered (%s)", moodleCredentials.BaseURL)
 	}
 
 	loader := storage.NewSourceLoader(*dataDir)

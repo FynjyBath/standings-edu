@@ -58,8 +58,22 @@
   <div id="c-provider-section" style="margin-top:0.9rem;display:none;">
     <div class="admin-form-grid">
       <label><span>provider</span>
-        <select id="c-provider"><option value="codeforces_contest">codeforces_contest</option><option value="html_table_import">html_table_import</option></select>
+        <select id="c-provider"><option value="codeforces_contest">codeforces_contest</option><option value="html_table_import">html_table_import</option><option value="moodle_grades">moodle_grades</option></select>
       </label>
+    </div>
+    <div id="c-moodle-helper" style="display:none;margin-top:0.6rem;border:1px solid var(--line);border-radius:8px;padding:0.6rem;">
+      <p class="empty-hint" style="margin:0 0 0.5rem;">Оценки из журнала Moodle: вставьте ссылку на тест/задание — поля ниже сами соберут provider_config. Рекомендуемая score_system — <strong>ioi (баллы)</strong>.</p>
+      <div class="admin-form-grid">
+        <label><span>Ссылка на активность (тест, задание…) *</span><input type="text" id="c-moodle-url" placeholder="https://kurs.kod-u.ru/mod/quiz/view.php?id=5" /></label>
+        <label><span>Группа Moodle (название или id, опц.)</span><input type="text" id="c-moodle-group" placeholder="пусто — весь курс" /></label>
+        <label><span>Оценка в ячейке</span>
+          <select id="c-moodle-display"><option value="percent">percent (% от максимума — с заливкой)</option><option value="raw">raw (как в журнале)</option></select>
+        </label>
+        <label style="flex-direction:row;align-items:center;gap:0.5rem;">
+          <input type="checkbox" id="c-moodle-showall" style="width:auto;" />
+          <span title="Показать всех пользователей курса/группы Moodle: сопоставленные по ФИО привязываются к ученикам, остальные — отдельными строками. Без галочки — только ученики группы.">Вся табличка (все пользователи Moodle)</span>
+        </label>
+      </div>
     </div>
     <label style="display:block;margin-top:0.5rem;"><span>provider_config (JSON)</span>
       <textarea id="c-provider-config" class="account-list" rows="6" spellcheck="false" placeholder='{ "contest_id": 1711, "show_unofficial": true }'></textarea>
@@ -96,8 +110,41 @@
       var isProvider = $("c-source").value === "provider";
       $("c-provider-section").style.display = isProvider ? "" : "none";
       $("c-tasks-section").style.display = isProvider ? "none" : "";
+      toggleMoodleHelper();
     }
     $("c-source").addEventListener("change", toggleSections);
+
+    // Помощник moodle_grades: поля собирают provider_config сами; при
+    // редактировании существующего контеста заполняются из JSON. Textarea
+    // остаётся источником истины для отправки.
+    function moodleSyncToJSON() {
+      if ($("c-provider").value !== "moodle_grades") return;
+      var cfg = { activity_url: ($("c-moodle-url").value || "").trim() };
+      var g = ($("c-moodle-group").value || "").trim();
+      if (g) cfg.moodle_group = g;
+      if ($("c-moodle-showall").checked) cfg.show_all = true;
+      if ($("c-moodle-display").value === "raw") cfg.display = "raw";
+      $("c-provider-config").value = JSON.stringify(cfg, null, 2);
+    }
+    function moodleFillFromJSON() {
+      var cfg = {};
+      try { cfg = JSON.parse($("c-provider-config").value || "{}") || {}; } catch (e) { cfg = {}; }
+      $("c-moodle-url").value = cfg.activity_url || "";
+      $("c-moodle-group").value = cfg.moodle_group || "";
+      $("c-moodle-showall").checked = !!cfg.show_all;
+      $("c-moodle-display").value = (cfg.display === "raw") ? "raw" : "percent";
+    }
+    function toggleMoodleHelper() {
+      var on = $("c-source").value === "provider" && $("c-provider").value === "moodle_grades";
+      $("c-moodle-helper").style.display = on ? "" : "none";
+      if (on) moodleFillFromJSON();
+    }
+    $("c-provider").addEventListener("change", toggleMoodleHelper);
+    ["c-moodle-url", "c-moodle-group"].forEach(function (id) { $(id).addEventListener("input", moodleSyncToJSON); });
+    ["c-moodle-showall", "c-moodle-display"].forEach(function (id) { $(id).addEventListener("change", moodleSyncToJSON); });
+    $("c-provider-config").addEventListener("input", function () {
+      if ($("c-moodle-helper").style.display !== "none") moodleFillFromJSON();
+    });
 
     function addMaterial(title, url) {
       var row = document.createElement("div");

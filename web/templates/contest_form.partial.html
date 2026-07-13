@@ -76,10 +76,33 @@
       </div>
     </div>
     <div id="c-manual-helper" style="display:none;margin-top:0.6rem;border:1px solid var(--line);border-radius:8px;padding:0.6rem;">
-      <p class="empty-hint" style="margin:0 0 0.5rem;">Кондуит / ручные оценки: выделите таблицу в Google Таблицах или Excel и вставьте сюда (Ctrl+V). Первая колонка — ФИО, дальше оценки: пусто — не сдана, «1» или «+» — сдана, можно любые числа («0», «±» — попытка). Первая строка с названиями колонок — по желанию. score_system <strong>edu</strong> — плюсики, <strong>ioi</strong> — числа как есть.</p>
-      <textarea id="c-manual-table" class="account-list" rows="10" spellcheck="false" placeholder="ФИО	1	2	3&#10;Иванов Иван	1		1&#10;Петров Пётр		1	"></textarea>
-      <div id="c-manual-stats" class="empty-hint" style="margin-top:0.3rem;"></div>
-      <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.4rem;">
+      <p class="empty-hint" style="margin:0 0 0.5rem;">Кондуит / ручные оценки. Пусто — задача не сдана, «1» или «+» — сдана, можно любые числа («0», «±» — попытка). score_system <strong>edu</strong> — плюсики, <strong>ioi</strong> — числа как есть.</p>
+      <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:0.55rem;">
+        <button type="button" id="c-manual-mode-grid" class="admin-btn admin-btn--secondary">Заполнить в форме</button>
+        <button type="button" id="c-manual-mode-paste" class="admin-btn admin-btn--secondary">Вставить из Google Таблиц</button>
+        <label style="display:flex;align-items:center;gap:0.35rem;margin-left:auto;"><span>Задач:</span>
+          <input type="number" id="c-manual-cols" min="1" max="60" step="1" value="4" style="max-width:4.5rem;" title="Число колонок-задач кондуита (task_count в конфиге)." />
+        </label>
+      </div>
+      <div id="c-manual-paste-pane" style="display:none;">
+        <p class="empty-hint" style="margin:0 0 0.4rem;">Выделите таблицу в Google Таблицах или Excel и вставьте сюда (Ctrl+V). Первая колонка — ФИО; первая строка с названиями колонок — по желанию.</p>
+        <textarea id="c-manual-table" class="account-list" rows="10" spellcheck="false" placeholder="ФИО	1	2	3&#10;Иванов Иван	1		1&#10;Петров Пётр		1	"></textarea>
+        <div id="c-manual-stats" class="empty-hint" style="margin-top:0.3rem;"></div>
+      </div>
+      <div id="c-manual-grid-pane" style="display:none;">
+        <div class="table-wrap" style="max-height:26rem;overflow:auto;">
+          <table class="standings-table data-table" id="c-manual-grid" style="min-width:auto;">
+            <thead><tr id="c-manual-grid-head"></tr></thead>
+            <tbody id="c-manual-grid-body"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.4rem;">
+          <button type="button" id="c-manual-add-row" class="admin-btn admin-btn--secondary">+ строка</button>
+          <button type="button" id="c-manual-fill-students" class="admin-btn admin-btn--secondary" style="display:none;">+ ученики группы</button>
+        </div>
+        <p class="empty-hint" style="margin-top:0.3rem;">Вставка из буфера работает и в ячейках: встаньте в ячейку и Ctrl+V — блок значений разложится вправо-вниз. Названия колонок редактируются в шапке.</p>
+      </div>
+      <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;">
         <input type="checkbox" id="c-manual-showall" style="width:auto;" />
         <span title="Строки, не сопоставленные с учениками группы по ФИО, будут показаны отдельными строками с именем из таблицы. Без галочки — только ученики группы.">Показывать несопоставленные строки</span>
       </label>
@@ -143,21 +166,139 @@
       $("c-moodle-showall").checked = !!cfg.show_all;
       $("c-moodle-display").value = (cfg.display === "raw") ? "raw" : "percent";
     }
-    // Помощник manual_table (кондуит): большая textarea для вставки из
-    // Google Таблиц/Excel + живой счётчик распознанных строк и колонок.
-    // Сырой JSON при этом прячем — таблица в нём нечитаема.
-    function manualSyncToJSON() {
+    // Помощник manual_table (кондуит), два режима поверх одного конфига
+    // {table (TSV), task_count, show_all}: «Заполнить в форме» — сетка
+    // (ученики по строкам, задачи по столбцам), «Вставить из Google Таблиц» —
+    // textarea. Сырой JSON прячем — таблица в нём нечитаема.
+    var manualStudents = []; // [{id, name}] — участники группы (задаёт страница)
+    var manualMode = "grid";
+
+    // Заголовок распознаём как на сервере: первая ячейка — «ФИО»-подобная,
+    // либо в ячейках оценок есть буквы.
+    function manualTsvParse(text) {
+      var rows = [];
+      (text || "").split(/\r\n|\r|\n/).forEach(function (line) {
+        if (line.trim() === "") return;
+        rows.push(line.split("\t").map(function (c) { return c.replace(/ /g, " ").trim(); }));
+      });
+      var header = null;
+      if (rows.length) {
+        var first = (rows[0][0] || "").toLowerCase();
+        var kw = ["", "фио", "ученик", "имя", "фамилия", "участник", "name"];
+        var lettersInGrades = rows[0].slice(1).some(function (c) { return /[а-яёa-z]/i.test(c.replace(/[+±]/g, "")); });
+        if (kw.indexOf(first) >= 0 || lettersInGrades) { header = rows.shift(); }
+      }
+      return { header: header, rows: rows.filter(function (r) { return (r[0] || "") !== ""; }) };
+    }
+    function manualGridBody() { return $("c-manual-grid-body"); }
+    function manualColCount() {
+      var n = parseInt($("c-manual-cols").value, 10);
+      return (isNaN(n) || n < 1) ? 1 : Math.min(n, 60);
+    }
+    function manualColNames() {
+      return [].slice.call($("c-manual-grid-head").querySelectorAll(".mg-col")).map(function (i) { return i.value.trim(); });
+    }
+    // Сетка → TSV (источник истины для конфига).
+    function manualGridToTsv() {
+      var lines = ["ФИО\t" + manualColNames().map(function (n, i) { return n || String(i + 1); }).join("\t")];
+      [].slice.call(manualGridBody().querySelectorAll("tr")).forEach(function (tr) {
+        var name = tr.querySelector(".mg-name").value.trim();
+        var vals = [].slice.call(tr.querySelectorAll(".mg-val")).map(function (i) { return i.value.trim(); });
+        if (name === "" && vals.join("") === "") return;
+        lines.push(name + "\t" + vals.join("\t"));
+      });
+      return lines.length > 1 ? lines.join("\n") + "\n" : "";
+    }
+    function manualWriteCfg() {
       if ($("c-provider").value !== "manual_table") return;
-      var cfg = { table: $("c-manual-table").value || "" };
+      if (manualMode === "grid") {
+        $("c-manual-table").value = manualGridToTsv();
+      } else {
+        // В режиме вставки число задач выводится из самой таблицы, чтобы
+        // счётчик не обрезал вставленные колонки.
+        var parsed = manualTsvParse($("c-manual-table").value);
+        var inferred = parsed.header ? parsed.header.length - 1 : 0;
+        parsed.rows.forEach(function (r) { inferred = Math.max(inferred, r.length - 1); });
+        if (inferred > 0) $("c-manual-cols").value = inferred;
+      }
+      var cfg = { table: $("c-manual-table").value || "", task_count: manualColCount() };
       if ($("c-manual-showall").checked) cfg.show_all = true;
       $("c-provider-config").value = JSON.stringify(cfg);
       manualUpdateStats();
+    }
+    // Одна строка сетки: имя + ячейки оценок + удаление.
+    function manualAddRow(name, vals) {
+      var cols = manualColCount();
+      var tr = document.createElement("tr");
+      var tdName = document.createElement("td");
+      var nameInput = document.createElement("input");
+      nameInput.type = "text"; nameInput.className = "mg-name"; nameInput.placeholder = "ФИО";
+      nameInput.style.minWidth = "13rem"; nameInput.value = name || "";
+      tdName.appendChild(nameInput); tr.appendChild(tdName);
+      for (var i = 0; i < cols; i++) {
+        var td = document.createElement("td");
+        var inp = document.createElement("input");
+        inp.type = "text"; inp.className = "mg-val";
+        inp.style.cssText = "width:3.2rem;text-align:center;";
+        inp.value = (vals && vals[i]) || "";
+        td.appendChild(inp); tr.appendChild(td);
+      }
+      var tdDel = document.createElement("td");
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "admin-btn admin-btn--secondary"; del.textContent = "×"; del.title = "Убрать строку";
+      del.addEventListener("click", function () { tr.remove(); manualWriteCfg(); });
+      tdDel.appendChild(del); tr.appendChild(tdDel);
+      manualGridBody().appendChild(tr);
+    }
+    // Полная перерисовка сетки из разобранного TSV (+ дозаполнение учениками).
+    function manualGridRender(parsed) {
+      var cols = manualColCount();
+      var head = $("c-manual-grid-head");
+      head.innerHTML = "";
+      var thName = document.createElement("th"); thName.textContent = "Ученик"; head.appendChild(thName);
+      for (var i = 0; i < cols; i++) {
+        var th = document.createElement("th");
+        var inp = document.createElement("input");
+        inp.type = "text"; inp.className = "mg-col";
+        inp.style.cssText = "width:3.2rem;text-align:center;font-weight:700;";
+        inp.value = (parsed.header && (parsed.header[i + 1] || "").trim()) || String(i + 1);
+        th.appendChild(inp); head.appendChild(th);
+      }
+      head.appendChild(document.createElement("th"));
+      manualGridBody().innerHTML = "";
+      var seen = {};
+      parsed.rows.forEach(function (r) {
+        seen[r[0].toLowerCase().replace(/ё/g, "е")] = true;
+        manualAddRow(r[0], r.slice(1));
+      });
+      // Ученики группы, которых ещё нет в таблице, — пустыми строками.
+      manualStudents.forEach(function (s) {
+        if (!seen[s.name.toLowerCase().replace(/ё/g, "е")]) manualAddRow(s.name, []);
+      });
+      if (!parsed.rows.length && !manualStudents.length) manualAddRow("", []);
+    }
+    function manualSetMode(mode) {
+      manualMode = mode;
+      if (mode === "grid") manualGridRender(manualTsvParse($("c-manual-table").value));
+      $("c-manual-grid-pane").style.display = (mode === "grid") ? "" : "none";
+      $("c-manual-paste-pane").style.display = (mode === "paste") ? "" : "none";
+      $("c-manual-mode-grid").className = "admin-btn" + (mode === "grid" ? "" : " admin-btn--secondary");
+      $("c-manual-mode-paste").className = "admin-btn" + (mode === "paste" ? "" : " admin-btn--secondary");
+      // В режиме вставки число задач автоматически следует за таблицей.
+      $("c-manual-cols").disabled = (mode === "paste");
     }
     function manualFillFromJSON() {
       var cfg = {};
       try { cfg = JSON.parse($("c-provider-config").value || "{}") || {}; } catch (e) { cfg = {}; }
       $("c-manual-table").value = cfg.table || "";
       $("c-manual-showall").checked = !!cfg.show_all;
+      var parsed = manualTsvParse(cfg.table || "");
+      var inferred = 0;
+      if (parsed.header) inferred = parsed.header.length - 1;
+      parsed.rows.forEach(function (r) { inferred = Math.max(inferred, r.length - 1); });
+      $("c-manual-cols").value = cfg.task_count > 0 ? cfg.task_count : (inferred > 0 ? inferred : 4);
+      $("c-manual-fill-students").style.display = manualStudents.length ? "" : "none";
+      manualSetMode(manualMode);
       manualUpdateStats();
     }
     function manualUpdateStats() {
@@ -172,6 +313,54 @@
       }
       $("c-manual-stats").textContent = "Распознано: " + lines.length + " строк, " + (cols - 1) + " колонок с оценками.";
     }
+    $("c-manual-mode-grid").addEventListener("click", function () { manualSetMode("grid"); manualWriteCfg(); });
+    $("c-manual-mode-paste").addEventListener("click", function () {
+      if (manualMode === "grid") $("c-manual-table").value = manualGridToTsv();
+      manualSetMode("paste"); manualWriteCfg();
+    });
+    $("c-manual-cols").addEventListener("change", function () {
+      if (manualMode === "grid") {
+        // Пересобрать сетку с новым числом колонок, сохранив значения.
+        $("c-manual-table").value = manualGridToTsv();
+        manualGridRender(manualTsvParse($("c-manual-table").value));
+      }
+      manualWriteCfg();
+    });
+    $("c-manual-add-row").addEventListener("click", function () { manualAddRow("", []); });
+    $("c-manual-fill-students").addEventListener("click", function () {
+      var have = {};
+      [].slice.call(manualGridBody().querySelectorAll(".mg-name")).forEach(function (i) { have[i.value.trim().toLowerCase().replace(/ё/g, "е")] = true; });
+      manualStudents.forEach(function (s) { if (!have[s.name.toLowerCase().replace(/ё/g, "е")]) manualAddRow(s.name, []); });
+      manualWriteCfg();
+    });
+    // Любой ввод в сетке — сразу в конфиг.
+    $("c-manual-grid").addEventListener("input", manualWriteCfg);
+    // Вставка блока из буфера в ячейку сетки: раскладываем вправо-вниз.
+    $("c-manual-grid").addEventListener("paste", function (e) {
+      var target = e.target;
+      if (!target.classList || (!target.classList.contains("mg-val") && !target.classList.contains("mg-name"))) return;
+      var text = (e.clipboardData || window.clipboardData).getData("text");
+      if (!text || (text.indexOf("\t") < 0 && text.indexOf("\n") < 0)) return; // одиночное значение — обычная вставка
+      e.preventDefault();
+      var block = text.split(/\r\n|\r|\n/).map(function (l) { return l.split("\t"); });
+      if (block.length && block[block.length - 1].join("") === "") block.pop();
+      var tr = target.closest("tr");
+      var rows = [].slice.call(manualGridBody().querySelectorAll("tr"));
+      var rowIdx = rows.indexOf(tr);
+      // Стартовая колонка: -1 — имя, 0.. — ячейки оценок.
+      var startCol = target.classList.contains("mg-name") ? -1 : [].slice.call(tr.querySelectorAll(".mg-val")).indexOf(target);
+      block.forEach(function (vals, dr) {
+        while (rowIdx + dr >= rows.length) { manualAddRow("", []); rows = [].slice.call(manualGridBody().querySelectorAll("tr")); }
+        var row = rows[rowIdx + dr];
+        vals.forEach(function (v, dc) {
+          var col = startCol + dc;
+          if (col === -1) { row.querySelector(".mg-name").value = v.trim(); return; }
+          var cells = row.querySelectorAll(".mg-val");
+          if (col >= 0 && col < cells.length) cells[col].value = v.trim();
+        });
+      });
+      manualWriteCfg();
+    });
     // Примеры provider_config под выбранный провайдер.
     var cfgPlaceholders = {
       codeforces_contest: '{ "contest_id": 1711, "show_unofficial": true }',
@@ -202,8 +391,8 @@
     $("c-provider").addEventListener("change", toggleMoodleHelper);
     ["c-moodle-url", "c-moodle-group"].forEach(function (id) { $(id).addEventListener("input", moodleSyncToJSON); });
     ["c-moodle-showall", "c-moodle-display"].forEach(function (id) { $(id).addEventListener("change", moodleSyncToJSON); });
-    $("c-manual-table").addEventListener("input", manualSyncToJSON);
-    $("c-manual-showall").addEventListener("change", manualSyncToJSON);
+    $("c-manual-table").addEventListener("input", manualWriteCfg);
+    $("c-manual-showall").addEventListener("change", manualWriteCfg);
     $("c-provider-config").addEventListener("input", function () {
       if ($("c-moodle-helper").style.display !== "none") moodleFillFromJSON();
     });
@@ -332,10 +521,17 @@
     }
     document.querySelectorAll(".c-tz").forEach(function (el) { el.textContent = "ваш пояс " + tzLabel(); });
 
+    // setStudents — участники группы для сетки кондуита ([{id, name}]).
+    // Вызывает страница группы; на странице глобальных контестов не задаётся.
+    function setStudents(list) {
+      manualStudents = Array.isArray(list) ? list.filter(function (s) { return s && s.name; }) : [];
+      $("c-manual-fill-students").style.display = manualStudents.length ? "" : "none";
+    }
+
     reset();
     return {
       fill: fill, reset: reset, collect: collect, show: show, hide: hide,
-      setTimesVisible: setTimesVisible,
+      setTimesVisible: setTimesVisible, setStudents: setStudents,
       timeFromISO: timeFromISO, timeToISO: timeToISO
     };
   })();

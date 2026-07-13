@@ -35,6 +35,11 @@ type manualTableConfig struct {
 	// ShowAll — показывать строки, не сопоставленные с учениками группы,
 	// отдельными строками с именем из таблицы.
 	ShowAll bool `json:"show_all,omitempty"`
+	// TaskCount — фиксированное число колонок-задач. Задано (>0) — таблица
+	// обрезается/дополняется до этого числа, а сама может быть и пустой
+	// (кондуит «на будущее»: колонки есть, оценок ещё нет). 0 — число колонок
+	// выводится из самой широкой строки таблицы, как раньше.
+	TaskCount int `json:"task_count,omitempty"`
 }
 
 func parseManualTableConfig(raw json.RawMessage) (manualTableConfig, error) {
@@ -48,8 +53,13 @@ func parseManualTableConfig(raw json.RawMessage) (manualTableConfig, error) {
 	if err := decoder.Decode(&cfg); err != nil {
 		return cfg, fmt.Errorf("decode provider_config: %w", err)
 	}
-	if strings.TrimSpace(cfg.Table) == "" {
-		return cfg, fmt.Errorf("provider_config.table is required (вставьте таблицу с оценками)")
+	if cfg.TaskCount < 0 || cfg.TaskCount > 200 {
+		return cfg, fmt.Errorf("provider_config.task_count must be in 0..200, got %d", cfg.TaskCount)
+	}
+	// Пустая таблица допустима только при заданном числе задач: контест уже
+	// создан (колонки известны), оценки заполнят позже.
+	if strings.TrimSpace(cfg.Table) == "" && cfg.TaskCount <= 0 {
+		return cfg, fmt.Errorf("provider_config.table is required (вставьте таблицу с оценками или задайте task_count)")
 	}
 	return cfg, nil
 }
@@ -67,8 +77,10 @@ type manualRow struct {
 }
 
 // parseManualTable разбирает вставленный текст: имена колонок (из заголовка или
-// номера 1..N) и строки учеников с оценками.
-func parseManualTable(raw string) ([]string, []manualRow, error) {
+// номера 1..N) и строки учеников с оценками. fixedTaskCount > 0 фиксирует число
+// колонок (строки обрезаются/дополняются), и тогда таблица может быть пустой;
+// 0 — число колонок берётся по самой широкой строке.
+func parseManualTable(raw string, fixedTaskCount int) ([]string, []manualRow, error) {
 	raw = strings.ReplaceAll(raw, "\r\n", "\n")
 	raw = strings.ReplaceAll(raw, "\r", "\n")
 
@@ -84,37 +96,39 @@ func parseManualTable(raw string) ([]string, []manualRow, error) {
 		lines = append(lines, cells)
 	}
 	if len(lines) == 0 {
+		if fixedTaskCount > 0 {
+			return manualHeaderLabels(nil, fixedTaskCount), nil, nil
+		}
 		return nil, nil, fmt.Errorf("таблица пуста")
 	}
 
-	maxCols := 0
-	for _, cells := range lines {
-		if len(cells) > maxCols {
-			maxCols = len(cells)
+	taskCount := fixedTaskCount
+	if taskCount <= 0 {
+		maxCols := 0
+		for _, cells := range lines {
+			if len(cells) > maxCols {
+				maxCols = len(cells)
+			}
 		}
+		if maxCols < 2 {
+			return nil, nil, fmt.Errorf("не найдено колонок с оценками: колонки должны разделяться табуляцией (копируйте таблицу из Google Таблиц/Excel)")
+		}
+		taskCount = maxCols - 1
 	}
-	if maxCols < 2 {
-		return nil, nil, fmt.Errorf("не найдено колонок с оценками: колонки должны разделяться табуляцией (копируйте таблицу из Google Таблиц/Excel)")
-	}
-	taskCount := maxCols - 1
 
 	var header []string
 	if isManualHeaderRow(lines[0]) {
 		header = lines[0]
 		lines = lines[1:]
 		if len(lines) == 0 {
+			if fixedTaskCount > 0 {
+				return manualHeaderLabels(header, taskCount), nil, nil
+			}
 			return nil, nil, fmt.Errorf("в таблице только заголовок — нет строк с учениками")
 		}
 	}
 
-	labels := make([]string, taskCount)
-	for i := range labels {
-		if header != nil && i+1 < len(header) && header[i+1] != "" {
-			labels[i] = header[i+1]
-		} else {
-			labels[i] = strconv.Itoa(i + 1)
-		}
-	}
+	labels := manualHeaderLabels(header, taskCount)
 
 	rows := make([]manualRow, 0, len(lines))
 	for _, cells := range lines {
@@ -136,6 +150,20 @@ func parseManualTable(raw string) ([]string, []manualRow, error) {
 		return nil, nil, fmt.Errorf("не найдено строк с учениками (первая колонка — ФИО)")
 	}
 	return labels, rows, nil
+}
+
+// manualHeaderLabels — имена колонок: из строки-заголовка (первая ячейка —
+// «ФИО»), пустые/недостающие — порядковые номера 1..N.
+func manualHeaderLabels(header []string, taskCount int) []string {
+	labels := make([]string, taskCount)
+	for i := range labels {
+		if header != nil && i+1 < len(header) && header[i+1] != "" {
+			labels[i] = header[i+1]
+		} else {
+			labels[i] = strconv.Itoa(i + 1)
+		}
+	}
+	return labels
 }
 
 // isManualHeaderRow распознаёт строку-заголовок: первая ячейка — «ФИО»/«Ученик»/
@@ -187,7 +215,7 @@ func (p *ManualTableProvider) BuildStandings(_ context.Context, input ContestPro
 	if err != nil {
 		return domain.GeneratedContestStandings{}, err
 	}
-	labels, rows, err := parseManualTable(cfg.Table)
+	labels, rows, err := parseManualTable(cfg.Table, cfg.TaskCount)
 	if err != nil {
 		return domain.GeneratedContestStandings{}, err
 	}

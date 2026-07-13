@@ -44,7 +44,7 @@ func TestParseManualCell(t *testing.T) {
 
 func TestParseManualTableHeaderAndPadding(t *testing.T) {
 	// Заголовок с «ФИО», у второй строки не хватает хвостовых ячеек.
-	labels, rows, err := parseManualTable("ФИО\tЗадача 1\tЗадача 2\tИтог\nИванов Иван\t1\t\t2\nПетров Пётр\t1")
+	labels, rows, err := parseManualTable("ФИО\tЗадача 1\tЗадача 2\tИтог\nИванов Иван\t1\t\t2\nПетров Пётр\t1", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestParseManualTableHeaderAndPadding(t *testing.T) {
 	}
 
 	// Без заголовка — колонки нумеруются.
-	labels, rows, err = parseManualTable("Иванов Иван\t1\t\t1\nПетров Пётр\t\t1\t")
+	labels, rows, err = parseManualTable("Иванов Иван\t1\t\t1\nПетров Пётр\t\t1\t", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +71,53 @@ func TestParseManualTableHeaderAndPadding(t *testing.T) {
 	}
 
 	// Без табуляций — понятная ошибка.
-	if _, _, err := parseManualTable("Иванов Иван 1 1"); err == nil {
+	if _, _, err := parseManualTable("Иванов Иван 1 1", 0); err == nil {
 		t.Fatal("must fail without tabs")
 	}
-	if _, _, err := parseManualTable("   \n \n"); err == nil {
+	if _, _, err := parseManualTable("   \n \n", 0); err == nil {
 		t.Fatal("must fail on empty table")
+	}
+}
+
+// task_count фиксирует число колонок: строки обрезаются/дополняются, пустая
+// таблица допустима (кондуит «на будущее»), лишние колонки игнорируются.
+func TestParseManualTableFixedTaskCount(t *testing.T) {
+	// Обрезка и дополнение до 2 колонок.
+	labels, rows, err := parseManualTable("Иванов Иван\t1\t1\t1\nПетров Пётр\t1", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(labels) != 2 || len(rows[0].cells) != 2 || len(rows[1].cells) != 2 {
+		t.Fatalf("fixed cols: labels=%v rows=%+v", labels, rows)
+	}
+	if rows[1].cells[1].status != domain.TaskStatusNone {
+		t.Fatalf("padded cell must be none: %+v", rows[1].cells)
+	}
+
+	// Пустая таблица с task_count — колонки есть, строк нет.
+	labels, rows, err = parseManualTable("", 3)
+	if err != nil || len(labels) != 3 || len(rows) != 0 {
+		t.Fatalf("empty with task_count: %v %v %v", labels, rows, err)
+	}
+
+	// Только заголовок с task_count — тоже ок, метки из заголовка.
+	labels, rows, err = parseManualTable("ФИО\tА\tБ\tВ", 3)
+	if err != nil || len(rows) != 0 || labels[0] != "А" || labels[2] != "В" {
+		t.Fatalf("header-only with task_count: %v %v %v", labels, rows, err)
+	}
+
+	// Провайдер с пустой таблицей и task_count: пустые строки учеников.
+	provider := NewManualTableProvider()
+	cfgJSON, _ := json.Marshal(map[string]any{"table": "", "task_count": 3})
+	out, err := provider.BuildStandings(context.Background(), ContestProviderInput{
+		Contest:  domain.Contest{ID: "m", ScoreSystem: domain.ScoreSystemEdu, Provider: ManualTableProviderID, ProviderConfig: cfgJSON},
+		Students: []domain.Student{{ID: "s1", FullName: "Иванов Иван", PublicName: "Иванов И."}},
+	})
+	if err != nil {
+		t.Fatalf("empty konduit: %v", err)
+	}
+	if len(out.Tasks) != 3 || len(out.Rows) != 1 || out.Rows[0].Statuses[2] != domain.TaskStatusNone {
+		t.Fatalf("empty konduit build: tasks=%d rows=%+v", len(out.Tasks), out.Rows)
 	}
 }
 

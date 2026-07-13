@@ -163,11 +163,14 @@
 </section>
 
 <script id="inline-data" type="application/json">{{.InlineJSON}}</script>
+<script id="group-members-data" type="application/json">{{.MembersJSON}}</script>
 <script>
   (function () {
     var slug = {{.GroupSlug}};
     var inlineById = {};
     try { inlineById = JSON.parse(document.getElementById("inline-data").textContent || "{}") || {}; } catch (e) {}
+    // Участники группы — для сетки кондуита в форме контеста.
+    try { ContestForm.setStudents(JSON.parse(document.getElementById("group-members-data").textContent || "[]")); } catch (e) {}
 
     function post(url, body) {
       return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })

@@ -302,13 +302,17 @@ type AdminGroupManagePageData struct {
 	Entries         []AdminGroupContestEntry
 	AddableContests []AdminGroupContestOption
 	InlineJSON      template.JS
-	HasGrades       bool
-	SecretToken     string // group_secret_token — просмотр размороженных таблиц
+	// MembersJSON — участники группы для формы кондуита (сетка «Заполнить в
+	// форме»): [{id, name}], где name — полное ФИО (для матчинга по имени).
+	MembersJSON template.JS
+	HasGrades   bool
+	SecretToken string // group_secret_token — просмотр размороженных таблиц
 }
 
 type AdminGroupMember struct {
 	StudentID  string
 	PublicName string
+	FullName   string
 }
 
 type AdminGroupContestEntry struct {
@@ -445,14 +449,15 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		title = slug
 	}
 
-	publicNames := h.loadPublicNames()
+	studentsByID := h.loadStudentsByID()
 	members := make([]AdminGroupMember, 0, len(groupFile.StudentIDs))
 	for _, sid := range domain.NormalizeGroups(groupFile.StudentIDs) {
-		name := publicNames[sid]
+		s := studentsByID[sid]
+		name := strings.TrimSpace(s.PublicName)
 		if name == "" {
 			name = sid
 		}
-		members = append(members, AdminGroupMember{StudentID: sid, PublicName: name})
+		members = append(members, AdminGroupMember{StudentID: sid, PublicName: name, FullName: strings.TrimSpace(s.FullName)})
 	}
 
 	entries, err := h.loadGroupContestEntries(slug)
@@ -571,6 +576,26 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Участники для сетки кондуита: полное ФИО, если есть (лучше матчится).
+	type memberRef struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	memberRefs := make([]memberRef, 0, len(members))
+	for _, m := range members {
+		name := m.FullName
+		if name == "" {
+			name = m.PublicName
+		}
+		memberRefs = append(memberRefs, memberRef{ID: m.StudentID, Name: name})
+	}
+	membersBlob, err := json.Marshal(memberRefs)
+	if err != nil {
+		h.logger.Printf("ERROR admin group manage marshal members: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	page := AdminGroupManagePageData{
 		PageTitle:       "Группа: " + title,
 		Footer:          h.buildFooterInfo(),
@@ -581,6 +606,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		Entries:         rows,
 		AddableContests: addable,
 		InlineJSON:      template.JS(inlineBlob),
+		MembersJSON:     template.JS(membersBlob),
 		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
 		SecretToken:     strings.TrimSpace(groupFile.GroupSecretToken),
 	}

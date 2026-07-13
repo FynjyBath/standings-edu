@@ -1358,14 +1358,23 @@ func (h *Handlers) readGroupFile(slug string) (domain.GroupFile, bool, error) {
 }
 
 func (h *Handlers) loadPublicNames() map[string]string {
+	out := make(map[string]string)
+	for id, s := range h.loadStudentsByID() {
+		out[id] = s.PublicName
+	}
+	return out
+}
+
+// loadStudentsByID читает students.json в карту по id (пустая при ошибке).
+func (h *Handlers) loadStudentsByID() map[string]domain.Student {
 	var students []domain.Student
 	if err := fileutil.ReadJSON(filepath.Join(h.admin.cfg.DataDir, "students.json"), &students); err != nil {
-		return map[string]string{}
+		return map[string]domain.Student{}
 	}
-	out := make(map[string]string, len(students))
+	out := make(map[string]domain.Student, len(students))
 	for _, student := range domain.NormalizeStudents(students) {
 		if student.ID != "" {
-			out[student.ID] = student.PublicName
+			out[student.ID] = student
 		}
 	}
 	return out

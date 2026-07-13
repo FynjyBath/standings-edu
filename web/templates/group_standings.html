@@ -17,8 +17,27 @@
     {{end}}
     {{if .TokenValid}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/participants?token={{.Token}}">Статистика участников</a>
+    {{if .JuryHasGrades}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/jury-grades?token={{.Token}}">✏️ Выставить оценки</a>
+    {{end}}
     {{end}}
   </p>
+  {{if and .TokenValid .JuryCanManage}}
+  <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
+    {{if .JuryAddable}}
+    <label style="display:flex;align-items:center;gap:0.4rem;">
+      <span>Добавить контест:</span>
+      <select id="jury-add-select">
+        <option value="">— выберите —</option>
+        {{range .JuryAddable}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
+      </select>
+    </label>
+    <button type="button" id="jury-add-btn" class="admin-btn admin-btn--secondary">Добавить</button>
+    {{end}}
+    <span id="jury-status" class="admin-editor-status"></span>
+  </div>
+  <p class="empty-hint">Панель жюри: добавление уже созданных контестов (сверху списка) и порядок — стрелками у контестов. Таблицы обновятся после ближайшей генерации.</p>
+  {{end}}
 </section>
 
 {{if .Standings.SolvedSummary}}
@@ -66,6 +85,15 @@
     <p class="empty-hint">Результаты после {{contestGeneratedAt .FrozenAt}} скрыты до разморозки.</p>
     {{else}}
     <h2>{{.Title}}</h2>
+    {{end}}
+    {{if and $.TokenValid $.JuryCanManage}}
+    <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
+      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="up" title="Поднять контест выше">↑</button>
+      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="down" title="Опустить контест ниже">↓</button>
+      {{if index $.JuryKonduits .ID}}
+      <a class="admin-btn admin-btn--secondary" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}&token={{$.Token}}">✏️ Заполнить кондуит</a>
+      {{end}}
+    </div>
     {{end}}
     {{with contestWindowText .StartTime .EndTime}}
     <p class="empty-hint">🕒 Контест: {{.}}</p>
@@ -154,5 +182,41 @@
   {{end}}
 {{else}}
 <p class="empty-hint">Для этой группы не назначены контесты.</p>
+{{end}}
+
+{{if and .TokenValid .JuryCanManage}}
+<script>
+  (function () {
+    var slug = {{.Standings.GroupSlug}};
+    var token = {{.Token}};
+    var status = document.getElementById("jury-status");
+    function setStatus(m, err) {
+      if (!status) return;
+      status.textContent = m;
+      status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+    function post(url, body) {
+      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); return p; }); });
+    }
+    var addBtn = document.getElementById("jury-add-btn");
+    if (addBtn) addBtn.addEventListener("click", function () {
+      var sel = document.getElementById("jury-add-select");
+      if (!sel.value) { setStatus("Выберите контест", true); return; }
+      setStatus("Добавление…", false);
+      post("/api/jury/group/contests/add-ref", { slug: slug, token: token, id: sel.value })
+        .then(function () { location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+    document.querySelectorAll(".jury-move").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setStatus("Перемещение…", false);
+        post("/api/jury/group/contests/move", { slug: slug, token: token, id: btn.dataset.id, dir: btn.dataset.dir })
+          .then(function () { location.reload(); })
+          .catch(function (err) { setStatus(err.message, true); });
+      });
+    });
+  })();
+</script>
 {{end}}
 {{end}}

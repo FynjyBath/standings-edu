@@ -761,10 +761,20 @@ func (h *Handlers) AdminGroupContestAddRef(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if status, msg := h.addGroupContestRef(slug, id); msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// addGroupContestRef добавляет ссылку на глобальный контест В НАЧАЛО списка
+// контестов группы. Возвращает (status, "") при успехе или (status, ошибка).
+// Общий код админки и жюри-панели (по токену группы).
+func (h *Handlers) addGroupContestRef(slug, id string) (int, string) {
 	globals, err := h.loadContestsList()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
 	inGlobal := false
 	for _, c := range globals {
@@ -774,36 +784,31 @@ func (h *Handlers) AdminGroupContestAddRef(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if !inGlobal {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "нет такого глобального контеста"})
-		return
+		return http.StatusBadRequest, "нет такого глобального контеста"
 	}
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
 	encoded, err := json.Marshal(map[string]any{"id": id, "update": true})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
 	// Новый контест — сверху списка (обычно он самый актуальный).
 	out := make([]json.RawMessage, 0, len(entries)+1)
 	out = append(out, encoded)
 	for _, e := range entries {
 		if e.id == id {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест уже добавлен в группу"})
-			return
+			return http.StatusBadRequest, "контест уже добавлен в группу"
 		}
 		out = append(out, e.raw)
 	}
 
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 // AdminGroupContestRemove убирает контест группы (ссылку или inline) по id.
@@ -889,6 +894,16 @@ func (h *Handlers) AdminGroupContestMove(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	if status, msg := h.moveGroupContestEntry(slug, id, dir, entries); msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// moveGroupContestEntry меняет контест местами с соседним по уже загруженным
+// записям группы. Общий код админки и жюри-панели.
+func (h *Handlers) moveGroupContestEntry(slug, id, dir string, entries []groupContestEntry) (int, string) {
 	idx := -1
 	for i, e := range entries {
 		if e.id == id {
@@ -897,16 +912,14 @@ func (h *Handlers) AdminGroupContestMove(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if idx < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест не найден в группе"})
-		return
+		return http.StatusBadRequest, "контест не найден в группе"
 	}
 	swap := idx - 1
 	if dir == "down" {
 		swap = idx + 1
 	}
 	if swap < 0 || swap >= len(entries) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест уже с краю"})
-		return
+		return http.StatusBadRequest, "контест уже с краю"
 	}
 
 	out := make([]json.RawMessage, len(entries))
@@ -915,10 +928,9 @@ func (h *Handlers) AdminGroupContestMove(w http.ResponseWriter, r *http.Request)
 	}
 	out[idx], out[swap] = out[swap], out[idx]
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 // AdminGroupContestSetOptions меняет entry-настройки контеста группы: update,

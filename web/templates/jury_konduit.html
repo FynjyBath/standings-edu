@@ -1,0 +1,123 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Кондуит: {{.ContestTitle}} <span class="grade-weight">({{.GroupTitle}})</span></h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}?token={{.Token}}">← К таблицам</a>
+  </p>
+  <p class="empty-hint">Пусто — задача не сдана, «1» или «+» — сдана, можно любые числа («0», «±» — попытка). Работает вставка блока из буфера: встаньте в ячейку и Ctrl+V — значения разложатся вправо-вниз. Изменения появятся в таблицах после ближайшей генерации.</p>
+</section>
+
+<section class="admin-block">
+  <div class="admin-editor-tools">
+    <button type="button" id="k-save" class="admin-btn">Сохранить кондуит</button>
+    <button type="button" id="k-add-row" class="admin-btn admin-btn--secondary">+ строка</button>
+    <span id="k-status" class="admin-editor-status"></span>
+  </div>
+  <div class="table-wrap" style="max-height:34rem;overflow:auto;margin-top:0.6rem;">
+    <table class="standings-table data-table" id="k-grid" style="min-width:auto;">
+      <thead>
+        <tr>
+          <th class="student-col">Ученик</th>
+          {{range .Labels}}<th class="count-col">{{.}}</th>{{end}}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="k-body">
+        {{range .Rows}}
+        <tr>
+          <td><input type="text" class="k-name" value="{{.Name}}" style="min-width:13rem;" /></td>
+          {{range .Vals}}
+          <td><input type="text" class="k-val" value="{{.}}" style="width:3.2rem;text-align:center;" /></td>
+          {{end}}
+          <td><button type="button" class="admin-btn admin-btn--secondary k-del" title="Убрать строку">×</button></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script id="k-labels" type="application/json">{{.LabelsJSON}}</script>
+<script>
+  (function () {
+    var slug = {{.GroupSlug}};
+    var token = {{.Token}};
+    var contestId = {{.ContestID}};
+    var labels = [];
+    try { labels = JSON.parse(document.getElementById("k-labels").textContent || "[]") || []; } catch (e) {}
+    var body = document.getElementById("k-body");
+    var status = document.getElementById("k-status");
+    function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+
+    function bindDelete(btn) { btn.addEventListener("click", function () { btn.closest("tr").remove(); }); }
+    [].slice.call(body.querySelectorAll(".k-del")).forEach(bindDelete);
+
+    function addRow(name, vals) {
+      var tr = document.createElement("tr");
+      var tdName = document.createElement("td");
+      var nameInput = document.createElement("input");
+      nameInput.type = "text"; nameInput.className = "k-name"; nameInput.placeholder = "ФИО"; nameInput.style.minWidth = "13rem";
+      nameInput.value = name || "";
+      tdName.appendChild(nameInput); tr.appendChild(tdName);
+      for (var i = 0; i < labels.length; i++) {
+        var td = document.createElement("td");
+        var inp = document.createElement("input");
+        inp.type = "text"; inp.className = "k-val"; inp.style.cssText = "width:3.2rem;text-align:center;";
+        inp.value = (vals && vals[i]) || "";
+        td.appendChild(inp); tr.appendChild(td);
+      }
+      var tdDel = document.createElement("td");
+      var del = document.createElement("button");
+      del.type = "button"; del.className = "admin-btn admin-btn--secondary k-del"; del.textContent = "×"; del.title = "Убрать строку";
+      bindDelete(del);
+      tdDel.appendChild(del); tr.appendChild(tdDel);
+      body.appendChild(tr);
+      return tr;
+    }
+    document.getElementById("k-add-row").addEventListener("click", function () { addRow("", []); });
+
+    // Вставка блока из буфера: раскладываем вправо-вниз от ячейки.
+    document.getElementById("k-grid").addEventListener("paste", function (e) {
+      var target = e.target;
+      if (!target.classList || (!target.classList.contains("k-val") && !target.classList.contains("k-name"))) return;
+      var text = (e.clipboardData || window.clipboardData).getData("text");
+      if (!text || (text.indexOf("\t") < 0 && text.indexOf("\n") < 0)) return;
+      e.preventDefault();
+      var block = text.split(/\r\n|\r|\n/).map(function (l) { return l.split("\t"); });
+      if (block.length && block[block.length - 1].join("") === "") block.pop();
+      var tr = target.closest("tr");
+      var rows = [].slice.call(body.querySelectorAll("tr"));
+      var rowIdx = rows.indexOf(tr);
+      var startCol = target.classList.contains("k-name") ? -1 : [].slice.call(tr.querySelectorAll(".k-val")).indexOf(target);
+      block.forEach(function (vals, dr) {
+        while (rowIdx + dr >= rows.length) { addRow("", []); rows = [].slice.call(body.querySelectorAll("tr")); }
+        var row = rows[rowIdx + dr];
+        vals.forEach(function (v, dc) {
+          var col = startCol + dc;
+          if (col === -1) { row.querySelector(".k-name").value = v.trim(); return; }
+          var cells = row.querySelectorAll(".k-val");
+          if (col >= 0 && col < cells.length) cells[col].value = v.trim();
+        });
+      });
+    });
+
+    document.getElementById("k-save").addEventListener("click", function () {
+      var lines = ["ФИО\t" + labels.join("\t")];
+      [].slice.call(body.querySelectorAll("tr")).forEach(function (tr) {
+        var name = tr.querySelector(".k-name").value.trim();
+        var vals = [].slice.call(tr.querySelectorAll(".k-val")).map(function (i) { return i.value.trim(); });
+        if (name === "" && vals.join("") === "") return;
+        lines.push(name + "\t" + vals.join("\t"));
+      });
+      var table = lines.length > 1 ? lines.join("\n") + "\n" : "";
+      var btn = document.getElementById("k-save");
+      btn.disabled = true;
+      setStatus("Сохранение…", false);
+      fetch("/api/jury/group/konduit/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, token: token, id: contestId, table: table, task_count: labels.length }) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); setStatus("Сохранено. Изменения появятся после генерации.", false); }); })
+        .catch(function (err) { setStatus(err.message, true); })
+        .finally(function () { btn.disabled = false; });
+    });
+  })();
+</script>
+{{end}}

@@ -345,6 +345,7 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if tokenValid {
 		page.Token = token
+		h.juryStandingsExtras(slug, &page)
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_standings.html", page); err != nil {
 		h.logger.Printf("ERROR render group standings slug=%s err=%v", slug, err)
@@ -685,6 +686,15 @@ type GroupPageData struct {
 	// CombinedMembers — названия групп-участниц, если это объединённая группа
 	// (для подписи на странице). Пусто — обычная группа.
 	CombinedMembers []string
+	// Жюри-панель (заполняется только при валидном токене):
+	// JuryCanManage — можно добавлять/двигать контесты (обычная группа);
+	// JuryAddable — глобальные контесты, которых ещё нет в группе;
+	// JuryKonduits — id inline-кондуитов (жюри может заполнять оценки);
+	// JuryHasGrades — у группы есть ручные столбцы оценок (ссылка на редактор).
+	JuryCanManage bool
+	JuryAddable   []AdminGroupContestOption
+	JuryKonduits  map[string]bool
+	JuryHasGrades bool
 }
 
 type ParticipantRow struct {

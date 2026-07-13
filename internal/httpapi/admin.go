@@ -1175,10 +1175,20 @@ func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if status, msg := h.saveManualGrades(slug, req.Grades); msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// saveManualGrades валидирует и пишет grades_manual.json группы: только
+// известные ручные столбцы и ученики группы, оценки зажимаются в диапазон.
+// Общий код админки и жюри-панели (по токену группы).
+func (h *Handlers) saveManualGrades(slug string, grades map[string]map[string]float64) (int, string) {
 	groupFile, ok, err := h.readGroupFile(slug)
 	if err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
+		return http.StatusBadRequest, "group not found"
 	}
 
 	allowedColumns := make(map[string]struct{})
@@ -1191,7 +1201,7 @@ func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) 
 	}
 
 	out := make(map[string]map[string]float64)
-	for colID, byStudent := range req.Grades {
+	for colID, byStudent := range grades {
 		if _, ok := allowedColumns[colID]; !ok {
 			continue
 		}
@@ -1209,12 +1219,10 @@ func (h *Handlers) AdminGroupGradesSave(w http.ResponseWriter, r *http.Request) 
 
 	path := filepath.Join(h.admin.cfg.DataDir, "groups", slug, "grades_manual.json")
 	if err := fileutil.WriteJSON(path, out, 0o644); err != nil {
-		h.logger.Printf("ERROR admin group grades save slug=%s err=%v", slug, err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		h.logger.Printf("ERROR group grades save slug=%s err=%v", slug, err)
+		return http.StatusInternalServerError, err.Error()
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 type adminGradesConfigColumn struct {

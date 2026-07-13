@@ -152,6 +152,61 @@ func parseManualTable(raw string, fixedTaskCount int) ([]string, []manualRow, er
 	return labels, rows, nil
 }
 
+// SplitManualTable разбирает TSV кондуита на СЫРЫЕ строки для редактора:
+// имена колонок (по заголовку либо номера 1..N с учётом fixedTaskCount) и
+// строки [имя, значения…] как введены. Ошибок нет — редактору годится любой
+// текст (битые строки просто отбрасываются).
+func SplitManualTable(raw string, fixedTaskCount int) (labels []string, rows [][]string) {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	raw = strings.ReplaceAll(raw, "\r", "\n")
+	lines := make([][]string, 0)
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cells := strings.Split(line, "\t")
+		for i := range cells {
+			cells[i] = strings.TrimSpace(strings.ReplaceAll(cells[i], "\u00a0", " "))
+		}
+		lines = append(lines, cells)
+	}
+
+	taskCount := fixedTaskCount
+	if taskCount <= 0 {
+		maxCols := 1
+		for _, cells := range lines {
+			if len(cells) > maxCols {
+				maxCols = len(cells)
+			}
+		}
+		taskCount = maxCols - 1
+	}
+	if taskCount < 1 {
+		taskCount = 1
+	}
+
+	var header []string
+	if len(lines) > 0 && isManualHeaderRow(lines[0]) {
+		header = lines[0]
+		lines = lines[1:]
+	}
+	labels = manualHeaderLabels(header, taskCount)
+
+	rows = make([][]string, 0, len(lines))
+	for _, cells := range lines {
+		if cells[0] == "" {
+			continue
+		}
+		row := make([]string, taskCount+1)
+		row[0] = cells[0]
+		for i := 0; i < taskCount && i+1 < len(cells); i++ {
+			row[i+1] = cells[i+1]
+		}
+		rows = append(rows, row)
+	}
+	return labels, rows
+}
+
 // manualHeaderLabels — имена колонок: из строки-заголовка (первая ячейка —
 // «ФИО»), пустые/недостающие — порядковые номера 1..N.
 func manualHeaderLabels(header []string, taskCount int) []string {

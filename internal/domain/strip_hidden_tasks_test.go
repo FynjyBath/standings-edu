@@ -76,3 +76,44 @@ func TestStripHiddenTasksNoop(t *testing.T) {
 		t.Fatal("rows must be shared (not reallocated) when nothing hidden")
 	}
 }
+
+// StripTaskLinks зануляет ссылки на задачи (в заголовках и плоском списке) и
+// source_url, оставляя метки; на строки/статусы не влияет.
+func TestStripTaskLinks(t *testing.T) {
+	std := GeneratedGroupStandings{
+		Contests: []GeneratedContestStandings{{
+			ID:        "c1",
+			SourceURL: "https://informatics.msk.ru/x?id=5",
+			Tasks: []GeneratedTask{
+				{Label: "A", URL: "u1", NormalizedURL: "n1"},
+				{Label: "B", URL: "u2", NormalizedURL: "n2"},
+			},
+			Subcontests: []GeneratedSubcontest{{
+				Title: "S", TaskCount: 2,
+				Tasks: []GeneratedTask{
+					{Label: "A", URL: "u1", NormalizedURL: "n1"},
+					{Label: "B", URL: "u2", NormalizedURL: "n2"},
+				},
+			}},
+			Rows: []GeneratedRow{{StudentID: "s1", Statuses: []string{"solved", "none"}}},
+		}},
+	}
+	std.StripTaskLinks()
+	c := std.Contests[0]
+	for i, tk := range c.Tasks {
+		if tk.URL != "" || tk.NormalizedURL != "" || tk.Label == "" {
+			t.Fatalf("task %d: url должен быть пуст, метка сохранена: %+v", i, tk)
+		}
+	}
+	for _, tk := range c.Subcontests[0].Tasks {
+		if tk.URL != "" {
+			t.Fatalf("subcontest task url должен быть пуст: %+v", tk)
+		}
+	}
+	if c.SourceURL != "" {
+		t.Fatalf("source_url должен быть пуст: %q", c.SourceURL)
+	}
+	if len(c.Rows) != 1 || c.Rows[0].StudentID != "s1" {
+		t.Fatal("строки не должны меняться")
+	}
+}

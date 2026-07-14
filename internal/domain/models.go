@@ -283,6 +283,15 @@ type GroupFile struct {
 	// HiddenContests — id контестов, скрытых в объединённой группе (галочка
 	// «показывать» в её настройках). Только для объединённых групп.
 	HiddenContests []string `json:"hidden_contests,omitempty"`
+	// ShowTaskLinks — показывать ли ссылки на задачи на странице, видной
+	// ученикам. nil/absent или true — показывать (как раньше); false — на
+	// публичной странице ссылок на задачи нет (по токену жюри видны всегда).
+	ShowTaskLinks *bool `json:"show_task_links,omitempty"`
+}
+
+// TaskLinksShown — показывать ли ссылки на задачи (по умолчанию да).
+func (g GroupFile) TaskLinksShown() bool {
+	return g.ShowTaskLinks == nil || *g.ShowTaskLinks
 }
 
 type GroupDefinition struct {
@@ -684,6 +693,30 @@ func (s *GeneratedGroupStandings) StripHiddenContests() {
 // и их массивы пересобираются заново, без мутации общих срезов. Место (Place) и
 // штраф (Penalty) не пересчитываются: скрытые задачи ученикам недоступны, их
 // вклад в ранжирование в обычной ситуации нулевой.
+// StripTaskLinks убирает ссылки на задачи из всех контестов (флаг группы
+// show_task_links=false для публичного вида): у задач и в заголовках, и в
+// плоском списке зануляются URL, поэтому в таблице остаются только метки задач,
+// а ячейки с посылками перестают быть кликабельными. Работает на клоне
+// (CloneForServe копирует Tasks/Subcontests), кэш не задевается.
+func (s *GeneratedGroupStandings) StripTaskLinks() {
+	for ci := range s.Contests {
+		c := &s.Contests[ci]
+		for j := range c.Tasks {
+			c.Tasks[j].URL = ""
+			c.Tasks[j].NormalizedURL = ""
+		}
+		for j := range c.Subcontests {
+			for k := range c.Subcontests[j].Tasks {
+				c.Subcontests[j].Tasks[k].URL = ""
+				c.Subcontests[j].Tasks[k].NormalizedURL = ""
+			}
+		}
+		// SourceURL используется в сводной для ссылки «посылки по контесту» —
+		// это тоже ссылка на задачи, убираем.
+		c.SourceURL = ""
+	}
+}
+
 func (s *GeneratedGroupStandings) StripHiddenTasks() {
 	for ci := range s.Contests {
 		c := &s.Contests[ci]

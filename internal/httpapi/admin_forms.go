@@ -308,6 +308,8 @@ type AdminGroupManagePageData struct {
 	MembersJSON template.JS
 	HasGrades   bool
 	SecretToken string // group_secret_token — просмотр размороженных таблиц
+	// ShowTaskLinks — показывать ли ссылки на задачи ученикам (по умолчанию да).
+	ShowTaskLinks bool
 }
 
 type AdminGroupMember struct {
@@ -618,6 +620,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		MembersJSON:     template.JS(membersBlob),
 		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
 		SecretToken:     strings.TrimSpace(groupFile.GroupSecretToken),
+		ShowTaskLinks:   groupFile.TaskLinksShown(),
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group.html", page); err != nil {
 		h.logger.Printf("ERROR render admin group manage slug=%s: %v", slug, err)
@@ -737,6 +740,45 @@ func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "short_name": groupFile.ShortName})
+}
+
+// AdminGroupSetShowTaskLinks переключает флаг show_task_links группы (показывать
+// ли ссылки на задачи ученикам). Действует сразу при отдаче, без перегенерации.
+func (h *Handlers) AdminGroupSetShowTaskLinks(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug string `json:"slug"`
+		Show bool   `json:"show"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+	// true — поле убираем (значение по умолчанию), false — ставим явно.
+	if req.Show {
+		groupFile.ShowTaskLinks = nil
+	} else {
+		v := false
+		groupFile.ShowTaskLinks = &v
+	}
+	if err := h.writeGroupFile(slug, groupFile); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "show": groupFile.TaskLinksShown()})
 }
 
 // writeGroupContestRaw атомарно перезаписывает groups/<slug>/contests.json

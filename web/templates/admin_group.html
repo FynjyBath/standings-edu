@@ -20,6 +20,18 @@
 </section>
 
 <section class="admin-block">
+  <h2>Ссылки на задачи</h2>
+  <p class="empty-hint">Показывать ли ученикам ссылки на условия задач в таблицах. Если снять — на странице для учеников останутся только метки задач (A, B, C…), без переходов к условиям и посылкам. Жюри по токену ссылки видит всегда. Действует сразу, без перегенерации.</p>
+  <div class="admin-editor-tools">
+    <label style="display:flex;align-items:center;gap:0.5rem;">
+      <input type="checkbox" id="show-task-links" style="width:auto;"{{if .ShowTaskLinks}} checked{{end}} />
+      <span>Показывать ссылки на задачи ученикам</span>
+    </label>
+    <span id="show-task-links-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
   <h2>Участники ({{len .Members}})</h2>
   <p class="empty-hint">Добавление — через форму/обработчик. Здесь можно только удалить.</p>
   {{if .Members}}
@@ -201,6 +213,17 @@
       post("/api/admin/group/short-name/set", { slug: slug, short_name: input.value })
         .then(function () { st.textContent = "Сохранено"; st.className = "admin-editor-status admin-editor-status--ok"; })
         .catch(function (err) { st.textContent = err.message; st.className = "admin-editor-status admin-editor-status--error"; });
+    });
+
+    // Показ ссылок на задачи ученикам.
+    var showLinks = document.getElementById("show-task-links");
+    if (showLinks) showLinks.addEventListener("change", function () {
+      var st = document.getElementById("show-task-links-status");
+      st.textContent = "Сохранение…";
+      st.className = "admin-editor-status";
+      post("/api/admin/group/show-task-links/set", { slug: slug, show: showLinks.checked })
+        .then(function () { st.textContent = "Сохранено (действует сразу)"; st.className = "admin-editor-status admin-editor-status--ok"; })
+        .catch(function (err) { showLinks.checked = !showLinks.checked; st.textContent = err.message; st.className = "admin-editor-status admin-editor-status--error"; });
     });
 
     document.querySelectorAll(".member-remove").forEach(function (btn) {

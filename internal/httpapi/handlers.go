@@ -186,7 +186,20 @@ func (h *Handlers) applyFreezeView(standings *domain.GeneratedGroupStandings, sl
 	standings.StripFullRows()
 	standings.StripHiddenContests()
 	standings.StripHiddenTasks()
+	if !h.groupShowsTaskLinks(slug) {
+		standings.StripTaskLinks()
+	}
 	return false
+}
+
+// groupShowsTaskLinks читает флаг show_task_links из group.json (по умолчанию —
+// показывать). false — на публичной странице ссылок на задачи нет.
+func (h *Handlers) groupShowsTaskLinks(slug string) bool {
+	gf, ok := h.readSourceGroupFile(slug)
+	if !ok {
+		return true
+	}
+	return gf.TaskLinksShown()
 }
 
 // groupTokenValid сверяет токен с group_secret_token из groups/<slug>/group.json.

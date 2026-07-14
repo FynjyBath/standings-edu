@@ -420,6 +420,9 @@ func appendNewInformaticsRuns(out *[]informaticsRun, runs []informaticsRun, last
 // попадают — их повторно подхватят в следующий сбор, когда вердикт станет
 // финальным (иначе, став OK, они были бы пропущены как «уже известные»).
 func foldNewInformaticsRuns(newRuns []informaticsRun, lastKnownRunID int, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string) (maxRunID int) {
+	// Самая ранняя незавершённая посылка (в очереди/на компиляции): её вердикт
+	// ещё может стать финальным, поэтому водяной знак нельзя двигать за неё —
+	// иначе, финализировавшись, она была бы пропущена как «уже известная».
 	pendingFloor := 0
 	for _, run := range newRuns {
 		if run.ID > 0 && isInformaticsPendingStatus(run.EjudgeStatus) {
@@ -434,11 +437,17 @@ func foldNewInformaticsRuns(newRuns []informaticsRun, lastKnownRunID int, aggByT
 		if run.ID <= 0 {
 			continue
 		}
-		if pendingFloor > 0 && run.ID >= pendingFloor {
-			continue
+		if isInformaticsPendingStatus(run.EjudgeStatus) {
+			continue // ещё судится — результат не записываем (подхватим позже)
 		}
+		// Финальные посылки сворачиваем ВСЕГДА, даже если они новее какой-то
+		// «застрявшей» незавершённой. Иначе одна старая зависшая в очереди посылка
+		// (маленький run.ID) обнуляла бы все более новые результаты аккаунта.
+		// Свёртка идемпотентна, поэтому повторный забор ничего не портит.
 		foldInformaticsRun(run, aggByTask, buildTaskURL)
-		if run.ID > maxRunID {
+		// Водяной знак двигаем только по посылкам старше самой ранней
+		// незавершённой — чтобы её финализацию точно перечитать в следующий раз.
+		if run.ID > maxRunID && (pendingFloor == 0 || run.ID < pendingFloor) {
 			maxRunID = run.ID
 		}
 	}
@@ -1118,7 +1127,7 @@ type informaticsTaskAggregate struct {
 // informaticsStateVersion — версия схемы/логики кэша. При изменении правил
 // трактовки вердиктов или формата (добавление статуса «Зачтено», времени посылок)
 // версию повышаем, чтобы старый кэш игнорировался и результаты пересчитались с нуля.
-const informaticsStateVersion = 4
+const informaticsStateVersion = 5
 
 type informaticsStateFile struct {
 	Version  int                                `json:"version"`

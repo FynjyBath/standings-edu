@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"hasPenaltyColumn":        hasPenaltyColumn,
 			"hasProviderStatusColumn": hasProviderStatusColumn,
 			"taskCells":               taskCells,
+			"upsolvingView":           upsolvingView,
 			"contestGeneratedAt":      contestGeneratedAt,
 			"contestNotStarted":       contestNotStarted,
 			"contestGeneratedAtISO":   contestGeneratedAtISO,
@@ -143,6 +145,163 @@ func taskCells(contest domain.GeneratedContestStandings, row domain.GeneratedRow
 		cells = append(cells, cell)
 	}
 	return cells
+}
+
+// UpsolvingView — таблица «без дорешки» (второй tbody). Строки уже отсортированы
+// и с проставленными местами по результату только в окне контеста. Клиентский
+// переключатель просто показывает этот tbody вместо обычного — у каждого
+// зрителя свой выбор, данные для всех одни.
+type UpsolvingView struct {
+	Rows       []UpsolvingRow
+	HasPenalty bool // показывать ли колонку «Штраф» в оконном виде
+}
+
+// UpsolvingRow — одна строка оконного вида, готовая к рендеру.
+type UpsolvingRow struct {
+	PublicName     string
+	Place          string
+	Count          int    // «Баллы» (ioi) или «Решено» (edu)
+	Penalty        string // текст колонки «Штраф» (если есть)
+	ProviderStatus string
+	Cells          []TaskCell
+}
+
+// upsolvingView возвращает nil, если в контесте нет дорешки (кнопка не нужна).
+// Иначе строит вид «только окно»: у tasks-контестов места/порядок
+// пересчитываются той же логикой, что при сборке; у provider-контестов (CF)
+// место и порядок — по результатам во время контеста (дорешка на них и так не
+// влияла), меняются только суммы и ячейки.
+func upsolvingView(contest domain.GeneratedContestStandings) *UpsolvingView {
+	hasUpsolving := false
+	for _, row := range contest.Rows {
+		for _, u := range row.Upsolved {
+			if u {
+				hasUpsolving = true
+			}
+		}
+		for _, p := range row.PracticeScores {
+			if p != nil {
+				hasUpsolving = true
+			}
+		}
+	}
+	if !hasUpsolving {
+		return nil
+	}
+
+	isIOI := contest.ScoreSystem.IsIOI()
+	isProvider := contest.ContestType == domain.ContestTypeProvider
+	hasPenalty := hasPenaltyColumn(contest.Rows)
+
+	type built struct {
+		out   UpsolvingRow
+		score int
+		count int
+	}
+	items := make([]built, len(contest.Rows))
+	for ri, row := range contest.Rows {
+		ups := func(i int) bool { return i < len(row.Upsolved) && row.Upsolved[i] }
+
+		cells := taskCells(contest, row)
+		winCells := make([]TaskCell, len(cells))
+		windowScore, windowSolved, zeros := 0, 0, 0
+		for i := range cells {
+			wc := cells[i]
+			wc.Practice = false
+			solvedInWindow := row.Statuses[i] == domain.TaskStatusSolved && !ups(i)
+			if isIOI {
+				// Балл в окне: у tasks Scores[i] всегда оконный; у provider для
+				// дорешанной задачи Scores[i] — это балл дорешки, поэтому её обнуляем.
+				var main *int
+				if i < len(row.Scores) && !(isProvider && ups(i)) {
+					main = row.Scores[i]
+				}
+				wc.Text = scoreText(main)
+				wc.Alpha = scoreAlpha(main)
+				if main != nil {
+					windowScore += *main
+				}
+				if main == nil || *main <= 0 {
+					zeros++
+				}
+			} else {
+				if solvedInWindow {
+					wc.Status, wc.Text = "solved", statusSymbol(domain.TaskStatusSolved)
+				} else if row.Statuses[i] == domain.TaskStatusAttempted && !ups(i) {
+					wc.Status, wc.Text = "attempted", statusSymbol(domain.TaskStatusAttempted)
+				} else {
+					wc.Status, wc.Text = "none", ""
+				}
+			}
+			if solvedInWindow {
+				windowSolved++
+			} else {
+				wc.Accepted = false // рамка «зачтено» только у оконного решения
+			}
+			if wc.Text == "" {
+				wc.SubmissionURL = ""
+			}
+			winCells[i] = wc
+		}
+
+		penaltyStr := ""
+		if hasPenalty {
+			penaltyStr = penaltyText(row.Penalty)
+		}
+		if !isProvider && isIOI && contest.ZeroPenalty > 0 {
+			penalty := zeros * contest.ZeroPenalty
+			windowScore -= penalty
+			penaltyStr = fmt.Sprintf("%d", penalty)
+		}
+
+		count := windowSolved
+		if isIOI {
+			count = windowScore
+		}
+		items[ri] = built{
+			out: UpsolvingRow{
+				PublicName: row.PublicName, Place: row.Place, Count: count,
+				Penalty: penaltyStr, ProviderStatus: row.ProviderStatus, Cells: winCells,
+			},
+			score: windowScore, count: windowSolved,
+		}
+	}
+
+	// Порядок и места. Провайдеры уже упорядочены по местам во время контеста —
+	// сохраняем их. Для tasks пересортировываем и переставляем места по окну.
+	order := make([]int, len(items))
+	for i := range order {
+		order[i] = i
+	}
+	if !isProvider {
+		sort.SliceStable(order, func(a, b int) bool {
+			ia, ib := items[order[a]], items[order[b]]
+			if isIOI && ia.score != ib.score {
+				return ia.score > ib.score
+			}
+			if ia.count != ib.count {
+				return ia.count > ib.count
+			}
+			return strings.ToLower(ia.out.PublicName) < strings.ToLower(ib.out.PublicName)
+		})
+	}
+
+	view := &UpsolvingView{HasPenalty: hasPenalty, Rows: make([]UpsolvingRow, 0, len(items))}
+	ranked := make([]domain.GeneratedRow, len(order))
+	for pos, ri := range order {
+		ranked[pos] = domain.GeneratedRow{TotalScore: items[ri].score, SolvedCount: items[ri].count}
+	}
+	if !isProvider {
+		domain.AssignContestPlaces(ranked, isIOI)
+	}
+	for pos, ri := range order {
+		r := items[ri].out
+		if !isProvider {
+			r.Place = ranked[pos].Place
+		}
+		view.Rows = append(view.Rows, r)
+	}
+	return view
 }
 
 // submissionURL строит ссылку на список посылок ученика по задаче. Пока умеет

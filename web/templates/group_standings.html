@@ -1,3 +1,7 @@
+{{define "uvTaskCell" -}}
+{{if .IsIOI}}<td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}} style="--score-alpha: {{.Alpha}};">{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>{{else}}<td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}}>{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>{{end}}
+{{- end}}
+
 {{define "content"}}
 <section class="page-head">
   <h1>{{.Standings.GroupTitle}}</h1>
@@ -94,6 +98,7 @@
 {{if .Standings.Contests}}
   {{range .Standings.Contests}}
   {{$contest := .}}
+  {{$uv := upsolvingView $contest}}
   <section class="contest-block" id="contest-{{.ID}}">
     {{if .FrozenAt}}
     <div class="contest-block-head">
@@ -111,6 +116,11 @@
       {{if index $.JuryKonduits .ID}}
       <a class="admin-btn admin-btn--secondary" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}&token={{$.Token}}">✏️ Заполнить кондуит</a>
       {{end}}
+    </div>
+    {{end}}
+    {{if $uv}}
+    <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
+      <button type="button" class="admin-btn admin-btn--secondary uv-toggle" aria-pressed="false">Скрыть дорешку</button>
     </div>
     {{end}}
     {{with contestWindowText .StartTime .EndTime}}
@@ -133,7 +143,7 @@
     </div>
     {{end}}
     <div class="table-wrap">
-      <table class="standings-table">
+      <table class="standings-table{{if $uv}} has-upsolving{{end}}"{{if $uv}} data-contest="{{.ID}}"{{end}}>
         <thead>
           <tr>
             <th rowspan="2" class="count-col">Место</th>
@@ -163,28 +173,34 @@
             {{end}}
           </tr>
         </thead>
-        <tbody>
+        {{$hasPenalty := hasPenaltyColumn $contest.Rows}}
+        {{$hasProviderStatus := and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}
+        <tbody class="uv-body-full">
           {{range .Rows}}
           <tr>
             <td class="solved-count">{{placeText .Place}}</td>
             <td class="student-name">{{.PublicName}}</td>
             <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
-            {{if hasPenaltyColumn $contest.Rows}}
-            <td class="solved-count">{{penaltyText .Penalty}}</td>
-            {{end}}
-            {{range taskCells $contest .}}
-              {{if .IsIOI}}
-              <td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}} style="--score-alpha: {{.Alpha}};">{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
-              {{else}}
-              <td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}}>{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
-              {{end}}
-            {{end}}
-            {{if and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}
-            <td class="provider-status-cell">{{.ProviderStatus}}</td>
-            {{end}}
+            {{if $hasPenalty}}<td class="solved-count">{{penaltyText .Penalty}}</td>{{end}}
+            {{range taskCells $contest .}}{{template "uvTaskCell" .}}{{end}}
+            {{if $hasProviderStatus}}<td class="provider-status-cell">{{.ProviderStatus}}</td>{{end}}
           </tr>
           {{end}}
         </tbody>
+        {{if $uv}}
+        <tbody class="uv-body-window" hidden>
+          {{range $uv.Rows}}
+          <tr>
+            <td class="solved-count">{{placeText .Place}}</td>
+            <td class="student-name">{{.PublicName}}</td>
+            <td class="solved-count">{{.Count}}</td>
+            {{if $hasPenalty}}<td class="solved-count">{{.Penalty}}</td>{{end}}
+            {{range .Cells}}{{template "uvTaskCell" .}}{{end}}
+            {{if $hasProviderStatus}}<td class="provider-status-cell">{{.ProviderStatus}}</td>{{end}}
+          </tr>
+          {{end}}
+        </tbody>
+        {{end}}
       </table>
     </div>
     {{if not .Rows}}
@@ -201,6 +217,38 @@
 {{else}}
 <p class="empty-hint">Для этой группы не назначены контесты.</p>
 {{end}}
+
+<script>
+  // Переключатель «Скрыть дорешку» — только у смотрящего (выбор в localStorage,
+  // на данные для других не влияет). Сервер уже отрендерил второй tbody с
+  // оконным видом (пересчитанные суммы, места и сортировка), кнопка лишь
+  // показывает нужный.
+  (function () {
+    var slug = {{.Standings.GroupSlug}};
+    document.querySelectorAll(".uv-toggle").forEach(function (btn) {
+      var section = btn.closest(".contest-block");
+      if (!section) return;
+      var table = section.querySelector("table.has-upsolving");
+      if (!table) return;
+      var full = table.querySelector(".uv-body-full");
+      var win = table.querySelector(".uv-body-window");
+      if (!full || !win) return;
+      var key = "hideUpsolving:" + slug + ":" + (table.dataset.contest || "");
+      function apply(hide) {
+        full.hidden = hide;
+        win.hidden = !hide;
+        btn.textContent = hide ? "Показать дорешку" : "Скрыть дорешку";
+        btn.setAttribute("aria-pressed", hide ? "true" : "false");
+      }
+      apply(localStorage.getItem(key) === "1");
+      btn.addEventListener("click", function () {
+        var hide = win.hidden; // сейчас окно скрыто → включаем режим «без дорешки»
+        apply(hide);
+        try { localStorage.setItem(key, hide ? "1" : "0"); } catch (e) {}
+      });
+    });
+  })();
+</script>
 
 {{if and .TokenValid .JuryCanManage}}
 <script>

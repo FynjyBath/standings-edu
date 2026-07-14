@@ -145,3 +145,123 @@ func TestSubmissionLink(t *testing.T) {
 		t.Fatalf("no informatics acc → empty, got %q", got)
 	}
 }
+
+// upsolvingView: без дорешки → nil; с дорешкой считает оконные суммы, места и
+// сортировку. IOI-tasks: три ученика, у одного всё в дорешку — в оконном виде
+// он падает вниз, места пересчитываются.
+func TestUpsolvingViewIOITasks(t *testing.T) {
+	tasks := []domain.GeneratedTask{{Label: "A"}, {Label: "B"}}
+	contest := domain.GeneratedContestStandings{
+		ScoreSystem: domain.ScoreSystemIOI,
+		ContestType: domain.ContestTypeTasks,
+		Tasks:       tasks,
+	}
+	// Аня: A=100 в окне, B=100 в дорешке (main=nil→практика). Итого полн.=200, окно=100.
+	anya := domain.GeneratedRow{
+		PublicName: "Аня", Place: "1", TotalScore: 200, SolvedCount: 2,
+		Statuses:       []string{"solved", "solved"},
+		Scores:         []*int{ip(100), nil},
+		PracticeScores: []*int{nil, ip(100)},
+		Upsolved:       []bool{false, true},
+	}
+	// Боря: A=100, B=100 обе в окне. Полн.=200, окно=200 → в оконном виде он первый.
+	borya := domain.GeneratedRow{
+		PublicName: "Боря", Place: "1", TotalScore: 200, SolvedCount: 2,
+		Statuses: []string{"solved", "solved"},
+		Scores:   []*int{ip(100), ip(100)},
+	}
+	contest.Rows = []domain.GeneratedRow{anya, borya}
+
+	uv := upsolvingView(contest)
+	if uv == nil {
+		t.Fatal("должна быть дорешка → не nil")
+	}
+	if len(uv.Rows) != 2 {
+		t.Fatalf("строк: %d", len(uv.Rows))
+	}
+	// Оконный порядок: Боря (200) выше Ани (100).
+	if uv.Rows[0].PublicName != "Боря" || uv.Rows[0].Count != 200 || uv.Rows[0].Place != "1" {
+		t.Fatalf("первый оконный: %+v", uv.Rows[0])
+	}
+	if uv.Rows[1].PublicName != "Аня" || uv.Rows[1].Count != 100 || uv.Rows[1].Place != "2" {
+		t.Fatalf("второй оконный: %+v", uv.Rows[1])
+	}
+	// Ячейка B у Ани в оконном виде — пустая (дорешка).
+	anyaWin := uv.Rows[1]
+	if anyaWin.Cells[0].Text != "100" || anyaWin.Cells[1].Text != "" {
+		t.Fatalf("оконные ячейки Ани: %q %q", anyaWin.Cells[0].Text, anyaWin.Cells[1].Text)
+	}
+}
+
+// Нет дорешки → кнопки нет (nil).
+func TestUpsolvingViewNone(t *testing.T) {
+	contest := domain.GeneratedContestStandings{
+		ScoreSystem: domain.ScoreSystemEdu, ContestType: domain.ContestTypeTasks,
+		Tasks: []domain.GeneratedTask{{Label: "A"}},
+		Rows: []domain.GeneratedRow{
+			{PublicName: "Аня", Statuses: []string{"solved"}, SolvedCount: 1},
+		},
+	}
+	if upsolvingView(contest) != nil {
+		t.Fatal("без дорешки должно быть nil")
+	}
+}
+
+// edu-tasks: дорешанная задача не считается решённой в оконном виде.
+func TestUpsolvingViewEdu(t *testing.T) {
+	contest := domain.GeneratedContestStandings{
+		ScoreSystem: domain.ScoreSystemEdu, ContestType: domain.ContestTypeTasks,
+		Tasks: []domain.GeneratedTask{{Label: "A"}, {Label: "B"}},
+		Rows: []domain.GeneratedRow{{
+			PublicName: "Аня", Place: "1", SolvedCount: 2,
+			Statuses: []string{"solved", "solved"},
+			Upsolved: []bool{false, true}, // B решена только в дорешке
+		}},
+	}
+	uv := upsolvingView(contest)
+	if uv == nil || len(uv.Rows) != 1 {
+		t.Fatalf("uv: %+v", uv)
+	}
+	r := uv.Rows[0]
+	if r.Count != 1 { // в окне решена только A
+		t.Fatalf("оконное «решено» = %d, ждём 1", r.Count)
+	}
+	if r.Cells[0].Text != "+" || r.Cells[0].Status != "solved" {
+		t.Fatalf("A в окне должна быть '+': %+v", r.Cells[0])
+	}
+	if r.Cells[1].Text != "" || r.Cells[1].Status != "none" {
+		t.Fatalf("B в окне должна быть пустой: %+v", r.Cells[1])
+	}
+}
+
+// provider-контест (CF): место и порядок остаются по результату во время
+// контеста, дорешка только убирает баллы из суммы и ячеек.
+func TestUpsolvingViewProviderKeepsPlaces(t *testing.T) {
+	contest := domain.GeneratedContestStandings{
+		ScoreSystem: domain.ScoreSystemIOI, ContestType: domain.ContestTypeProvider,
+		Tasks: []domain.GeneratedTask{{Label: "A"}},
+		Rows: []domain.GeneratedRow{
+			// Лидер по итогу за счёт дорешки, но место 1 — по контесту.
+			{PublicName: "Аня", Place: "1", TotalScore: 100, SolvedCount: 1,
+				Statuses: []string{"solved"}, Scores: []*int{ip(100)}, Upsolved: []bool{true}},
+			{PublicName: "Боря", Place: "2", TotalScore: 50, SolvedCount: 0,
+				Statuses: []string{"attempted"}, Scores: []*int{ip(50)}},
+		},
+	}
+	uv := upsolvingView(contest)
+	if uv == nil || len(uv.Rows) != 2 {
+		t.Fatalf("uv: %+v", uv)
+	}
+	// Порядок и места — как были (по контесту), не пересортировка по окну.
+	if uv.Rows[0].PublicName != "Аня" || uv.Rows[0].Place != "1" {
+		t.Fatalf("место провайдера должно сохраниться: %+v", uv.Rows[0])
+	}
+	// Оконная сумма Ани — 0 (её задача дорешана: Scores у provider = балл дорешки).
+	if uv.Rows[0].Count != 0 || uv.Rows[0].Cells[0].Text != "" {
+		t.Fatalf("оконный балл Ани должен быть 0/пусто: count=%d cell=%q", uv.Rows[0].Count, uv.Rows[0].Cells[0].Text)
+	}
+	// Боря: 50 в контесте, дорешки нет → окно 50.
+	if uv.Rows[1].Count != 50 {
+		t.Fatalf("оконный балл Бори = %d, ждём 50", uv.Rows[1].Count)
+	}
+}

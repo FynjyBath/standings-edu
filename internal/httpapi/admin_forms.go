@@ -742,6 +742,51 @@ func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "short_name": groupFile.ShortName})
 }
 
+// AdminDirectoryTokenSet генерирует/убирает секретный токен каталога групп
+// (/standings?token=…). Хранится в data/credentials/directory_credentials.json,
+// читается на каждый запрос — смена действует сразу.
+func (h *Handlers) AdminDirectoryTokenSet(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Clear bool `json:"clear"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	path := h.directoryTokenPath()
+	if path == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "data dir is not configured"})
+		return
+	}
+	if req.Clear {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": ""})
+		return
+	}
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	token := hex.EncodeToString(raw)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	if err := fileutil.WriteJSON(path, map[string]string{"token": token}, 0o600); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": token})
+}
+
 // AdminGroupSetShowTaskLinks переключает флаг show_task_links группы (показывать
 // ли ссылки на задачи ученикам). Действует сразу при отдаче, без перегенерации.
 func (h *Handlers) AdminGroupSetShowTaskLinks(w http.ResponseWriter, r *http.Request) {

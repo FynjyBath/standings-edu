@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +62,34 @@ func (h *Handlers) SerializeDataWrite(next http.HandlerFunc) http.HandlerFunc {
 // защита выключена (эндпоинт открыт).
 func (h *Handlers) ConfigureIntakeToken(token string) {
 	h.intakeToken = token
+}
+
+// directoryTokenPath — файл с секретным токеном каталога групп. Управляется из
+// админки, читается на каждый запрос (смена действует сразу).
+func (h *Handlers) directoryTokenPath() string {
+	if h.dataDir == "" {
+		return ""
+	}
+	return filepath.Join(h.dataDir, "credentials", "directory_credentials.json")
+}
+
+// readDirectoryToken читает текущий токен каталога (пусто — каталог выключен).
+func (h *Handlers) readDirectoryToken() string {
+	path := h.directoryTokenPath()
+	if path == "" {
+		return ""
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(body, &cfg) != nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Token)
 }
 
 // ConfigureSourceDir задаёт каталог исходных данных (data/). Нужен, чтобы
@@ -619,14 +648,62 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (h *Handlers) IndexPage(w http.ResponseWriter, _ *http.Request) {
+func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 	page := IndexPageData{
 		PageTitle: "Standings",
 		Footer:    h.buildFooterInfo(),
 	}
+	// Каталог групп — по директорному токену (?token=…). Неверный/пустой токен —
+	// обычный экран, факт существования каталога не раскрываем.
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if dirToken := h.readDirectoryToken(); dirToken != "" && token != "" &&
+		subtle.ConstantTimeCompare([]byte(token), []byte(dirToken)) == 1 {
+		page.Directory = h.buildDirectory()
+	}
 	if err := h.renderer.Render(w, http.StatusOK, "index.html", page); err != nil {
 		h.logger.Printf("ERROR render index: %v", err)
 	}
+}
+
+// buildDirectory собирает список всех настроенных групп (data/groups/*) со
+// ссылками для ученика и преподавателя (с токеном группы, если он задан).
+func (h *Handlers) buildDirectory() []DirectoryGroup {
+	if h.dataDir == "" {
+		return []DirectoryGroup{}
+	}
+	entries, err := os.ReadDir(filepath.Join(h.dataDir, "groups"))
+	if err != nil {
+		return []DirectoryGroup{}
+	}
+	out := make([]DirectoryGroup, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() || !domain.IsValidSlug(e.Name()) {
+			continue
+		}
+		slug := e.Name()
+		gf, ok := h.readSourceGroupFile(slug)
+		if !ok {
+			continue
+		}
+		title := strings.TrimSpace(gf.Title)
+		if title == "" {
+			title = slug
+		}
+		item := DirectoryGroup{
+			Slug:       slug,
+			Title:      title,
+			StudentURL: "/standings/" + slug,
+			Combined:   len(gf.MemberGroups) > 0,
+		}
+		if tok := strings.TrimSpace(gf.GroupSecretToken); tok != "" {
+			item.TeacherURL = "/standings/" + slug + "?token=" + url.QueryEscape(tok)
+		}
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title)
+	})
+	return out
 }
 
 func (h *Handlers) buildFooterInfo() FooterInfo {
@@ -683,6 +760,18 @@ type FooterInfo struct {
 type IndexPageData struct {
 	PageTitle string
 	Footer    FooterInfo
+	// Directory — список групп (по директорному токену). nil — обычный экран.
+	Directory []DirectoryGroup
+}
+
+// DirectoryGroup — одна строка каталога групп: ссылка для ученика и (если есть
+// токен группы) ссылка для преподавателя с токеном.
+type DirectoryGroup struct {
+	Slug       string
+	Title      string
+	StudentURL string
+	TeacherURL string // пусто — у группы нет токена жюри
+	Combined   bool
 }
 
 type GroupPageData struct {

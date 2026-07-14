@@ -45,6 +45,21 @@
 </section>
 
 <section class="admin-block">
+  <h2>Каталог групп для преподавателей</h2>
+  <p class="empty-hint">Секретная ссылка со списком всех групп: для каждой — ссылка ученику и ссылка с токеном жюри. Раздайте её только преподавателям. Смена/удаление токена действует сразу.</p>
+  {{if .DirectoryToken}}
+  <p>Ссылка на каталог: <a id="directory-link" href="/standings?token={{.DirectoryToken}}" target="_blank" rel="noopener noreferrer"></a></p>
+  {{else}}
+  <p class="empty-hint">Токен не задан — каталог на <code>/standings</code> выключен (обычный приветственный экран).</p>
+  {{end}}
+  <div class="admin-editor-tools">
+    <button type="button" id="directory-token-generate" class="admin-btn">{{if .DirectoryToken}}Перегенерировать{{else}}Сгенерировать{{end}}</button>
+    {{if .DirectoryToken}}<button type="button" id="directory-token-clear" class="admin-btn admin-btn--secondary">Убрать токен</button>{{end}}
+    <span id="directory-token-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
   <h2>Создать группу</h2>
   <form method="post" action="/api/admin/groups/create" class="admin-form-grid">
     <label>
@@ -193,6 +208,25 @@
 <script src="/static/vendor/ace/theme-github.js"></script>
 <script src="/static/vendor/ace/theme-tomorrow_night.js"></script>
 <script>
+  // Токен каталога групп: сгенерировать / убрать.
+  (function () {
+    var link = document.getElementById("directory-link");
+    if (link) link.textContent = location.origin + link.getAttribute("href");
+    var status = document.getElementById("directory-token-status");
+    function action(clear) {
+      if (clear && !confirm("Убрать токен каталога? Старая ссылка перестанет работать сразу.")) return;
+      if (status) { status.textContent = "Сохранение…"; status.className = "admin-editor-status"; }
+      fetch("/api/admin/directory-token/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: clear }) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+        .then(function () { location.reload(); })
+        .catch(function (err) { if (status) { status.textContent = err.message; status.className = "admin-editor-status admin-editor-status--error"; } });
+    }
+    var gen = document.getElementById("directory-token-generate");
+    if (gen) gen.addEventListener("click", function () { action(false); });
+    var clr = document.getElementById("directory-token-clear");
+    if (clr) clr.addEventListener("click", function () { action(true); });
+  })();
+
   (function () {
     var select = document.getElementById("admin-file-select");
     var validateButton = document.getElementById("admin-file-validate");

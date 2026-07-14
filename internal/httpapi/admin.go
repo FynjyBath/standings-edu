@@ -66,6 +66,9 @@ type AdminPageData struct {
 	SelectableGroups []AdminGroupLink
 	LastResult       *AdminActionResult
 	DefaultPath      string
+	// DirectoryToken — текущий токен каталога групп (/standings?token=…); пусто —
+	// каталог выключен.
+	DirectoryToken string
 }
 
 type AdminGroupLink struct {
@@ -289,6 +292,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		SelectableGroups: selectableGroups,
 		LastResult:       h.lastAdminResult(),
 		DefaultPath:      defaultPath,
+		DirectoryToken:   h.readDirectoryToken(),
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin.html", page); err != nil {
 		h.logger.Printf("ERROR render admin page: %v", err)

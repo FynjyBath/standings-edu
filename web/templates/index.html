@@ -1,6 +1,42 @@
 {{define "content"}}
+{{if .Directory}}
+<section class="page-head">
+  <h1>Все группы</h1>
+  <p class="empty-hint">Каталог для преподавателей: ссылка для ученика и ссылка с токеном жюри (просмотр без заморозки, скрытые контесты, статистика участников). Ссылка с токеном — секретная, не давайте её ученикам.</p>
+</section>
+
+<section class="admin-block">
+  <div class="table-wrap">
+    <table class="standings-table data-table">
+      <thead>
+        <tr>
+          <th class="student-col">Группа</th>
+          <th>Ссылка для ученика</th>
+          <th>Ссылка для преподавателя (с токеном)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Directory}}
+        <tr>
+          <td class="student-name">{{.Title}}{{if .Combined}} <span class="grade-weight">(объединённая)</span>{{end}} <span class="grade-weight">{{.Slug}}</span></td>
+          <td><a href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">{{.StudentURL}}</a></td>
+          <td>
+            {{if .TeacherURL}}
+            <a href="{{.TeacherURL}}" target="_blank" rel="noopener noreferrer">открыть по токену</a>
+            {{else}}
+            <span class="grade-weight">токена нет</span>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{else}}
 <section class="index-hero">
   <h1>Платформа для проведения занятий по олимпиадному программированию</h1>
   <p>Попросите у преподавателя ссылку на страницу вашей группы.</p>
 </section>
+{{end}}
 {{end}}

@@ -100,14 +100,17 @@
   {{$contest := .}}
   {{$uv := upsolvingView $contest}}
   <section class="contest-block" id="contest-{{.ID}}">
-    {{if .FrozenAt}}
     <div class="contest-block-head">
       <h2>{{.Title}}</h2>
-      <span class="pinned-badge">❄ Заморожено</span>
+      <div class="contest-head-right">
+        {{if and .StartTime .EndTime}}
+        <span class="contest-status" data-start="{{timeISO .StartTime}}" data-end="{{timeISO .EndTime}}"></span>
+        {{end}}
+        {{if .FrozenAt}}<span class="pinned-badge">❄ Заморожено</span>{{end}}
+      </div>
     </div>
+    {{if .FrozenAt}}
     <p class="empty-hint">Результаты после {{contestGeneratedAt .FrozenAt}} скрыты до разморозки.</p>
-    {{else}}
-    <h2>{{.Title}}</h2>
     {{end}}
     {{if and $.TokenValid $.JuryCanManage}}
     <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
@@ -217,6 +220,42 @@
 {{else}}
 <p class="empty-hint">Для этой группы не назначены контесты.</p>
 {{end}}
+
+<script>
+  // «Живой» статус контеста рядом с названием: до начала / до конца / завершён.
+  // Часы клиента синхронизируем по серверному «сейчас» (data-server-now в
+  // футере), чтобы отсчёт был точным при неверных часах у зрителя.
+  (function () {
+    var cfg = document.querySelector("[data-server-now]");
+    var serverNowMs = cfg ? Date.parse(cfg.getAttribute("data-server-now") || "") : NaN;
+    var skew = isNaN(serverNowMs) ? 0 : (serverNowMs - Date.now());
+    function pad2(n) { return String(n).padStart(2, "0"); }
+    function fmt(ms) {
+      var t = Math.max(0, Math.floor(ms / 1000));
+      var d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+      if (d > 0) return d + " дн " + pad2(h) + ":" + pad2(m) + ":" + pad2(s);
+      if (h > 0) return h + ":" + pad2(m) + ":" + pad2(s);
+      return m + ":" + pad2(s);
+    }
+    var nodes = [].slice.call(document.querySelectorAll(".contest-status")).map(function (el) {
+      return { el: el, start: Date.parse(el.getAttribute("data-start") || ""), end: Date.parse(el.getAttribute("data-end") || "") };
+    }).filter(function (n) { return !isNaN(n.start) && !isNaN(n.end); });
+    if (!nodes.length) return;
+    function tick() {
+      var now = Date.now() + skew;
+      nodes.forEach(function (x) {
+        var cls, txt;
+        if (now < x.start) { cls = "upcoming"; txt = "⏳ до начала " + fmt(x.start - now); }
+        else if (now < x.end) { cls = "running"; txt = "⏱ до конца " + fmt(x.end - now); }
+        else { cls = "finished"; txt = "✔ контест завершён"; }
+        x.el.className = "contest-status contest-status--" + cls;
+        x.el.textContent = txt;
+      });
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
 
 <script>
   // Переключатель «Скрыть дорешку» — только у смотрящего (выбор в localStorage,

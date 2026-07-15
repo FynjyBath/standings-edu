@@ -444,6 +444,50 @@ button.summary-link-btn {
   white-space: nowrap;
 }
 
+/* Правая часть заголовка контеста: живой статус + бейдж заморозки. */
+.contest-head-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* «Живой» статус контеста рядом с названием (заполняется JS). */
+.contest-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0.16rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* До заполнения JS (или без JS) — пустой бейдж не показываем. */
+.contest-status:empty {
+  display: none;
+}
+
+.contest-status--running {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line) 45%);
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface) 85%);
+  color: var(--accent-strong);
+}
+
+.contest-status--upcoming {
+  border-color: color-mix(in srgb, #4a90d9 45%, var(--line) 55%);
+  background: color-mix(in srgb, #4a90d9 13%, var(--surface) 87%);
+  color: color-mix(in srgb, #2c6cb0 78%, var(--text) 22%);
+}
+
+.contest-status--finished {
+  background: color-mix(in srgb, var(--muted) 12%, var(--surface) 88%);
+  color: var(--muted);
+}
+
 .contest-materials-block {
   margin: 0 0 0.8rem;
 }

@@ -46,6 +46,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"contestGeneratedAt":      contestGeneratedAt,
 			"contestNotStarted":       contestNotStarted,
 			"contestGeneratedAtISO":   contestGeneratedAtISO,
+			"timeISO":                 timeISO,
 			"contestWindowText":       contestWindowText,
 			"gradeText":               gradeText,
 			"grade2Text":              grade2Text,
@@ -458,6 +459,14 @@ func contestGeneratedAtISO(generatedAt *time.Time) string {
 		return ""
 	}
 	return generatedAt.Format(time.RFC3339)
+}
+
+// timeISO — момент в ISO 8601 (RFC3339) для «живого» отсчёта в JS. Пусто — нет.
+func timeISO(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 func wrapPractice(text string, practice bool) string {

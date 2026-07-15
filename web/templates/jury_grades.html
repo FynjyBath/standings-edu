@@ -13,6 +13,11 @@
     <button type="button" id="grades-save" class="admin-btn">Сохранить оценки</button>
     <span id="grades-status" class="admin-editor-status"></span>
   </div>
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#jgrades-tbody > tr" data-filter-count="#jgrades-count" data-filter-empty="#jgrades-empty" />
+    <span class="filter-count" id="jgrades-count"></span>
+  </div>
   <div class="table-wrap">
     <table class="standings-table">
       <thead>
@@ -23,10 +28,10 @@
           {{end}}
         </tr>
       </thead>
-      <tbody>
+      <tbody id="jgrades-tbody">
         {{range .Rows}}
         {{$row := .}}
-        <tr>
+        <tr data-filter-text="{{$row.PublicName}}">
           <td class="student-name">{{.PublicName}}</td>
           {{range $i, $col := $.Columns}}
           <td>
@@ -40,6 +45,7 @@
       </tbody>
     </table>
   </div>
+  <p class="empty-hint" id="jgrades-empty" hidden>Ничего не найдено.</p>
 {{else}}
   <p class="empty-hint">У группы нет ручных столбцов оценок — их настраивает администратор.</p>
 {{end}}

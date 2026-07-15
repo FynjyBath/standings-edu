@@ -47,15 +47,21 @@
   <h2>Участники ({{len .Members}})</h2>
   <p class="empty-hint">Добавление — списком ФИО выше или через анкеты. Здесь можно только удалить.</p>
   {{if .Members}}
-  <ul class="admin-groups-list">
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#group-members-list > li" data-filter-count="#group-members-count" data-filter-empty="#group-members-empty" />
+    <span class="filter-count" id="group-members-count"></span>
+  </div>
+  <ul class="admin-groups-list" id="group-members-list">
     {{range .Members}}
-    <li>
+    <li data-filter-text="{{.PublicName}} {{.StudentID}}">
       <span>{{.PublicName}}</span> <code>{{.StudentID}}</code>
       <a class="admin-btn admin-btn--secondary" href="/standings/admin/student?id={{.StudentID}}">Профиль</a>
       <button type="button" class="admin-btn admin-btn--secondary member-remove" data-id="{{.StudentID}}" data-name="{{.PublicName}}">Убрать</button>
     </li>
     {{end}}
   </ul>
+  <p class="empty-hint" id="group-members-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">В группе нет участников.</p>
   {{end}}
@@ -81,12 +87,17 @@
   <h2>Контесты группы ({{len .Entries}})</h2>
   <p class="empty-hint">Ссылка берёт контест из глобального <code>contests.json</code>. Inline-контест хранится прямо в группе. После изменений не забудьте перегенерировать.</p>
   {{if .Entries}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по названию или id…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#group-entries-tbody > tr" data-filter-count="#group-entries-count" data-filter-empty="#group-entries-empty" />
+    <span class="filter-count" id="group-entries-count"></span>
+  </div>
   <div class="table-wrap">
     <table class="standings-table data-table">
       <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th>Σ в сводной</th><th>Показывать</th><th>Штраф за ноль</th><th></th></tr></thead>
-      <tbody>
+      <tbody id="group-entries-tbody">
         {{range .Entries}}
-        <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}">
+        <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}" data-filter-text="{{.Title}} {{.ID}} {{.Kind}}">
           <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
           <td>{{if .Inline}}inline{{else}}ссылка{{end}}{{if .Kind}}<div class="grade-weight">{{.Kind}}</div>{{end}}</td>
           <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
@@ -159,6 +170,7 @@
       </tbody>
     </table>
   </div>
+  <p class="empty-hint" id="group-entries-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">В группе пока нет контестов.</p>
   {{end}}
@@ -166,7 +178,7 @@
   <div class="admin-editor-tools" style="margin-top:0.9rem;flex-wrap:wrap;gap:0.5rem;">
     <label style="display:flex;align-items:center;gap:0.4rem;">
       <span>Добавить из глобальных:</span>
-      <select id="add-ref-select">
+      <select id="add-ref-select" data-searchable data-placeholder="Поиск контеста по названию или id…">
         <option value="">— выберите контест —</option>
         {{range .AddableContests}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
       </select>

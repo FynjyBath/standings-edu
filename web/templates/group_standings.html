@@ -31,7 +31,7 @@
     {{if .JuryAddable}}
     <label style="display:flex;align-items:center;gap:0.4rem;">
       <span>Добавить контест:</span>
-      <select id="jury-add-select">
+      <select id="jury-add-select" data-searchable data-placeholder="Поиск контеста по названию или id…">
         <option value="">— выберите —</option>
         {{range .JuryAddable}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
       </select>
@@ -61,6 +61,15 @@
   <p class="empty-hint">Панель жюри: добавление уже созданных контестов (сверху списка), создание кондуитов и порядок — стрелками у контестов. Таблицы обновятся после ближайшей генерации.</p>
   {{end}}
 </section>
+
+<nav class="contest-toc" data-contest-toc hidden aria-label="Оглавление контестов">
+  <div class="contest-toc-head">
+    <span class="contest-toc-title">Контесты</span>
+    <input type="search" class="filter-input" data-toc-filter placeholder="Найти контест…" autocomplete="off" spellcheck="false" style="flex:0 1 18rem;" />
+    <span class="filter-count" data-toc-empty hidden>ничего не найдено</span>
+  </div>
+  <div class="contest-toc-chips" data-toc-chips></div>
+</nav>
 
 {{if .Standings.SolvedSummary}}
 <details class="contest-block contest-block--pinned honor-board">

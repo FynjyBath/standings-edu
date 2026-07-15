@@ -12,7 +12,12 @@
 
 <section class="contest-block">
   <h2>Сводная таблица</h2>
+  <div class="filter-bar" id="summary-filter-bar" hidden>
+    <input type="search" class="filter-input" id="summary-filter" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false" />
+    <span class="filter-count" id="summary-count"></span>
+  </div>
   <div class="table-wrap" id="summary-root" data-token="{{.Token}}"></div>
+  <p class="empty-hint" id="summary-nomatch" hidden>Ничего не найдено.</p>
   <p class="empty-hint" id="summary-empty" style="display:none;">Нет контестов для выбранной таблицы.</p>
 </section>
 
@@ -330,6 +335,8 @@
       students.forEach(function (student) {
         var tr = document.createElement("tr");
 
+        tr.setAttribute("data-filter-text", (student.public_name || "").toLowerCase());
+
         var tdName = document.createElement("td");
         tdName.className = "student-name";
         tdName.textContent = student.public_name;
@@ -479,16 +486,40 @@
       return (practice && text) ? "(" + text + ")" : text;
     }
 
+    // Фильтр по имени ученика — скрывает строки матрицы; применяется заново
+    // после каждой перерисовки (смены вкладки), чтобы выбор не сбрасывался.
+    var filterBar = document.getElementById("summary-filter-bar");
+    var filterInput = document.getElementById("summary-filter");
+    var countNode = document.getElementById("summary-count");
+    var noMatch = document.getElementById("summary-nomatch");
+    function applyFilter() {
+      var rows = root.querySelectorAll("tbody tr");
+      var total = rows.length, shown = 0;
+      var q = filterInput ? (filterInput.value || "").trim().toLowerCase() : "";
+      [].forEach.call(rows, function (tr) {
+        var m = !q || (tr.getAttribute("data-filter-text") || "").indexOf(q) !== -1;
+        tr.classList.toggle("filtered-out", !m);
+        if (m) shown++;
+      });
+      if (filterBar) filterBar.hidden = total === 0;
+      if (countNode) countNode.textContent = q ? (shown + " из " + total) : String(total);
+      if (noMatch) noMatch.hidden = !(q && shown === 0 && total > 0);
+    }
+    if (filterInput) filterInput.addEventListener("input", applyFilter);
+
     function render(tab) {
       root.textContent = "";
       var table = buildTable(contestsForTab(tab));
       if (!table) {
         empty.textContent = "Нет задач в выбранной таблице.";
         empty.style.display = "";
+        if (filterBar) filterBar.hidden = true;
+        if (noMatch) noMatch.hidden = true;
         return;
       }
       empty.style.display = "none";
       root.appendChild(table);
+      applyFilter();
     }
 
     var activeTab = tabs[0];

@@ -38,6 +38,11 @@
     <button type="button" id="grades-save" class="admin-btn">Сохранить оценки</button>
     <span id="grades-status" class="admin-editor-status"></span>
   </div>
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#agrades-tbody > tr" data-filter-count="#agrades-count" data-filter-empty="#agrades-empty" />
+    <span class="filter-count" id="agrades-count"></span>
+  </div>
   <div class="table-wrap">
     <table class="standings-table">
       <thead>
@@ -48,10 +53,10 @@
           {{end}}
         </tr>
       </thead>
-      <tbody>
+      <tbody id="agrades-tbody">
         {{range .Rows}}
         {{$row := .}}
-        <tr>
+        <tr data-filter-text="{{$row.PublicName}}">
           <td class="student-name">{{.PublicName}}</td>
           {{range $i, $col := $.Columns}}
           <td>
@@ -65,6 +70,7 @@
       </tbody>
     </table>
   </div>
+  <p class="empty-hint" id="agrades-empty" hidden>Ничего не найдено.</p>
 {{else}}
   <p class="empty-hint">В этой группе нет ручных столбцов — добавьте столбец типа «ручной» выше.</p>
 {{end}}

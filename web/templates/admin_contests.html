@@ -16,12 +16,17 @@
 <section class="admin-block">
   <h2>Список ({{len .Contests}})</h2>
   {{if .Contests}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по названию, id, типу…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#contests-tbody tr" data-filter-count="#contests-count" data-filter-empty="#contests-empty" />
+    <span class="filter-count" id="contests-count"></span>
+  </div>
   <div class="table-wrap">
     <table class="standings-table data-table">
       <thead><tr><th>Название</th><th>id</th><th>Тип</th><th>score</th><th></th></tr></thead>
-      <tbody>
+      <tbody id="contests-tbody">
         {{range .Contests}}
-        <tr>
+        <tr data-filter-text="{{.Title}} {{.ID}} {{.Type}} {{.ScoreSystem}}">
           <td>{{.Title}}</td><td><code>{{.ID}}</code></td><td>{{.Type}}</td><td>{{.ScoreSystem}}</td>
           <td style="white-space:nowrap;">
             <button type="button" class="admin-btn admin-btn--secondary c-edit" data-id="{{.ID}}">Изм.</button>
@@ -32,6 +37,7 @@
       </tbody>
     </table>
   </div>
+  <p class="empty-hint" id="contests-empty" hidden>Ничего не найдено.</p>
   {{else}}<p class="empty-hint">Контестов пока нет.</p>{{end}}
 </section>
 

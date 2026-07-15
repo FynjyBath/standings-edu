@@ -87,10 +87,15 @@
 <section class="admin-block">
   <h2>Группы</h2>
   {{if .Groups}}
-  <ul class="admin-groups-grid">
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#groups-grid > li" data-filter-count="#groups-count" data-filter-empty="#groups-empty" />
+    <span class="filter-count" id="groups-count"></span>
+  </div>
+  <ul class="admin-groups-grid" id="groups-grid">
     {{range .Groups}}
     {{if not .IsCombined}}
-    <li>
+    <li data-filter-text="{{.Title}} {{.Slug}}">
       <a class="admin-btn" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
       <span>({{.Slug}})</span>
       <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
@@ -100,6 +105,7 @@
     {{end}}
     {{end}}
   </ul>
+  <p class="empty-hint" id="groups-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">Группы не найдены.</p>
   {{end}}
@@ -110,9 +116,14 @@
   <p class="empty-hint">Общая страница нескольких групп: контесты с одной и той же ссылкой сливаются в одну табличку (с учениками всех групп), разные — идут отдельными. Оценок у объединённой группы нет. Изменения видны сразу, перегенерация не нужна.</p>
 
   {{if .CombinedGroups}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#combined-list > li" data-filter-count="#combined-count" data-filter-empty="#combined-empty" />
+    <span class="filter-count" id="combined-count"></span>
+  </div>
   <ul class="combined-list" id="combined-list">
     {{range .CombinedGroups}}
-    <li class="combined-item" data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}">
+    <li class="combined-item" data-slug="{{.Slug}}" data-title="{{.Title}}" data-members="{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.Slug}}{{end}}" data-filter-text="{{.Title}} {{.Slug}}">
       <div class="combined-item-head">
         <a class="admin-btn combined-item-title" href="/standings/admin/combined?slug={{.Slug}}">{{.Title}}</a>
         <span class="grade-weight">({{.Slug}})</span>
@@ -127,6 +138,7 @@
     </li>
     {{end}}
   </ul>
+  <p class="empty-hint" id="combined-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">Пока нет объединённых групп.</p>
   {{end}}

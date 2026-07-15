@@ -10,6 +10,11 @@
 <section class="contest-block">
   <h2>Участники ({{len .Rows}})</h2>
   {{if .Rows}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#participants-tbody > tr" data-filter-count="#participants-count" data-filter-empty="#participants-empty" />
+    <span class="filter-count" id="participants-count"></span>
+  </div>
   <div class="table-wrap">
     <table class="standings-table data-table">
       <thead>
@@ -24,9 +29,9 @@
           <th>Последняя активность</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="participants-tbody">
         {{range .Rows}}
-        <tr>
+        <tr data-filter-text="{{.PublicName}}">
           <td class="student-name"><a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a></td>
           {{if .HasProfile}}
           <td class="solved-count">{{.Stats.TotalSolved}}</td>
@@ -44,6 +49,7 @@
       </tbody>
     </table>
   </div>
+  <p class="empty-hint" id="participants-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">В группе нет участников.</p>
   {{end}}

@@ -1379,3 +1379,162 @@ button.summary-link-btn {
     height: min(58vh, 460px);
   }
 }
+
+/* ── Общие фильтры списков/таблиц, поисковый select, оглавление контестов ── */
+
+/* Скрытие строк/чипов/блоков живым фильтром (важнее table-row у tr). */
+.filtered-out {
+  display: none !important;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.filter-input {
+  flex: 1 1 15rem;
+  max-width: 24rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.filter-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent 78%);
+}
+
+.filter-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Поисковая выпадашка (combobox) поверх скрытого <select>. */
+.combo {
+  position: relative;
+  display: inline-block;
+  min-width: 16rem;
+  max-width: 100%;
+}
+
+.combo-input {
+  width: 100%;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.combo-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent 78%);
+}
+
+.combo-list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.combo-item {
+  padding: 0.35rem 0.55rem;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.combo-item.is-active,
+.combo-item:hover {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+  color: var(--accent-strong);
+}
+
+.combo-empty {
+  padding: 0.35rem 0.55rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Оглавление контестов: полоса чипов-якорей. */
+.contest-toc {
+  margin: 0.4rem 0 1.1rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--line) 64%, transparent 36%);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.contest-toc-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.contest-toc-title {
+  font-weight: 800;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.contest-toc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.toc-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 18rem;
+  padding: 0.24rem 0.66rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.toc-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line) 55%);
+  color: var(--accent-strong);
+}
+
+.toc-chip.is-current {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+  color: var(--accent-strong);
+}

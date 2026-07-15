@@ -11,6 +11,13 @@
 </section>
 
 <section class="contest-block">
+  {{if .Grades.Rows}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#grades-tbody > tr" data-filter-count="#grades-count" data-filter-empty="#grades-empty" />
+    <span class="filter-count" id="grades-count"></span>
+  </div>
+  {{end}}
   <div class="table-wrap">
     <table class="standings-table">
       <thead>
@@ -23,9 +30,9 @@
           <th class="count-col">Итог</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="grades-tbody">
         {{range .Grades.Rows}}
-        <tr>
+        <tr data-filter-text="{{.PublicName}}">
           <td class="student-name">{{.PublicName}}</td>
           {{range .Values}}
           <td class="solved-count">{{gradeText .}}</td>
@@ -37,7 +44,9 @@
       </tbody>
     </table>
   </div>
-  {{if not .Grades.Rows}}
+  {{if .Grades.Rows}}
+  <p class="empty-hint" id="grades-empty" hidden>Ничего не найдено.</p>
+  {{else}}
   <p class="empty-hint">В группе нет учеников.</p>
   {{end}}
 </section>

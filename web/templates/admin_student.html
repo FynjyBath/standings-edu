@@ -1,38 +1,110 @@
 {{define "content"}}
 {{$p := .Profile}}
 <section class="page-head">
-  <h1>Профиль: {{if $p.PublicName}}{{$p.PublicName}}{{else}}{{.StudentID}}{{end}} <span class="grade-weight">{{.StudentID}}</span></h1>
+  <h1>{{if $p.PublicName}}{{$p.PublicName}}{{else}}{{.StudentID}}{{end}} <span class="grade-weight">{{.StudentID}}</span></h1>
   <p class="summary-links">
     <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
   </p>
+  {{if $p.Accounts}}
+  <div class="account-chips">
+    {{range $p.Accounts}}<span class="account-chip"><span class="acc-site">{{siteName .Site}}</span><span class="acc-id">{{.AccountID}}</span></span>{{end}}
+  </div>
+  {{end}}
   {{if .NotGenerated}}
   <p class="empty-hint">Профиль ещё не сгенерирован. Он появится после ближайшей генерации таблиц (кнопка «Сгенерировать» в админке).</p>
   {{else}}
-  <p class="empty-hint">Лента посылок и метрики скорости — только Codeforces и Informatics (ACMP не отдаёт время посылок). Данные на момент последней генерации{{with contestGeneratedAt $p.GeneratedAt}}: {{.}}{{end}}.</p>
+  <p class="empty-hint">Активность и посылки — только Codeforces и Informatics (ACMP не отдаёт время посылок). Данные на момент последней генерации{{with contestGeneratedAt $p.GeneratedAt}}: {{.}}{{end}}.</p>
   {{end}}
 </section>
 
 {{if not .NotGenerated}}
 {{$s := $p.Stats}}
 
+<!-- Активность за период (KPI + график 90 дней) -->
 <section class="contest-block">
-  <h2>Сводка</h2>
+  <h2>Активность</h2>
   <div class="stat-grid">
     <div class="stat-card stat-card--primary"><span class="stat-value">{{$s.TotalSolved}}</span><span class="stat-label">решено задач</span></div>
-    <div class="stat-card"><span class="stat-value">{{$s.TotalSubmissions}}</span><span class="stat-label">посылок (со временем)</span></div>
     <div class="stat-card"><span class="stat-value">{{$s.SolvedToday}}</span><span class="stat-label">решено сегодня</span></div>
     <div class="stat-card"><span class="stat-value">{{$s.Submissions7d}}</span><span class="stat-label">посылок за 7 дней</span></div>
     <div class="stat-card"><span class="stat-value">{{$s.Submissions30d}}</span><span class="stat-label">посылок за 30 дней</span></div>
+    <div class="stat-card"><span class="stat-value">{{$s.TotalSubmissions}}</span><span class="stat-label">посылок всего</span></div>
     <div class="stat-card"><span class="stat-value">{{$s.ActiveDays}}</span><span class="stat-label">активных дней</span></div>
     <div class="stat-card"><span class="stat-value stat-value--text">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span class="stat-label">последняя активность</span></div>
   </div>
   {{if gt $s.SolvedWithTimes 0}}
-  <p class="empty-hint">По {{$s.SolvedWithTimes}} задачам, решённым на CF/Informatics: в среднем <strong>{{numText $s.AvgAttemptsToSolve}}</strong> посылок до решения; с первой попытки решено <strong>{{$s.FirstTrySolved}}</strong>.</p>
-  {{else}}
-  <p class="empty-hint">Нет решённых задач с известным временем посылок — метрики скорости недоступны.</p>
+  <p class="empty-hint">По {{$s.SolvedWithTimes}} задачам с известным временем посылок: в среднем <strong>{{numText $s.AvgAttemptsToSolve}}</strong> посылок до решения; с первой попытки — <strong>{{$s.FirstTrySolved}}</strong>.</p>
+  {{end}}
+  {{if $p.DailyActivity}}
+  <div class="profile-chart-head">
+    <span class="profile-chart-title">Посылки по дням — 90 дней</span>
+    <span class="empty-hint">макс. за день: {{.MaxDaily}}</span>
+  </div>
+  <div class="activity-bar" title="Посылки по дням (MSK)">
+    {{range $p.DailyActivity}}
+    <span class="activity-cell{{if .Count}} has-count{{end}}" style="height:{{barHeight .Count $.MaxDaily}}px;" title="{{dayLabel .Date}}: {{.Count}}"></span>
+    {{end}}
+  </div>
   {{end}}
 </section>
 
+<!-- Лента посылок: поиск + только решённые + ссылки на посылки -->
+<section class="contest-block">
+  <h2>Последние посылки</h2>
+  {{if $p.Recent}}
+  <div class="filter-bar">
+    <input type="search" id="subs-search" class="filter-input" placeholder="Фильтр по сайту, задаче…" autocomplete="off" spellcheck="false" />
+    <label class="field-inline"><input type="checkbox" id="subs-solved-only" /> <span>только решённые</span></label>
+    <span class="filter-count" id="subs-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="standings-table data-table">
+      <thead><tr><th>Время (MSK)</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
+      <tbody id="subs-body">
+        {{range $p.Recent}}
+        <tr class="{{if .Solved}}is-solved{{end}}" data-filter-text="{{siteName .Site}} {{.Label}} {{if .Solved}}решено{{else}}попытка{{end}}">
+          <td>{{submissionTime .At}}</td>
+          <td class="site-tag">{{siteName .Site}}</td>
+          <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer" title="{{if $sub}}Посылки ученика по задаче на сайте{{else}}Открыть задачу{{end}}">{{.Label}}</a></td>
+          <td>{{if .Solved}}<span class="result-pill result-pill--ok">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="result-pill result-pill--try">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="subs-empty" hidden>Ничего не найдено.</p>
+  <p class="empty-hint">Показаны последние {{len $p.Recent}} посылок с известным временем (CF/Informatics). Клик по задаче ведёт к посылкам ученика на сайте.</p>
+  {{else}}
+  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">📭</span><p>Нет посылок с известным временем.</p></div>
+  {{end}}
+</section>
+
+<!-- Группы и успеваемость -->
+<section class="contest-block">
+  <h2>Группы и успеваемость</h2>
+  {{if $p.Groups}}
+  <div class="table-wrap">
+    <table class="standings-table data-table">
+      <thead><tr><th>Группа</th><th class="count-col">Решено (доска почёта)</th><th class="count-col">Место</th><th class="count-col">Оценка</th><th class="count-col">Место по оценке</th></tr></thead>
+      <tbody>
+        {{range $p.Groups}}
+        <tr>
+          <td>{{if $.TokenView}}{{.Title}}{{else}}<a href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>{{end}}</td>
+          <td class="solved-count">{{.SolvedCount}}</td>
+          <td class="solved-count">{{if .HonorTotal}}{{.HonorPlace}} из {{.HonorTotal}}{{else}}—{{end}}</td>
+          <td class="solved-count">{{if .Grade}}{{gradeText .Grade}}{{else}}—{{end}}</td>
+          <td class="solved-count">{{if .GradeTotal}}{{.GradePlace}} из {{.GradeTotal}}{{else}}—{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">👥</span><p>Ученик не состоит в сгенерированных группах.</p></div>
+  {{end}}
+</section>
+
+<!-- Аккаунты и статистика по сайтам -->
 <section class="contest-block">
   <h2>Аккаунты и сайты</h2>
   {{if $p.Sites}}
@@ -54,71 +126,36 @@
   {{else}}
   <p class="empty-hint">Нет данных по аккаунтам (или у ученика нет привязанных аккаунтов на отслеживаемых сайтах).</p>
   {{end}}
-  {{if $p.Accounts}}
-  <p class="empty-hint">Аккаунты: {{range $p.Accounts}}<code>{{.Site}}:{{.AccountID}}</code> {{end}}</p>
-  {{end}}
 </section>
 
-<section class="contest-block">
-  <h2>Позиции в группах</h2>
-  {{if $p.Groups}}
-  <div class="table-wrap">
-    <table class="standings-table data-table">
-      <thead><tr><th>Группа</th><th class="count-col">Решено (доска почёта)</th><th class="count-col">Место</th><th class="count-col">Оценка</th><th class="count-col">Место по оценке</th></tr></thead>
-      <tbody>
-        {{range $p.Groups}}
-        <tr>
-          <td>{{if $.TokenView}}{{.Title}}{{else}}<a href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>{{end}}</td>
-          <td class="solved-count">{{.SolvedCount}}</td>
-          <td class="solved-count">{{if .HonorTotal}}{{.HonorPlace}} из {{.HonorTotal}}{{else}}—{{end}}</td>
-          <td class="solved-count">{{if .Grade}}{{gradeText .Grade}}{{else}}—{{end}}</td>
-          <td class="solved-count">{{if .GradeTotal}}{{.GradePlace}} из {{.GradeTotal}}{{else}}—{{end}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </div>
-  {{else}}
-  <p class="empty-hint">Ученик не состоит в сгенерированных группах.</p>
-  {{end}}
-</section>
-
-<section class="contest-block">
-  <h2>Активность за 90 дней</h2>
-  {{if $p.DailyActivity}}
-  <div class="activity-bar" title="Посылки по дням (MSK)">
-    {{range $p.DailyActivity}}
-    <span class="activity-cell{{if .Count}} has-count{{end}}" style="height:{{barHeight .Count $.MaxDaily}}px;" title="{{dayLabel .Date}}: {{.Count}}"></span>
-    {{end}}
-  </div>
-  <p class="empty-hint">Максимум за день: {{.MaxDaily}}.</p>
-  {{else}}
-  <p class="empty-hint">Нет посылок за период.</p>
-  {{end}}
-</section>
-
-<section class="contest-block">
-  <h2>Последние посылки</h2>
-  {{if $p.Recent}}
-  <div class="table-wrap">
-    <table class="standings-table data-table">
-      <thead><tr><th>Время (MSK)</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
-      <tbody>
-        {{range $p.Recent}}
-        <tr>
-          <td>{{submissionTime .At}}</td>
-          <td>{{siteName .Site}}</td>
-          <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer"{{if $sub}} title="Посылки ученика по задаче"{{end}}>{{.Label}}</a></td>
-          <td>{{if .Solved}}<span class="text-ok">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="grade-weight">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </div>
-  <p class="empty-hint">Показаны последние {{len $p.Recent}} посылок (CF/Informatics).</p>
-  {{else}}
-  <p class="empty-hint">Нет посылок с известным временем.</p>
-  {{end}}
-</section>
+<script>
+  // Фильтр ленты посылок: текстовый поиск (сайт/задача/результат) + «только решённые».
+  (function () {
+    var body = document.getElementById("subs-body");
+    if (!body) return;
+    var search = document.getElementById("subs-search");
+    var solvedOnly = document.getElementById("subs-solved-only");
+    var count = document.getElementById("subs-count");
+    var empty = document.getElementById("subs-empty");
+    var rows = [].slice.call(body.querySelectorAll("tr"));
+    function apply() {
+      var q = (search.value || "").trim().toLowerCase();
+      var onlySolved = solvedOnly.checked;
+      var shown = 0;
+      rows.forEach(function (r) {
+        var okText = !q || (r.getAttribute("data-filter-text") || "").toLowerCase().indexOf(q) !== -1;
+        var okSolved = !onlySolved || r.classList.contains("is-solved");
+        var vis = okText && okSolved;
+        r.classList.toggle("filtered-out", !vis);
+        if (vis) shown++;
+      });
+      if (count) count.textContent = (q || onlySolved) ? (shown + " из " + rows.length) : String(rows.length);
+      if (empty) empty.hidden = shown !== 0;
+    }
+    search.addEventListener("input", apply);
+    solvedOnly.addEventListener("change", apply);
+    apply();
+  })();
+</script>
 {{end}}
 {{end}}

@@ -1697,3 +1697,73 @@ button.summary-link-btn {
 .activity-cell.has-count {
   background: var(--accent);
 }
+
+/* ── Профиль участника: аккаунты-чипы, лента посылок, шапка графика ───────── */
+.account-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+}
+
+.account-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent 30%);
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+
+.account-chip .acc-site {
+  color: var(--muted);
+}
+
+.account-chip .acc-id {
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.profile-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0.4rem;
+}
+
+.profile-chart-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Результат посылки — пилюля (решено/попытка). */
+.result-pill {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.result-pill--ok {
+  background: color-mix(in srgb, var(--solved-bg) 55%, var(--surface) 45%);
+  color: var(--solved-text);
+  border: 1px solid color-mix(in srgb, var(--solved-bg) 72%, var(--line) 28%);
+}
+
+.result-pill--try {
+  background: color-mix(in srgb, var(--attempt-bg) 45%, var(--surface) 55%);
+  color: var(--attempt-text);
+  border: 1px solid color-mix(in srgb, var(--attempt-bg) 60%, var(--line) 40%);
+}
+
+.site-tag {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}

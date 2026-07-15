@@ -85,6 +85,8 @@
       var timer = null;
       btn.addEventListener("click", function () {
         var url = btn.getAttribute("data-url") || "";
+        // Копируем абсолютную ссылку (её вставляют в мессенджер), а не путь.
+        try { url = new URL(url, location.href).href; } catch (e) {}
         function ok() {
           btn.classList.add("dir-copy--done");
           btn.textContent = "✓ Скопировано";

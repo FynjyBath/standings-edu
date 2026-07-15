@@ -173,18 +173,44 @@
       });
     }
 
-    if ("IntersectionObserver" in window) {
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (en) {
-          var it = byId[en.target.id];
-          if (it && en.isIntersecting) {
-            chipsBox.querySelectorAll(".toc-chip.is-current").forEach(function (c) { c.classList.remove("is-current"); });
-            it.chip.classList.add("is-current");
-          }
-        });
-      }, { rootMargin: "-20% 0px -70% 0px" });
-      blocks.forEach(function (b) { io.observe(b); });
+    // Подсветка активного чипа. Детерминированно: текущий контест — последний
+    // видимый блок, чей верх уже ушёл под верхнюю кромку окна (порог у самого
+    // верха). Так клик по чипу подсвечивает именно выбранный контест независимо
+    // от высоты его таблицы (короткий блок раньше подсвечивал соседа снизу).
+    function setCurrent(id) {
+      if (!id || !byId[id] || byId[id].chip.classList.contains("is-current")) return;
+      chipsBox.querySelectorAll(".toc-chip.is-current").forEach(function (c) { c.classList.remove("is-current"); });
+      byId[id].chip.classList.add("is-current");
     }
+    function currentId() {
+      var visible = blocks.filter(function (b) { return !b.classList.contains("filtered-out"); });
+      if (!visible.length) return null;
+      // Долистали до низа страницы — последний контест (его верх мог не дойти
+      // до кромки, если внизу мало контента).
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        return visible[visible.length - 1].id;
+      }
+      var cur = visible[0].id;
+      for (var i = 0; i < visible.length; i++) {
+        if (visible[i].getBoundingClientRect().top <= 4) cur = visible[i].id; else break;
+      }
+      return cur;
+    }
+    var ticking = false;
+    function refresh() {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(function () { ticking = false; setCurrent(currentId()); });
+    }
+    window.addEventListener("scroll", refresh, { passive: true });
+    window.addEventListener("resize", refresh);
+    window.addEventListener("hashchange", refresh);
+    // Мгновенная обратная связь по клику (не дожидаясь прокрутки к якорю).
+    chipsBox.addEventListener("click", function (e) {
+      var chip = e.target.closest ? e.target.closest(".toc-chip") : null;
+      if (chip) setCurrent(chip.getAttribute("data-toc-target"));
+    });
+    setCurrent(currentId());
   }
 
   function sel(s) { return s ? document.querySelector(s) : null; }

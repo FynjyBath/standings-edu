@@ -1767,3 +1767,128 @@ button.summary-link-btn {
   font-size: 0.85rem;
   white-space: nowrap;
 }
+
+/* ── Панель жюри (страница группы по токену) ─────────────────────────────── */
+.jury-panel {
+  margin: 0 0 1.1rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line) 66%);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface) 94%);
+}
+
+.jury-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.jury-panel-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--accent-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.jury-panel-icon {
+  font-size: 1rem;
+}
+
+.jury-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0.8rem;
+}
+
+.jury-action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent 40%);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.jury-action-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.jury-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* combobox (заменяет select) и текстовое поле тянутся на всю ширину строки. */
+.jury-action-row .combo {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.jury-grow {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+
+.jury-action-row input[type="text"],
+.jury-action-row input[type="number"] {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.jury-action-row input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent 78%);
+}
+
+.jury-count-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.jury-count-field input {
+  width: 3.6rem;
+  text-align: center;
+}
+
+.jury-action-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.jury-konduits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.jury-konduits-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.jury-panel-foot {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}

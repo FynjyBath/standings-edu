@@ -33,41 +33,49 @@
     {{if .Standings.Grades}}<span class="overview-stat">Оценки <b>{{len .Standings.Grades.Rows}}</b></span>{{end}}
   </div>
   {{end}}
-  {{if and .TokenValid .JuryCanManage}}
-  <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
-    {{if .JuryAddable}}
-    <label class="field-inline">
-      <span>Добавить контест:</span>
-      <select id="jury-add-select" data-searchable data-placeholder="Поиск контеста по названию или id…">
-        <option value="">— выберите —</option>
-        {{range .JuryAddable}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
-      </select>
-    </label>
-    <button type="button" id="jury-add-btn" class="admin-btn admin-btn--secondary">Добавить</button>
-    {{end}}
+</section>
+
+{{if and .TokenValid .JuryCanManage}}
+<section class="jury-panel">
+  <div class="jury-panel-head">
+    <h2><span class="jury-panel-icon" aria-hidden="true">🛠</span> Панель жюри</h2>
     <span id="jury-status" class="admin-editor-status"></span>
   </div>
-  <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
-    <label class="field-inline">
-      <span>Новый кондуит:</span>
-      <input type="text" id="jury-konduit-title" placeholder="Название" style="max-width:14rem;" />
-    </label>
-    <label class="field-inline">
-      <span>задач:</span>
-      <input type="number" id="jury-konduit-count" min="1" max="200" step="1" value="10" style="max-width:4.5rem;" />
-    </label>
-    <button type="button" id="jury-konduit-create" class="admin-btn admin-btn--secondary" title="Создаёт таблицу ручного ввода оценок (кондуит) и сразу открывает её редактор.">Создать кондуит</button>
+  <div class="jury-actions">
+    {{if .JuryAddable}}
+    <div class="jury-action">
+      <label class="jury-action-label" for="jury-add-select">Добавить контест</label>
+      <div class="jury-action-row">
+        <select id="jury-add-select" data-searchable data-placeholder="Поиск по названию или id…">
+          <option value="">— выберите —</option>
+          {{range .JuryAddable}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
+        </select>
+        <button type="button" id="jury-add-btn" class="admin-btn">Добавить</button>
+      </div>
+      <p class="jury-action-hint">Из уже созданных; встаёт в начало списка. Порядок — стрелками у контестов.</p>
+    </div>
+    {{end}}
+    <div class="jury-action">
+      <label class="jury-action-label" for="jury-konduit-title">Создать кондуит</label>
+      <div class="jury-action-row">
+        <input type="text" id="jury-konduit-title" class="jury-grow" placeholder="Название" />
+        <label class="jury-count-field">задач <input type="number" id="jury-konduit-count" min="1" max="200" step="1" value="10" /></label>
+        <button type="button" id="jury-konduit-create" class="admin-btn">Создать</button>
+      </div>
+      <p class="jury-action-hint">Таблица ручного ввода оценок — редактор откроется сразу.</p>
+    </div>
   </div>
   {{if .JuryNewKonduits}}
-  <p class="empty-hint">Новые кондуиты (появятся в таблицах после генерации, заполнять можно уже сейчас):
+  <div class="jury-konduits">
+    <span class="jury-konduits-label">Новые кондуиты (заполнять можно уже сейчас):</span>
     {{range .JuryNewKonduits}}
     <a class="summary-link-btn" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}&token={{$.Token}}">✏️ {{.Title}}</a>
     {{end}}
-  </p>
+  </div>
   {{end}}
-  <p class="empty-hint">Панель жюри: добавление уже созданных контестов (сверху списка), создание кондуитов и порядок — стрелками у контестов. Таблицы обновятся после ближайшей генерации.</p>
-  {{end}}
+  <p class="jury-panel-foot">Изменения появятся в таблицах после ближайшей генерации.</p>
 </section>
+{{end}}
 
 <nav class="contest-toc" data-contest-toc hidden aria-label="Оглавление контестов">
   <div class="contest-toc-head">

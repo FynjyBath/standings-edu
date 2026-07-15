@@ -32,8 +32,20 @@
 </section>
 
 <section class="admin-block">
+  <h2>Записать список ФИО на группу</h2>
+  <p class="empty-hint">По одному ФИО в строке. Для ФИО, которых ещё нет в базе, создаётся пустая запись ученика (без аккаунтов) и он добавляется в группу; существующие — просто дописываются в группу. Сначала «Пробный запуск» покажет, что произойдёт (кто новый, кто уже есть, спорные совпадения). Аккаунты потом добавляются через анкеты/форму ученика.</p>
+  <textarea id="reg-names" class="account-list" rows="8" spellcheck="false" placeholder="Иванов Иван Иванович&#10;Петрова Анна Андреевна"></textarea>
+  <div class="admin-editor-tools" style="margin-top:0.5rem;">
+    <button type="button" id="reg-names-dry" class="admin-btn admin-btn--secondary">Пробный запуск (что произойдёт)</button>
+    <button type="button" id="reg-names-apply" class="admin-btn" disabled>Записать</button>
+    <span id="reg-names-status" class="admin-editor-status"></span>
+  </div>
+  <div id="reg-names-preview" style="margin-top:0.6rem;"></div>
+</section>
+
+<section class="admin-block">
   <h2>Участники ({{len .Members}})</h2>
-  <p class="empty-hint">Добавление — через форму/обработчик. Здесь можно только удалить.</p>
+  <p class="empty-hint">Добавление — списком ФИО выше или через анкеты. Здесь можно только удалить.</p>
   {{if .Members}}
   <ul class="admin-groups-list">
     {{range .Members}}
@@ -234,6 +246,69 @@
           .catch(function (err) { alert(err.message); });
       });
     });
+
+    // Регистрация списка ФИО на группу (dry-run → запись).
+    (function () {
+      var input = document.getElementById("reg-names");
+      var dryBtn = document.getElementById("reg-names-dry");
+      var applyBtn = document.getElementById("reg-names-apply");
+      var st = document.getElementById("reg-names-status");
+      var preview = document.getElementById("reg-names-preview");
+      if (!input || !dryBtn || !applyBtn) return;
+
+      function setSt(m, err) { st.textContent = m || ""; st.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+      // Применять можно только то, что было показано в dry-run: любое изменение
+      // текста снова требует пробного запуска.
+      input.addEventListener("input", function () { applyBtn.disabled = true; });
+
+      var LABEL = {
+        create: ["новый ученик → в группу", "reg-badge reg-badge--create"],
+        add: ["в группу", "reg-badge reg-badge--add"],
+        already: ["уже в группе", "reg-badge reg-badge--already"],
+        ambiguous: ["неоднозначно", "reg-badge reg-badge--warn"],
+        duplicate: ["повтор в списке", "reg-badge reg-badge--warn"]
+      };
+      function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+      function render(plan, applied) {
+        var h = "";
+        var parts = [];
+        if (plan.create) parts.push((applied ? "создано" : "будет создано") + " новых: " + plan.create);
+        if (plan.add) parts.push((applied ? "добавлено в группу" : "добавятся") + ": " + plan.add);
+        if (plan.already) parts.push("уже в группе: " + plan.already);
+        if (plan.warnings) parts.push("⚠ предупреждений: " + plan.warnings);
+        h += '<p class="empty-hint">Распознано ФИО: ' + plan.total + (parts.length ? ". " + parts.join(", ") : "") + (plan.overflow ? ". Список обрезан по лимиту." : "") + "</p>";
+        h += '<div class="table-wrap"><table class="standings-table data-table"><thead><tr><th>ФИО</th><th>Действие</th><th>id</th></tr></thead><tbody>';
+        plan.rows.forEach(function (r) {
+          var lbl = LABEL[r.status] || [r.status, "reg-badge"];
+          h += "<tr><td class=\"student-name\">" + esc(r.full_name) + "</td>" +
+            "<td><span class=\"" + lbl[1] + "\">" + lbl[0] + "</span> <span class=\"grade-weight\">" + esc(r.note) + "</span></td>" +
+            "<td>" + (r.student_id ? "<code>" + esc(r.student_id) + "</code>" : "") + "</td></tr>";
+        });
+        h += "</tbody></table></div>";
+        preview.innerHTML = h;
+      }
+
+      dryBtn.addEventListener("click", function () {
+        setSt("Проверка…", false);
+        applyBtn.disabled = true;
+        post("/api/admin/group/register-names/dry-run", { slug: slug, names: input.value })
+          .then(function (p) {
+            render(p.plan, false);
+            setSt("Пробный запуск: проверьте таблицу и нажмите «Записать».", false);
+            applyBtn.disabled = !(p.plan.create || p.plan.add);
+          })
+          .catch(function (err) { preview.innerHTML = ""; setSt(err.message, true); });
+      });
+
+      applyBtn.addEventListener("click", function () {
+        if (applyBtn.disabled) return;
+        applyBtn.disabled = true;
+        setSt("Запись…", false);
+        post("/api/admin/group/register-names/apply", { slug: slug, names: input.value })
+          .then(function () { location.reload(); })
+          .catch(function (err) { setSt(err.message, true); });
+      });
+    })();
 
     var status = document.getElementById("contests-status");
     function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }

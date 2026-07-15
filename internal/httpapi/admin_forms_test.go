@@ -632,12 +632,12 @@ func TestHideUpcomingContestTaskURLs(t *testing.T) {
 		Contests: []domain.GeneratedContestStandings{
 			{
 				ID: "upcoming", StartTime: &future,
-				Tasks:       []domain.GeneratedTask{{Label: "A", URL: "https://acmp.ru/?id=1", NormalizedURL: "acmp.ru/?id=1"}},
-				Subcontests: []domain.GeneratedSubcontest{{Tasks: []domain.GeneratedTask{{Label: "A", URL: "https://acmp.ru/?id=1"}}}},
+				Tasks:       []domain.GeneratedTask{{Label: "A", URL: "https://acmp.ru/?id=1", NormalizedURL: "acmp.ru/?id=1", Name: "Секретная A"}},
+				Subcontests: []domain.GeneratedSubcontest{{Tasks: []domain.GeneratedTask{{Label: "A", URL: "https://acmp.ru/?id=1", Name: "Секретная A"}}}},
 			},
 			{
 				ID: "running", StartTime: &past,
-				Tasks: []domain.GeneratedTask{{Label: "B", URL: "https://acmp.ru/?id=2"}},
+				Tasks: []domain.GeneratedTask{{Label: "B", URL: "https://acmp.ru/?id=2", Name: "Видимая B"}},
 			},
 			{
 				ID:    "no-window",
@@ -651,11 +651,14 @@ func TestHideUpcomingContestTaskURLs(t *testing.T) {
 	if up.Tasks[0].URL != "" || up.Tasks[0].NormalizedURL != "" || up.Subcontests[0].Tasks[0].URL != "" {
 		t.Fatalf("upcoming contest URLs must be hidden: %+v", up)
 	}
+	if up.Tasks[0].Name != "" || up.Subcontests[0].Tasks[0].Name != "" {
+		t.Fatalf("upcoming contest task names must be hidden: %+v", up)
+	}
 	if up.Tasks[0].Label != "A" {
 		t.Fatalf("labels must stay: %+v", up.Tasks)
 	}
-	if standings.Contests[1].Tasks[0].URL == "" {
-		t.Fatalf("running contest URLs must stay: %+v", standings.Contests[1])
+	if standings.Contests[1].Tasks[0].URL == "" || standings.Contests[1].Tasks[0].Name != "Видимая B" {
+		t.Fatalf("running contest URLs/names must stay: %+v", standings.Contests[1])
 	}
 	if standings.Contests[2].Tasks[0].URL == "" {
 		t.Fatalf("no-window contest URLs must stay: %+v", standings.Contests[2])

@@ -75,6 +75,10 @@ func TestBuildGroupsWithEjudgeContest(t *testing.T) {
 	if len(c.Tasks) != 2 {
 		t.Fatalf("contest must expand into 2 problems, got %d", len(c.Tasks))
 	}
+	// Названия задач (long_name) прокидываются в подсказку заголовка колонки.
+	if c.Tasks[0].Name != "Alpha" || c.Tasks[1].Name != "Beta" {
+		t.Fatalf("task names must carry ejudge long_name: %q, %q", c.Tasks[0].Name, c.Tasks[1].Name)
+	}
 	byStudent := map[string]domain.GeneratedRow{}
 	for _, row := range c.Rows {
 		byStudent[row.StudentID] = row

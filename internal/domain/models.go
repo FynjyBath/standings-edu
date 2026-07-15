@@ -484,6 +484,13 @@ type GeneratedTask struct {
 	Label         string `json:"label"`
 	URL           string `json:"url"`
 	NormalizedURL string `json:"normalized_url"`
+	// Name — человекочитаемое название задачи для подсказки при наведении на
+	// заголовок колонки. Заполняется там, где источник его отдаёт «бесплатно»
+	// (Codeforces-контест, сборник informatics, контест ejudge); для одиночных
+	// ссылок (отдельная задача, acmp) пусто. Приравнивается к ссылке по
+	// видимости: когда ссылки скрыты (до старта или show_task_links=false),
+	// имя тоже убирается, чтобы не раскрывать задачу раньше времени.
+	Name string `json:"name,omitempty"`
 	// Hidden — задача скрыта в источнике (напр. затемнена в сборнике informatics).
 	// Сервер вырезает такие колонки из публичного вида, но отдаёт по токену жюри.
 	Hidden bool `json:"hidden,omitempty"`
@@ -704,11 +711,13 @@ func (s *GeneratedGroupStandings) StripTaskLinks() {
 		for j := range c.Tasks {
 			c.Tasks[j].URL = ""
 			c.Tasks[j].NormalizedURL = ""
+			c.Tasks[j].Name = ""
 		}
 		for j := range c.Subcontests {
 			for k := range c.Subcontests[j].Tasks {
 				c.Subcontests[j].Tasks[k].URL = ""
 				c.Subcontests[j].Tasks[k].NormalizedURL = ""
+				c.Subcontests[j].Tasks[k].Name = ""
 			}
 		}
 		// SourceURL используется в сводной для ссылки «посылки по контесту» —

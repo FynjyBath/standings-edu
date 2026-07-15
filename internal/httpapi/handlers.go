@@ -252,10 +252,10 @@ func (h *Handlers) groupTokenValid(slug, token string) bool {
 	return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 
-// hideUpcomingContestTaskURLs убирает ссылки на задачи у контестов, которые ещё
-// не начались (StartTime в будущем), чтобы задачи нельзя было подсмотреть до
+// hideUpcomingContestTaskURLs убирает ссылки и названия задач у контестов, которые
+// ещё не начались (StartTime в будущем), чтобы задачи нельзя было подсмотреть до
 // старта — ни на страницах, ни в JSON (API и встраиваемый в сводную страницу).
-// Названия задач остаются: виден объём контеста, но не условия.
+// Метки-колонки (A, B, …) остаются: виден объём контеста, но не сами задачи.
 func hideUpcomingContestTaskURLs(standings *domain.GeneratedGroupStandings) {
 	now := time.Now()
 	for i := range standings.Contests {
@@ -266,11 +266,13 @@ func hideUpcomingContestTaskURLs(standings *domain.GeneratedGroupStandings) {
 		for j := range contest.Tasks {
 			contest.Tasks[j].URL = ""
 			contest.Tasks[j].NormalizedURL = ""
+			contest.Tasks[j].Name = ""
 		}
 		for j := range contest.Subcontests {
 			for k := range contest.Subcontests[j].Tasks {
 				contest.Subcontests[j].Tasks[k].URL = ""
 				contest.Subcontests[j].Tasks[k].NormalizedURL = ""
+				contest.Subcontests[j].Tasks[k].Name = ""
 			}
 		}
 	}

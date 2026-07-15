@@ -85,14 +85,14 @@ func TestStripTaskLinks(t *testing.T) {
 			ID:        "c1",
 			SourceURL: "https://informatics.msk.ru/x?id=5",
 			Tasks: []GeneratedTask{
-				{Label: "A", URL: "u1", NormalizedURL: "n1"},
-				{Label: "B", URL: "u2", NormalizedURL: "n2"},
+				{Label: "A", URL: "u1", NormalizedURL: "n1", Name: "Задача A"},
+				{Label: "B", URL: "u2", NormalizedURL: "n2", Name: "Задача B"},
 			},
 			Subcontests: []GeneratedSubcontest{{
 				Title: "S", TaskCount: 2,
 				Tasks: []GeneratedTask{
-					{Label: "A", URL: "u1", NormalizedURL: "n1"},
-					{Label: "B", URL: "u2", NormalizedURL: "n2"},
+					{Label: "A", URL: "u1", NormalizedURL: "n1", Name: "Задача A"},
+					{Label: "B", URL: "u2", NormalizedURL: "n2", Name: "Задача B"},
 				},
 			}},
 			Rows: []GeneratedRow{{StudentID: "s1", Statuses: []string{"solved", "none"}}},
@@ -101,13 +101,13 @@ func TestStripTaskLinks(t *testing.T) {
 	std.StripTaskLinks()
 	c := std.Contests[0]
 	for i, tk := range c.Tasks {
-		if tk.URL != "" || tk.NormalizedURL != "" || tk.Label == "" {
-			t.Fatalf("task %d: url должен быть пуст, метка сохранена: %+v", i, tk)
+		if tk.URL != "" || tk.NormalizedURL != "" || tk.Name != "" || tk.Label == "" {
+			t.Fatalf("task %d: url и название должны быть пусты, метка сохранена: %+v", i, tk)
 		}
 	}
 	for _, tk := range c.Subcontests[0].Tasks {
-		if tk.URL != "" {
-			t.Fatalf("subcontest task url должен быть пуст: %+v", tk)
+		if tk.URL != "" || tk.Name != "" {
+			t.Fatalf("subcontest task url/название должны быть пусты: %+v", tk)
 		}
 	}
 	if c.SourceURL != "" {

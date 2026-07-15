@@ -270,6 +270,7 @@ func buildCodeforcesGeneratedStandings(
 			Label:         label,
 			URL:           taskURL,
 			NormalizedURL: domain.NormalizeTaskURL(taskURL),
+			Name:          strings.TrimSpace(problem.Name),
 		})
 	}
 

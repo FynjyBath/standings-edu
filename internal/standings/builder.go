@@ -600,6 +600,14 @@ func (b *Builder) expandCodeforcesContestRefs(ctx context.Context, data *domain.
 type expandedInformaticsProblem struct {
 	URL    string
 	Hidden bool
+	Name   string
+}
+
+// expandedEjudgeProblem — развёрнутая задача контеста ejudge: ссылка и название
+// (long_name из настроек задачи) для подсказки в заголовке колонки.
+type expandedEjudgeProblem struct {
+	URL  string
+	Name string
 }
 
 func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[int][]expandedInformaticsProblem {
@@ -644,6 +652,7 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 			refs = append(refs, expandedInformaticsProblem{
 				URL:    fmt.Sprintf("https://informatics.msk.ru/mod/statements/view.php?chapterid=%d#1", problem.ChapterID),
 				Hidden: problem.Hidden,
+				Name:   strings.TrimSpace(problem.Title),
 			})
 		}
 		out[sid] = refs
@@ -658,7 +667,7 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 // отдельная таблица не строится: результаты берутся из уже собранных прогонов
 // ученика по обычному сопоставлению URL. Ключ — нормализованная ссылка контеста
 // (учитывает хост, поэтому разные экземпляры ejudge не путаются).
-func (b *Builder) expandEjudgeContestRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[string][]string {
+func (b *Builder) expandEjudgeContestRefs(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[string][]expandedEjudgeProblem {
 	keys := make([]string, 0)
 	rawByKey := make(map[string]string)
 	seen := make(map[string]struct{})
@@ -681,7 +690,7 @@ func (b *Builder) expandEjudgeContestRefs(ctx context.Context, group domain.Grou
 		return nil
 	}
 
-	out := make(map[string][]string, len(keys))
+	out := make(map[string][]expandedEjudgeProblem, len(keys))
 	for _, key := range keys {
 		raw := rawByKey[key]
 		parsed, _ := domain.ParseEjudgeTaskURL(raw)
@@ -698,14 +707,21 @@ func (b *Builder) expandEjudgeContestRefs(ctx context.Context, group domain.Grou
 			out[key] = nil
 			continue
 		}
-		urls := make([]string, 0, len(problems))
+		refs := make([]expandedEjudgeProblem, 0, len(problems))
 		for _, problem := range problems {
 			if problem.ProbID <= 0 {
 				continue
 			}
-			urls = append(urls, fmt.Sprintf("https://%s/new-client?contest_id=%d&prob_id=%d", parsed.Host, parsed.ContestID, problem.ProbID))
+			name := strings.TrimSpace(problem.LongName)
+			if name == "" {
+				name = strings.TrimSpace(problem.ShortName)
+			}
+			refs = append(refs, expandedEjudgeProblem{
+				URL:  fmt.Sprintf("https://%s/new-client?contest_id=%d&prob_id=%d", parsed.Host, parsed.ContestID, problem.ProbID),
+				Name: name,
+			})
 		}
-		out[key] = urls
+		out[key] = refs
 	}
 	return out
 }
@@ -786,7 +802,7 @@ func linkableAccounts(accounts []domain.Account) map[string]string {
 	return out
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]string) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]expandedEjudgeProblem) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	var windowStart, windowEnd time.Time
@@ -856,13 +872,14 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 		}
 		// addNormalTask добавляет обычную задачу-колонку по её ссылке (результат
 		// берётся из посылок ученика по сопоставлению normalized_url).
-		addNormalTask := func(rawURL string, hidden bool) {
+		addNormalTask := func(rawURL string, hidden bool, name string) {
 			normalized := domain.NormalizeTaskURL(rawURL)
 			task := domain.GeneratedTask{
 				Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
 				URL:           domain.RewriteInformaticsHost(rawURL, informaticsBase),
 				NormalizedURL: normalized,
 				Hidden:        hidden,
+				Name:          strings.TrimSpace(name),
 			}
 			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
 			out.Tasks = append(out.Tasks, task)
@@ -891,6 +908,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 						Label:         domain.AlphabetLabel(len(generatedSubcontest.Tasks)),
 						URL:           problemURL,
 						NormalizedURL: domain.NormalizeTaskURL(problemURL),
+						Name:          problemTask.Name,
 					}
 					generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
 					out.Tasks = append(out.Tasks, task)
@@ -903,20 +921,20 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			// (ссылка на саму задачу, без сборника). Каждая — обычная задача.
 			if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
 				for _, problem := range statementRefs[sid] {
-					addNormalTask(problem.URL, problem.Hidden)
+					addNormalTask(problem.URL, problem.Hidden, problem.Name)
 				}
 				continue
 			}
 
 			// Контест ejudge (contest_id без prob_id): разворачиваем в задачи.
 			if parsed, ok := domain.ParseEjudgeTaskURL(rawTaskURL); ok && parsed.ProbID == 0 {
-				for _, problemURL := range ejudgeRefs[domain.NormalizeTaskURL(rawTaskURL)] {
-					addNormalTask(problemURL, false)
+				for _, problem := range ejudgeRefs[domain.NormalizeTaskURL(rawTaskURL)] {
+					addNormalTask(problem.URL, false, problem.Name)
 				}
 				continue
 			}
 
-			addNormalTask(rawTaskURL, false)
+			addNormalTask(rawTaskURL, false, "")
 		}
 		generatedSubcontest.TaskCount = len(generatedSubcontest.Tasks)
 		out.Subcontests = append(out.Subcontests, generatedSubcontest)

@@ -845,6 +845,11 @@ button.summary-link-btn {
   padding: 0 !important;
 }
 
+/* У колонки с известным названием задачи (title) — курсор-подсказка. */
+.task-col[title] {
+  cursor: help;
+}
+
 .task-col a {
   display: inline-flex;
   align-items: center;

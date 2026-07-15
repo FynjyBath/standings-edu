@@ -306,6 +306,7 @@
           subTasks.forEach(function (task) {
             var th = document.createElement("th");
             th.className = "task-col";
+            if (task.name) th.title = task.name; // подсказка с названием задачи
             if (task.url) {
               var a = document.createElement("a");
               a.href = task.url;

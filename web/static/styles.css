@@ -754,6 +754,25 @@ button.summary-link-btn {
   box-shadow: 8px 0 10px -8px var(--col-shadow);
 }
 
+/* Имя-ссылка на профиль (жюри) выглядит как обычный текст — без «ссылочного»
+   подчёркивания и фиолетового; подсказка кликабельности только при наведении. */
+.student-name a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.student-name a:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent 45%);
+}
+
+.student-name a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent 35%);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
 .standings-table thead .student-col {
   background: color-mix(in srgb, var(--sticky) 64%, var(--table-head) 36%);
   z-index: 3;

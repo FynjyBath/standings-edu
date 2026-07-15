@@ -2,7 +2,6 @@ package web
 
 import (
 	"testing"
-	"time"
 
 	"standings-edu/internal/domain"
 )
@@ -102,27 +101,6 @@ func TestTaskCellsSubmissionLink(t *testing.T) {
 		if c.SubmissionURL != "" {
 			t.Fatalf("без аккаунта ссылок быть не должно: %q", c.SubmissionURL)
 		}
-	}
-}
-
-// Подпись окна контеста: один день — компактно, разные дни — полный диапазон.
-func TestContestWindowText(t *testing.T) {
-	msk := time.FixedZone("MSK", 3*3600)
-	start := time.Date(2026, 7, 4, 18, 0, 0, 0, msk)
-	endSameDay := time.Date(2026, 7, 4, 20, 0, 0, 0, msk)
-	endNextDay := time.Date(2026, 7, 5, 20, 0, 0, 0, msk)
-
-	if got := contestWindowText(&start, &endSameDay); got != "04.07.2026 18:00–20:00 MSK" {
-		t.Fatalf("same day: %q", got)
-	}
-	if got := contestWindowText(&start, &endNextDay); got != "04.07.2026 18:00 — 05.07.2026 20:00 MSK" {
-		t.Fatalf("cross day: %q", got)
-	}
-	if got := contestWindowText(&start, nil); got != "с 04.07.2026 18:00 MSK" {
-		t.Fatalf("start only: %q", got)
-	}
-	if got := contestWindowText(nil, &endSameDay); got != "" {
-		t.Fatalf("no start must be empty: %q", got)
 	}
 }
 

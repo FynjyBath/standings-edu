@@ -126,9 +126,6 @@
       <button type="button" class="admin-btn admin-btn--secondary uv-toggle" aria-pressed="false">Скрыть дорешку</button>
     </div>
     {{end}}
-    {{with contestWindowText .StartTime .EndTime}}
-    <p class="empty-hint">🕒 Контест: {{.}}</p>
-    {{end}}
     {{if .ZeroPenalty}}
     <p class="empty-hint">Штраф за задачу без баллов: −{{.ZeroPenalty}}.</p>
     {{end}}
@@ -222,32 +219,60 @@
 {{end}}
 
 <script>
-  // «Живой» статус контеста рядом с названием: до начала / до конца / завершён.
-  // Часы клиента синхронизируем по серверному «сейчас» (data-server-now в
-  // футере), чтобы отсчёт был точным при неверных часах у зрителя.
+  // «Умный» чип статуса контеста справа от названия: до старта / идёт / завершён.
+  // Всё время — в местном поясе зрителя (считаем из ISO на клиенте), полное окно
+  // старт–конец кладём в подсказку (title). Часы клиента синхронизируем по
+  // серверному «сейчас» (data-server-now в футере), чтобы отсчёт был точным даже
+  // при неверных часах у зрителя.
   (function () {
     var cfg = document.querySelector("[data-server-now]");
     var serverNowMs = cfg ? Date.parse(cfg.getAttribute("data-server-now") || "") : NaN;
     var skew = isNaN(serverNowMs) ? 0 : (serverNowMs - Date.now());
+    var MON = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
     function pad2(n) { return String(n).padStart(2, "0"); }
-    function fmt(ms) {
+    function hhmm(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+    function dayMon(d) { return d.getDate() + " " + MON[d.getMonth()]; }
+    function sameDay(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+    // Точный обратный отсчёт H:MM:SS (или «N дн H:MM:SS»).
+    function clock(ms) {
       var t = Math.max(0, Math.floor(ms / 1000));
       var d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
       if (d > 0) return d + " дн " + pad2(h) + ":" + pad2(m) + ":" + pad2(s);
       if (h > 0) return h + ":" + pad2(m) + ":" + pad2(s);
       return m + ":" + pad2(s);
     }
+    // Грубый интервал «до старта»: дни/часы/минуты, без секундной трескотни.
+    function coarse(ms) {
+      var t = Math.max(0, Math.floor(ms / 1000));
+      var d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60);
+      if (d > 0) return d + " дн " + h + " ч";
+      if (h > 0) return h + " ч " + m + " мин";
+      if (m > 0) return m + " мин";
+      return "меньше минуты";
+    }
     var nodes = [].slice.call(document.querySelectorAll(".contest-status")).map(function (el) {
       return { el: el, start: Date.parse(el.getAttribute("data-start") || ""), end: Date.parse(el.getAttribute("data-end") || "") };
     }).filter(function (n) { return !isNaN(n.start) && !isNaN(n.end); });
     if (!nodes.length) return;
+    nodes.forEach(function (x) {
+      var s = new Date(x.start), e = new Date(x.end);
+      x.startLabel = sameDay(s, e) ? hhmm(s) : dayMon(s) + " " + hhmm(s);
+      x.endLabel = dayMon(e) + " " + hhmm(e);
+      // Подсказка — полное окно контеста в местном поясе.
+      x.title = sameDay(s, e)
+        ? dayMon(s) + ", " + hhmm(s) + " – " + hhmm(e)
+        : dayMon(s) + " " + hhmm(s) + " – " + x.endLabel;
+      x.el.title = x.title;
+    });
     function tick() {
       var now = Date.now() + skew;
       nodes.forEach(function (x) {
         var cls, txt;
-        if (now < x.start) { cls = "upcoming"; txt = "⏳ до начала " + fmt(x.start - now); }
-        else if (now < x.end) { cls = "running"; txt = "⏱ до конца " + fmt(x.end - now); }
-        else { cls = "finished"; txt = "✔ контест завершён"; }
+        if (now < x.start) { cls = "upcoming"; txt = "⏳ старт " + x.startLabel + " · через " + coarse(x.start - now); }
+        else if (now < x.end) { cls = "running"; txt = "🟢 идёт · осталось " + clock(x.end - now); }
+        else { cls = "finished"; txt = "✓ завершён · " + x.endLabel; }
         x.el.className = "contest-status contest-status--" + cls;
         x.el.textContent = txt;
       });

@@ -47,7 +47,6 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"contestNotStarted":       contestNotStarted,
 			"contestGeneratedAtISO":   contestGeneratedAtISO,
 			"timeISO":                 timeISO,
-			"contestWindowText":       contestWindowText,
 			"gradeText":               gradeText,
 			"grade2Text":              grade2Text,
 			"numText":                 numText,
@@ -380,24 +379,6 @@ func grade2Text(v *float64) string {
 // спрятал ссылки на задачи, а шаблон показывает подсказку с временем старта.
 func contestNotStarted(startTime *time.Time) bool {
 	return startTime != nil && time.Now().Before(*startTime)
-}
-
-// contestWindowText — человекочитаемое окно контеста в MSK для шапки таблицы:
-// «04.07.2026 18:00–20:00 MSK» (один день) или полный диапазон с датами.
-// Только начало — «с 04.07.2026 18:00 MSK». Пусто — окна нет.
-func contestWindowText(start, end *time.Time) string {
-	if start == nil {
-		return ""
-	}
-	s := start.In(moscowLocation)
-	if end == nil {
-		return "с " + s.Format("02.01.2006 15:04") + " MSK"
-	}
-	e := end.In(moscowLocation)
-	if s.Year() == e.Year() && s.YearDay() == e.YearDay() {
-		return s.Format("02.01.2006 15:04") + "–" + e.Format("15:04") + " MSK"
-	}
-	return s.Format("02.01.2006 15:04") + " — " + e.Format("02.01.2006 15:04") + " MSK"
 }
 
 // submissionTime форматирует время посылки в MSK для ленты профиля.

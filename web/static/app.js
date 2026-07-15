@@ -197,21 +197,50 @@
       }
       return cur;
     }
+    // Явно выбранный контест (клик по чипу, прямая ссылка #contest-…, back/forward)
+    // «закрепляется»: пока браузер докручивает к якорю, scroll-spy не перебивает
+    // подсветку соседом. Открепляется, когда цель достигнута (currentId дошёл до
+    // неё) или как только пользователь сам начал листать. Это чинит случай прямой
+    // ссылки: на старте currentId ещё считается при scrollY≈0 и вернул бы первый.
+    var pinned = null;
+    function idFromHash() {
+      var h = (window.location.hash || "").replace(/^#/, "");
+      return byId[h] ? h : null;
+    }
+    function pin(id) {
+      if (id && byId[id]) { pinned = id; setCurrent(id); }
+    }
     var ticking = false;
     function refresh() {
       if (ticking) return;
       ticking = true;
-      window.requestAnimationFrame(function () { ticking = false; setCurrent(currentId()); });
+      window.requestAnimationFrame(function () {
+        ticking = false;
+        if (pinned) {
+          setCurrent(pinned);
+          if (currentId() === pinned) pinned = null; // цель достигнута — дальше следим за прокруткой
+        } else {
+          setCurrent(currentId());
+        }
+      });
     }
     window.addEventListener("scroll", refresh, { passive: true });
     window.addEventListener("resize", refresh);
-    window.addEventListener("hashchange", refresh);
-    // Мгновенная обратная связь по клику (не дожидаясь прокрутки к якорю).
+    // Открепляем закреплённый выбор, как только пользователь сам начал листать.
+    ["wheel", "touchstart", "keydown"].forEach(function (ev) {
+      window.addEventListener(ev, function () { pinned = null; }, { passive: true });
+    });
+    // Прямая ссылка / клик по чипу / back-forward — источник истины подсветки.
+    window.addEventListener("hashchange", function () { pin(idFromHash()); refresh(); });
     chipsBox.addEventListener("click", function (e) {
       var chip = e.target.closest ? e.target.closest(".toc-chip") : null;
-      if (chip) setCurrent(chip.getAttribute("data-toc-target"));
+      if (chip) pin(chip.getAttribute("data-toc-target"));
     });
-    setCurrent(currentId());
+    // Стартовое состояние: если открыли по якорю — подсвечиваем именно его.
+    var initial = idFromHash();
+    if (initial) pin(initial); else setCurrent(currentId());
+    // Слой на позднюю укладку (картинки/таблицы сдвигают якорь после load).
+    window.addEventListener("load", refresh);
   }
 
   function sel(s) { return s ? document.querySelector(s) : null; }

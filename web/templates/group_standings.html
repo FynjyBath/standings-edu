@@ -82,7 +82,7 @@
       <tbody>
         {{range .Standings.SolvedSummary}}
         <tr>
-          <td class="student-name">{{.PublicName}}</td>
+          <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
           <td class="solved-count">{{.SolvedCountOnPageSites}}</td>
           {{range .SolvedCountBySite}}
           <td class="solved-count">{{.}}</td>
@@ -179,7 +179,7 @@
           {{range .Rows}}
           <tr>
             <td class="solved-count">{{placeText .Place}}</td>
-            <td class="student-name">{{.PublicName}}</td>
+            <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
             <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if $hasPenalty}}<td class="solved-count">{{penaltyText .Penalty}}</td>{{end}}
             {{range taskCells $contest .}}{{template "uvTaskCell" .}}{{end}}
@@ -192,7 +192,7 @@
           {{range $uv.Rows}}
           <tr>
             <td class="solved-count">{{placeText .Place}}</td>
-            <td class="student-name">{{.PublicName}}</td>
+            <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
             <td class="solved-count">{{.Count}}</td>
             {{if $hasPenalty}}<td class="solved-count">{{.Penalty}}</td>{{end}}
             {{range .Cells}}{{template "uvTaskCell" .}}{{end}}

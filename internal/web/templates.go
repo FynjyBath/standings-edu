@@ -158,6 +158,7 @@ type UpsolvingView struct {
 
 // UpsolvingRow — одна строка оконного вида, готовая к рендеру.
 type UpsolvingRow struct {
+	StudentID      string
 	PublicName     string
 	Place          string
 	Count          int    // «Баллы» (ioi) или «Решено» (edu)
@@ -260,7 +261,7 @@ func upsolvingView(contest domain.GeneratedContestStandings) *UpsolvingView {
 		}
 		items[ri] = built{
 			out: UpsolvingRow{
-				PublicName: row.PublicName, Place: row.Place, Count: count,
+				StudentID: row.StudentID, PublicName: row.PublicName, Place: row.Place, Count: count,
 				Penalty: penaltyStr, ProviderStatus: row.ProviderStatus, Cells: winCells,
 			},
 			score: windowScore, count: windowSolved,

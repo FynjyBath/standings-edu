@@ -315,6 +315,133 @@ button.summary-link-btn {
   color: var(--muted);
 }
 
+/* Приветственный экран (корень без токена): по центру, с эмблемой. */
+.index-hero--welcome {
+  margin: 2rem auto;
+  max-width: 640px;
+  padding: 2rem 1.6rem;
+  text-align: center;
+}
+
+.hero-emblem {
+  width: 4.2rem;
+  height: 4.2rem;
+  margin: 0 auto 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line) 58%);
+}
+
+.index-hero--welcome .hero-lead {
+  margin: 0.5rem auto 0;
+  max-width: 34rem;
+  color: var(--text);
+}
+
+.index-hero--welcome .hero-sub {
+  margin: 0.55rem auto 0;
+  max-width: 34rem;
+  font-size: 0.92rem;
+}
+
+/* Каталог групп: панель фильтра и действия со ссылками. */
+.dir-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.dir-filter {
+  flex: 1 1 16rem;
+  max-width: 26rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.dir-filter:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent 78%);
+}
+
+.dir-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.dir-title {
+  font-weight: 700;
+}
+
+.dir-tag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface) 85%);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line) 60%);
+  vertical-align: middle;
+}
+
+.dir-slug {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dir-title + .dir-slug,
+.dir-tag + .dir-slug {
+  margin-left: 0.4rem;
+}
+
+.dir-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.dir-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dir-copy:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line) 55%);
+  color: var(--text);
+}
+
+.dir-copy--done {
+  border-color: color-mix(in srgb, var(--solved-bg) 70%, var(--line) 30%);
+  background: color-mix(in srgb, var(--solved-bg) 26%, var(--surface) 74%);
+  color: var(--solved-text);
+}
+
 .form-block {
   margin: 1.15rem 0 1.5rem;
   background: var(--surface);

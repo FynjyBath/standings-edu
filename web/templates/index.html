@@ -6,8 +6,12 @@
 </section>
 
 <section class="admin-block">
+  <div class="dir-toolbar">
+    <input type="search" id="dir-filter" class="dir-filter" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false" />
+    <span class="dir-count" id="dir-count"></span>
+  </div>
   <div class="table-wrap">
-    <table class="standings-table data-table">
+    <table class="standings-table data-table" id="dir-table">
       <thead>
         <tr>
           <th class="student-col">Группа</th>
@@ -17,14 +21,26 @@
       </thead>
       <tbody>
         {{range .Directory}}
-        <tr>
-          <td class="student-name">{{.Title}}{{if .Combined}} <span class="grade-weight">(объединённая)</span>{{end}} <span class="grade-weight">{{.Slug}}</span></td>
-          <td><a href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">{{.StudentURL}}</a></td>
+        <tr class="dir-row" data-name="{{.Title}} {{.Slug}}">
+          <td class="student-name">
+            <span class="dir-title">{{.Title}}</span>
+            {{if .Combined}}<span class="dir-tag">объединённая</span>{{end}}
+            <span class="dir-slug">{{.Slug}}</span>
+          </td>
+          <td>
+            <span class="dir-links">
+              <a class="summary-link-btn" href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">Открыть&nbsp;↗</a>
+              <button type="button" class="dir-copy" data-url="{{.StudentURL}}" title="Скопировать ссылку для ученика">⧉ Копировать</button>
+            </span>
+          </td>
           <td>
             {{if .TeacherURL}}
-            <a href="{{.TeacherURL}}" target="_blank" rel="noopener noreferrer">открыть по токену</a>
+            <span class="dir-links">
+              <a class="summary-link-btn" href="{{.TeacherURL}}" target="_blank" rel="noopener noreferrer">Открыть&nbsp;↗</a>
+              <button type="button" class="dir-copy" data-url="{{.TeacherURL}}" title="Скопировать ссылку с токеном (секретная)">⧉ Копировать</button>
+            </span>
             {{else}}
-            <span class="grade-weight">токена нет</span>
+            <span class="dir-slug">токена нет</span>
             {{end}}
           </td>
         </tr>
@@ -32,11 +48,78 @@
       </tbody>
     </table>
   </div>
+  <p class="empty-hint dir-empty" id="dir-empty" hidden>Ничего не найдено.</p>
 </section>
+
+<script>
+  (function () {
+    // Фильтр каталога по названию/slug и копирование ссылок в буфер.
+    var filter = document.getElementById("dir-filter");
+    var countNode = document.getElementById("dir-count");
+    var emptyNode = document.getElementById("dir-empty");
+    var rows = [].slice.call(document.querySelectorAll(".dir-row"));
+
+    function applyFilter() {
+      var q = (filter.value || "").trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (row) {
+        var hay = (row.getAttribute("data-name") || "").toLowerCase();
+        var match = !q || hay.indexOf(q) !== -1;
+        row.hidden = !match;
+        if (match) shown++;
+      });
+      if (countNode) countNode.textContent = q ? shown + " из " + rows.length : rows.length + " " + plural(rows.length);
+      if (emptyNode) emptyNode.hidden = shown !== 0;
+    }
+    function plural(n) {
+      var d10 = n % 10, d100 = n % 100;
+      if (d10 === 1 && d100 !== 11) return "группа";
+      if (d10 >= 2 && d10 <= 4 && (d100 < 10 || d100 >= 20)) return "группы";
+      return "групп";
+    }
+    if (filter) filter.addEventListener("input", applyFilter);
+    applyFilter();
+
+    document.querySelectorAll(".dir-copy").forEach(function (btn) {
+      var original = btn.textContent;
+      var timer = null;
+      btn.addEventListener("click", function () {
+        var url = btn.getAttribute("data-url") || "";
+        function ok() {
+          btn.classList.add("dir-copy--done");
+          btn.textContent = "✓ Скопировано";
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(function () {
+            btn.classList.remove("dir-copy--done");
+            btn.textContent = original;
+          }, 1400);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(ok, fallback);
+        } else {
+          fallback();
+        }
+        function fallback() {
+          try {
+            var ta = document.createElement("textarea");
+            ta.value = url; ta.style.position = "fixed"; ta.style.opacity = "0";
+            document.body.appendChild(ta); ta.select();
+            document.execCommand("copy"); document.body.removeChild(ta);
+            ok();
+          } catch (e) {
+            btn.textContent = "не вышло — скопируйте вручную";
+          }
+        }
+      });
+    });
+  })();
+</script>
 {{else}}
-<section class="index-hero">
-  <h1>Платформа для проведения занятий по олимпиадному программированию</h1>
-  <p>Попросите у преподавателя ссылку на страницу вашей группы.</p>
+<section class="index-hero index-hero--welcome">
+  <div class="hero-emblem" aria-hidden="true">🏆</div>
+  <h1>Олимпиадное программирование</h1>
+  <p class="hero-lead">Здесь публикуются таблицы результатов по контестам вашей группы — задачи, места, дорешка и оценки.</p>
+  <p class="hero-sub">Попросите у преподавателя ссылку на страницу вашей группы — она откроется без пароля.</p>
 </section>
 {{end}}
 {{end}}

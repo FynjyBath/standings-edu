@@ -549,6 +549,13 @@ func (c *CodeforcesAPIClient) newAPIRequest(ctx context.Context, methodName stri
 	if params == nil {
 		params = make(url.Values)
 	}
+	// Локализация ответа: где у задачи/контеста есть русская версия, Codeforces
+	// вернёт русские названия (без параметра отдаёт английские). Ставим до
+	// подписи, чтобы lang вошёл в apiSig. Затрагивает все методы (contest.standings,
+	// contest.status и т.п.); методы без локализуемых полей параметр игнорируют.
+	if params.Get("lang") == "" {
+		params.Set("lang", "ru")
+	}
 	if err := c.addSignedQueryParams(methodName, params); err != nil {
 		return nil, err
 	}

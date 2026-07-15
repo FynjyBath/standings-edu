@@ -5,7 +5,7 @@
     <a class="summary-link-btn" href="/standings/admin">← В админку</a>
     <a class="summary-link-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница объединения</a>
   </p>
-  <p class="empty-hint">👥 Составлена из групп: {{range $i, $m := .Members}}{{if $i}} · {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}. Состав групп меняется на главной странице админки.</p>
+  <p class="empty-hint">👥 Составлена из групп: {{range $i, $m := .Members}}{{if $i}} · {{end}}{{if $m.Missing}}<span class="text-warn">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}. Состав групп меняется на главной странице админки.</p>
 </section>
 
 <section class="admin-block">

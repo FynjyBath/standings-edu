@@ -38,7 +38,7 @@
     </table>
   </div>
   <p class="empty-hint" id="contests-empty" hidden>Ничего не найдено.</p>
-  {{else}}<p class="empty-hint">Контестов пока нет.</p>{{end}}
+  {{else}}<div class="empty-state"><span class="empty-state-icon" aria-hidden="true">📭</span><p>Контестов пока нет.</p></div>{{end}}
 </section>
 
 <script id="contests-data" type="application/json">{{.ContestsJSON}}</script>

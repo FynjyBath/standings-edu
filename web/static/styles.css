@@ -18,6 +18,9 @@
   --attempt-bg: #f8d7d7;
   --attempt-text: #7b2323;
   --shadow: 0 14px 32px rgba(20, 46, 82, 0.12);
+  --warn: #b46a00;
+  --ok: #2f8f5b;
+  --col-shadow: rgba(20, 46, 82, 0.16);
 }
 
 html[data-theme="dark"] {
@@ -40,6 +43,9 @@ html[data-theme="dark"] {
   --attempt-bg: #6a3434;
   --attempt-text: #ffe0e0;
   --shadow: 0 18px 36px rgba(0, 0, 0, 0.38);
+  --warn: #ffb454;
+  --ok: #6fd39a;
+  --col-shadow: rgba(0, 0, 0, 0.5);
 }
 
 html[data-theme="dark"] body {
@@ -743,6 +749,9 @@ button.summary-link-btn {
   left: 0;
   background: var(--sticky);
   z-index: 1;
+  /* Тень у правого края закреплённого столбца — подсказка, что таблица
+     прокручивается вбок (спред -8px гасит тень сверху/снизу, оставляя справа). */
+  box-shadow: 8px 0 10px -8px var(--col-shadow);
 }
 
 .standings-table thead .student-col {
@@ -754,6 +763,7 @@ button.summary-link-btn {
 .solved-count {
   min-width: 76px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* data-table — списки/записи (админка, профиль участника): текст слева, числа
@@ -1545,4 +1555,145 @@ button.summary-link-btn {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
   color: var(--accent-strong);
+}
+
+/* ── Карточки-метрики профиля (#7) ───────────────────────────────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.6rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value--text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* Главная метрика выделена акцентом и крупнее — задаёт иерархию. */
+.stat-card--primary {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line) 45%);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface) 86%);
+}
+
+.stat-card--primary .stat-value {
+  color: var(--accent-strong);
+  font-size: 1.8rem;
+}
+
+/* ── Семантический «внимание/отсутствует» (#10) ──────────────────────────── */
+.text-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.text-ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+/* ── Единый пустой блок (#14) ─────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  text-align: center;
+  padding: 1.8rem 1rem;
+  margin: 0.8rem 0 0;
+  color: var(--muted);
+  border: 1px dashed color-mix(in srgb, var(--line) 70%, transparent 30%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent 45%);
+}
+
+.empty-state-icon {
+  font-size: 1.9rem;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.empty-state p {
+  margin: 0;
+  max-width: 46ch;
+}
+
+/* ── Быстрый обзор группы (#13) ───────────────────────────────────────────── */
+.group-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0;
+}
+
+.overview-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.28rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent 30%);
+  background: var(--surface);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.overview-stat b {
+  font-size: 1rem;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Утилиты вместо повторяющихся инлайн-стилей (#9) ──────────────────────── */
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Спарклайн активности профиля (высота столбца — data-driven, остаётся инлайн). */
+.activity-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 70px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  overflow-x: auto;
+}
+
+.activity-cell {
+  flex: 1 0 3px;
+  min-width: 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--line);
+}
+
+.activity-cell.has-count {
+  background: var(--accent);
 }

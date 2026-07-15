@@ -26,10 +26,17 @@
     {{end}}
     {{end}}
   </p>
+  {{if .TokenValid}}
+  <div class="group-overview">
+    <span class="overview-stat">Контесты <b>{{len .Standings.Contests}}</b></span>
+    {{if .Standings.SolvedSummary}}<span class="overview-stat">Участники <b>{{len .Standings.SolvedSummary}}</b></span>{{end}}
+    {{if .Standings.Grades}}<span class="overview-stat">Оценки <b>{{len .Standings.Grades.Rows}}</b></span>{{end}}
+  </div>
+  {{end}}
   {{if and .TokenValid .JuryCanManage}}
   <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
     {{if .JuryAddable}}
-    <label style="display:flex;align-items:center;gap:0.4rem;">
+    <label class="field-inline">
       <span>Добавить контест:</span>
       <select id="jury-add-select" data-searchable data-placeholder="Поиск контеста по названию или id…">
         <option value="">— выберите —</option>
@@ -41,11 +48,11 @@
     <span id="jury-status" class="admin-editor-status"></span>
   </div>
   <div class="admin-editor-tools" style="flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
-    <label style="display:flex;align-items:center;gap:0.4rem;">
+    <label class="field-inline">
       <span>Новый кондуит:</span>
       <input type="text" id="jury-konduit-title" placeholder="Название" style="max-width:14rem;" />
     </label>
-    <label style="display:flex;align-items:center;gap:0.4rem;">
+    <label class="field-inline">
       <span>задач:</span>
       <input type="number" id="jury-konduit-count" min="1" max="200" step="1" value="10" style="max-width:4.5rem;" />
     </label>
@@ -224,7 +231,7 @@
   </section>
   {{end}}
 {{else}}
-<p class="empty-hint">Для этой группы не назначены контесты.</p>
+<div class="empty-state"><span class="empty-state-icon" aria-hidden="true">📭</span><p>Для этой группы пока не назначены контесты.</p></div>
 {{end}}
 
 <script>

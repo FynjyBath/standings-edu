@@ -47,7 +47,7 @@
   {{if .Grades.Rows}}
   <p class="empty-hint" id="grades-empty" hidden>Ничего не найдено.</p>
   {{else}}
-  <p class="empty-hint">В группе нет учеников.</p>
+  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">👥</span><p>В группе пока нет учеников.</p></div>
   {{end}}
 </section>
 {{end}}

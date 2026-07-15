@@ -134,7 +134,7 @@
           <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>
         </span>
       </div>
-      <div class="combined-item-members">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span style="color:var(--accent-strong);">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</div>
+      <div class="combined-item-members">← {{range $i, $m := .Members}}{{if $i}}, {{end}}{{if $m.Missing}}<span class="text-warn">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}</div>
     </li>
     {{end}}
   </ul>

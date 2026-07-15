@@ -9,11 +9,15 @@
     <script>
       (function () {
         var storageKey = "nemalo-theme";
+        // Сохранённый выбор пользователя важнее всего; если его нет — следуем
+        // системной теме ОС (prefers-color-scheme), иначе светлая по умолчанию.
         var theme = "light";
         try {
           var saved = localStorage.getItem(storageKey);
           if (saved === "light" || saved === "dark") {
             theme = saved;
+          } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            theme = "dark";
           }
         } catch (e) {}
         document.documentElement.setAttribute("data-theme", theme);

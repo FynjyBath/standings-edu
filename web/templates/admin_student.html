@@ -15,25 +15,25 @@
 {{if not .NotGenerated}}
 {{$s := $p.Stats}}
 
-<section class="admin-block">
+<section class="contest-block">
   <h2>Сводка</h2>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.6rem;">
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.TotalSolved}}</span><span style="font-size:0.82rem;color:var(--muted);">решено задач</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.TotalSubmissions}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок (со временем)</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.SolvedToday}}</span><span style="font-size:0.82rem;color:var(--muted);">решено сегодня</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions7d}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок за 7 дней</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.Submissions30d}}</span><span style="font-size:0.82rem;color:var(--muted);">посылок за 30 дней</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.5rem;font-weight:800;line-height:1.1;color:var(--accent-strong);">{{$s.ActiveDays}}</span><span style="font-size:0.82rem;color:var(--muted);">активных дней</span></div>
-    <div style="display:flex;flex-direction:column;gap:0.2rem;padding:0.7rem 0.85rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-strong);"><span style="font-size:1.05rem;font-weight:700;line-height:1.2;color:var(--accent-strong);">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span style="font-size:0.82rem;color:var(--muted);">последняя активность</span></div>
+  <div class="stat-grid">
+    <div class="stat-card stat-card--primary"><span class="stat-value">{{$s.TotalSolved}}</span><span class="stat-label">решено задач</span></div>
+    <div class="stat-card"><span class="stat-value">{{$s.TotalSubmissions}}</span><span class="stat-label">посылок (со временем)</span></div>
+    <div class="stat-card"><span class="stat-value">{{$s.SolvedToday}}</span><span class="stat-label">решено сегодня</span></div>
+    <div class="stat-card"><span class="stat-value">{{$s.Submissions7d}}</span><span class="stat-label">посылок за 7 дней</span></div>
+    <div class="stat-card"><span class="stat-value">{{$s.Submissions30d}}</span><span class="stat-label">посылок за 30 дней</span></div>
+    <div class="stat-card"><span class="stat-value">{{$s.ActiveDays}}</span><span class="stat-label">активных дней</span></div>
+    <div class="stat-card"><span class="stat-value stat-value--text">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span class="stat-label">последняя активность</span></div>
   </div>
   {{if gt $s.SolvedWithTimes 0}}
-  <p class="empty-hint" style="margin-top:0.7rem;">По {{$s.SolvedWithTimes}} задачам, решённым на CF/Informatics: в среднем <strong>{{numText $s.AvgAttemptsToSolve}}</strong> посылок до решения; с первой попытки решено <strong>{{$s.FirstTrySolved}}</strong>.</p>
+  <p class="empty-hint">По {{$s.SolvedWithTimes}} задачам, решённым на CF/Informatics: в среднем <strong>{{numText $s.AvgAttemptsToSolve}}</strong> посылок до решения; с первой попытки решено <strong>{{$s.FirstTrySolved}}</strong>.</p>
   {{else}}
-  <p class="empty-hint" style="margin-top:0.7rem;">Нет решённых задач с известным временем посылок — метрики скорости недоступны.</p>
+  <p class="empty-hint">Нет решённых задач с известным временем посылок — метрики скорости недоступны.</p>
   {{end}}
 </section>
 
-<section class="admin-block">
+<section class="contest-block">
   <h2>Аккаунты и сайты</h2>
   {{if $p.Sites}}
   <div class="table-wrap">
@@ -55,11 +55,11 @@
   <p class="empty-hint">Нет данных по аккаунтам (или у ученика нет привязанных аккаунтов на отслеживаемых сайтах).</p>
   {{end}}
   {{if $p.Accounts}}
-  <p class="empty-hint" style="margin-top:0.5rem;">Аккаунты: {{range $p.Accounts}}<code>{{.Site}}:{{.AccountID}}</code> {{end}}</p>
+  <p class="empty-hint">Аккаунты: {{range $p.Accounts}}<code>{{.Site}}:{{.AccountID}}</code> {{end}}</p>
   {{end}}
 </section>
 
-<section class="admin-block">
+<section class="contest-block">
   <h2>Позиции в группах</h2>
   {{if $p.Groups}}
   <div class="table-wrap">
@@ -83,12 +83,12 @@
   {{end}}
 </section>
 
-<section class="admin-block">
+<section class="contest-block">
   <h2>Активность за 90 дней</h2>
   {{if $p.DailyActivity}}
-  <div style="display:flex;align-items:flex-end;gap:2px;height:70px;padding:5px;border:1px solid var(--line);border-radius:8px;background:var(--surface-strong);overflow-x:auto;" title="Посылки по дням (МSK)">
+  <div class="activity-bar" title="Посылки по дням (MSK)">
     {{range $p.DailyActivity}}
-    <span style="flex:1 0 3px;min-width:3px;height:{{barHeight .Count $.MaxDaily}}px;border-radius:2px 2px 0 0;{{if .Count}}background:var(--accent);{{else}}background:var(--line);{{end}}" title="{{dayLabel .Date}}: {{.Count}}"></span>
+    <span class="activity-cell{{if .Count}} has-count{{end}}" style="height:{{barHeight .Count $.MaxDaily}}px;" title="{{dayLabel .Date}}: {{.Count}}"></span>
     {{end}}
   </div>
   <p class="empty-hint">Максимум за день: {{.MaxDaily}}.</p>
@@ -97,7 +97,7 @@
   {{end}}
 </section>
 
-<section class="admin-block">
+<section class="contest-block">
   <h2>Последние посылки</h2>
   {{if $p.Recent}}
   <div class="table-wrap">
@@ -109,7 +109,7 @@
           <td>{{submissionTime .At}}</td>
           <td>{{siteName .Site}}</td>
           <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer"{{if $sub}} title="Посылки ученика по задаче"{{end}}>{{.Label}}</a></td>
-          <td>{{if .Solved}}<span style="color:var(--solved-text);font-weight:700;">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="grade-weight">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
+          <td>{{if .Solved}}<span class="text-ok">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="grade-weight">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
         </tr>
         {{end}}
       </tbody>

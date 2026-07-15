@@ -1570,11 +1570,6 @@ button.summary-link-btn {
   color: var(--accent-strong);
 }
 
-.toc-chip.is-current {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
-  color: var(--accent-strong);
-}
 
 /* ── Карточки-метрики профиля (#7) ───────────────────────────────────────── */
 .stat-grid {

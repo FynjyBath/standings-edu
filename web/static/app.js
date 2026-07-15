@@ -174,73 +174,8 @@
       });
     }
 
-    // Подсветка активного чипа. Детерминированно: текущий контест — последний
-    // видимый блок, чей верх уже ушёл под верхнюю кромку окна (порог у самого
-    // верха). Так клик по чипу подсвечивает именно выбранный контест независимо
-    // от высоты его таблицы (короткий блок раньше подсвечивал соседа снизу).
-    function setCurrent(id) {
-      if (!id || !byId[id] || byId[id].chip.classList.contains("is-current")) return;
-      chipsBox.querySelectorAll(".toc-chip.is-current").forEach(function (c) { c.classList.remove("is-current"); });
-      byId[id].chip.classList.add("is-current");
-    }
-    function currentId() {
-      var visible = blocks.filter(function (b) { return !b.classList.contains("filtered-out"); });
-      if (!visible.length) return null;
-      // Долистали до низа страницы — последний контест (его верх мог не дойти
-      // до кромки, если внизу мало контента).
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
-        return visible[visible.length - 1].id;
-      }
-      var cur = visible[0].id;
-      for (var i = 0; i < visible.length; i++) {
-        if (visible[i].getBoundingClientRect().top <= 4) cur = visible[i].id; else break;
-      }
-      return cur;
-    }
-    // Явно выбранный контест (клик по чипу, прямая ссылка #contest-…, back/forward)
-    // «закрепляется»: пока браузер докручивает к якорю, scroll-spy не перебивает
-    // подсветку соседом. Открепляется, когда цель достигнута (currentId дошёл до
-    // неё) или как только пользователь сам начал листать. Это чинит случай прямой
-    // ссылки: на старте currentId ещё считается при scrollY≈0 и вернул бы первый.
-    var pinned = null;
-    function idFromHash() {
-      var h = (window.location.hash || "").replace(/^#/, "");
-      return byId[h] ? h : null;
-    }
-    function pin(id) {
-      if (id && byId[id]) { pinned = id; setCurrent(id); }
-    }
-    var ticking = false;
-    function refresh() {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(function () {
-        ticking = false;
-        if (pinned) {
-          setCurrent(pinned);
-          if (currentId() === pinned) pinned = null; // цель достигнута — дальше следим за прокруткой
-        } else {
-          setCurrent(currentId());
-        }
-      });
-    }
-    window.addEventListener("scroll", refresh, { passive: true });
-    window.addEventListener("resize", refresh);
-    // Открепляем закреплённый выбор, как только пользователь сам начал листать.
-    ["wheel", "touchstart", "keydown"].forEach(function (ev) {
-      window.addEventListener(ev, function () { pinned = null; }, { passive: true });
-    });
-    // Прямая ссылка / клик по чипу / back-forward — источник истины подсветки.
-    window.addEventListener("hashchange", function () { pin(idFromHash()); refresh(); });
-    chipsBox.addEventListener("click", function (e) {
-      var chip = e.target.closest ? e.target.closest(".toc-chip") : null;
-      if (chip) pin(chip.getAttribute("data-toc-target"));
-    });
-    // Стартовое состояние: если открыли по якорю — подсвечиваем именно его.
-    var initial = idFromHash();
-    if (initial) pin(initial); else setCurrent(currentId());
-    // Слой на позднюю укладку (картинки/таблицы сдвигают якорь после load).
-    window.addEventListener("load", refresh);
+    // Чипы — только навигация-якори (клик прокручивает к контесту). Активный
+    // контест не подсвечиваем по просьбе: без scroll-spy и без is-current.
   }
 
   function sel(s) { return s ? document.querySelector(s) : null; }

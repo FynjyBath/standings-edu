@@ -488,6 +488,41 @@ button.summary-link-btn {
   color: var(--muted);
 }
 
+/* Персональный фильтр вида таблицы «дорешка» — лёгкая кнопка-переключатель в
+   стилистике таблицы (не «админская»), выровненная вправо над таблицей.
+   Активное состояние (дорешка скрыта) подсвечивается акцентом. */
+.uv-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.5rem;
+}
+
+.uv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.26rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.uv-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line) 55%);
+  color: var(--text);
+}
+
+.uv-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line) 45%);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface) 86%);
+  color: var(--accent-strong);
+}
+
 .contest-materials-block {
   margin: 0 0 0.8rem;
 }

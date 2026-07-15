@@ -122,8 +122,8 @@
     </div>
     {{end}}
     {{if $uv}}
-    <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
-      <button type="button" class="admin-btn admin-btn--secondary uv-toggle" aria-pressed="false">Скрыть дорешку</button>
+    <div class="uv-toggle-row">
+      <button type="button" class="uv-toggle" aria-pressed="false">👁 Скрыть дорешку</button>
     </div>
     {{end}}
     {{if .ZeroPenalty}}
@@ -301,7 +301,7 @@
       function apply(hide) {
         full.hidden = hide;
         win.hidden = !hide;
-        btn.textContent = hide ? "Показать дорешку" : "Скрыть дорешку";
+        btn.textContent = hide ? "👁 Показать дорешку" : "👁 Скрыть дорешку";
         btn.setAttribute("aria-pressed", hide ? "true" : "false");
       }
       apply(localStorage.getItem(key) === "1");

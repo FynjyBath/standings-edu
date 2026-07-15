@@ -153,6 +153,7 @@
       chip.className = "toc-chip";
       chip.href = "#" + b.id;
       chip.textContent = title;
+      chip.title = title; // полное название — в подсказке (чип обрезается многоточием)
       chip.setAttribute("data-toc-target", b.id);
       chipsBox.appendChild(chip);
       byId[b.id] = { block: b, chip: chip, text: title.toLowerCase() };

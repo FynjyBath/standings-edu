@@ -210,7 +210,39 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		}
 		out[s.ID] = computeStudentCourseStats(std, tasks, weights, totalWeight, times[s.ID], st, now)
 	}
+	normalizeCourseSpeeds(out)
 	return out
+}
+
+// normalizeCourseSpeeds перецентрирует скорости на медиану когорты: сырая
+// v = Σw/A систематически меньше 1 у всех (в знаменателе есть время на
+// нерешённое, а личное время обычно правее медианы), поэтому «×1» без
+// нормировки означало бы недостижимого идеального ученика. После деления на
+// медиану валидных скоростей медианный ученик получает ровно ×1 — как и
+// обещает подпись «от типичного темпа». Ранжирование не меняется.
+func normalizeCourseSpeeds(stats map[string]*domain.StudentCourseStats) {
+	valid := make([]float64, 0, len(stats))
+	for _, cs := range stats {
+		if cs != nil && !cs.LowData && cs.Speed > 0 {
+			valid = append(valid, cs.Speed)
+		}
+	}
+	const minCohort = 5
+	m := median(valid)
+	if len(valid) < minCohort || m <= 0 {
+		return // маленькая когорта — оставляем сырую шкалу
+	}
+	for _, cs := range stats {
+		if cs == nil {
+			continue
+		}
+		if cs.Speed > 0 {
+			cs.Speed = round2(cs.Speed / m)
+		}
+		if cs.SpeedRecent > 0 {
+			cs.SpeedRecent = round2(cs.SpeedRecent / m)
+		}
+	}
 }
 
 func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []courseTask, weights map[string]float64, totalWeight float64, tt studentTaskTime, st *accountStatuses, now time.Time) *domain.StudentCourseStats {

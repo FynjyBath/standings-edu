@@ -194,8 +194,10 @@ func TestComputeCourseStatsSpeedCalibration(t *testing.T) {
 	if cs.LowData {
 		t.Fatalf("данных достаточно: %+v", cs)
 	}
-	if cs.Speed < 0.8 || cs.Speed > 1.3 {
-		t.Fatalf("калибровка: у типичного ученика v≈1, got %v", cs.Speed)
+	// После нормировки на медиану когорты у медианного (здесь — любого из
+	// одинаковых) ученика скорость ровно ×1.
+	if cs.Speed != 1 {
+		t.Fatalf("калибровка: у медианного ученика v=1, got %v", cs.Speed)
 	}
 	if cs.SpeedRecent <= 0 {
 		t.Fatalf("speed_recent должен посчитаться: %+v", cs)

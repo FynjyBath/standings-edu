@@ -965,6 +965,10 @@ func TestGroupParticipantsByToken(t *testing.T) {
 		StudentID: "ivan", PublicName: "Иван И.",
 		Stats:  domain.StudentActivityStats{TotalSolved: 42, TotalSubmissions: 100},
 		Groups: []domain.StudentGroupStanding{{Slug: "g1", Title: "Группа 1", SolvedCount: 42}, {Slug: "g2", Title: "Другая", SolvedCount: 5}},
+		CourseStats: []domain.StudentCourseStats{{
+			GroupSlug: "g1", GroupTitle: "Группа 1",
+			Progress: 0.5, SolvedCount: 6, TotalCount: 12, Speed: 1.3, ActiveHours: 4,
+		}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -986,7 +990,7 @@ func TestGroupParticipantsByToken(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("participants code=%d", code)
 	}
-	for _, want := range []string{"Иван И.", "42", "профиль появится после генерации"} { // petr без профиля
+	for _, want := range []string{"Иван И.", "×1.3", "50%", "профиль появится после генерации"} { // petr без профиля
 		if !strings.Contains(body, want) {
 			t.Fatalf("participants missing %q", want)
 		}

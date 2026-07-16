@@ -1929,3 +1929,68 @@ table.rows-collapsed tbody tr:nth-child(n + 31) {
 .rows-expand-btn:hover {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface) 86%);
 }
+
+/* ── Страница «Анкеты учеников» ──────────────────────────────────────────── */
+.intake-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent 40%);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.intake-fields {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(140px, 1fr) repeat(3, minmax(110px, 0.8fr));
+  gap: 0.5rem;
+}
+
+.intake-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.intake-fields input {
+  padding: 0.34rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.intake-fields input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line) 40%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent 78%);
+}
+
+.intake-extra {
+  flex-basis: 100%;
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.intake-remove {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+@media (max-width: 900px) {
+  .intake-card {
+    flex-wrap: wrap;
+  }
+  .intake-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+}

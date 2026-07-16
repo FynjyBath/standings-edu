@@ -43,6 +43,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/export/download", handlers.AdminAuth(handlers.AdminExportDownload))
 	mux.HandleFunc("GET /standings/admin/import", handlers.AdminAuth(handlers.AdminImportPage))
 	mux.HandleFunc("POST /api/admin/import/apply", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminImportApply)))
+	mux.HandleFunc("GET /standings/admin/intake", handlers.AdminAuth(handlers.AdminIntakePage))
 	mux.HandleFunc("POST /api/admin/actions/intake/prepare", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminIntakeStagingPrepare)))
 	mux.HandleFunc("POST /api/admin/actions/intake/dry-run", handlers.AdminAuth(handlers.AdminIntakeMergeDryRun))
 	mux.HandleFunc("POST /api/admin/actions/intake/merge", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminIntakeStagingMerge)))

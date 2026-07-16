@@ -605,6 +605,18 @@ func (h *Handlers) AdminFileSave(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminIntakePage — страница «Анкеты учеников»: форма над тем же staging-флоу
+// (prepare → dry-run → merge), что и раньше; данные подтягивает JS.
+func (h *Handlers) AdminIntakePage(w http.ResponseWriter, _ *http.Request) {
+	page := struct {
+		PageTitle string
+		Footer    FooterInfo
+	}{PageTitle: "Анкеты учеников", Footer: h.buildFooterInfo()}
+	if err := h.renderer.Render(w, http.StatusOK, "admin_intake.html", page); err != nil {
+		h.logger.Printf("ERROR render admin intake page: %v", err)
+	}
+}
+
 func (h *Handlers) AdminIntakeStagingPrepare(w http.ResponseWriter, _ *http.Request) {
 	if h.intake == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{

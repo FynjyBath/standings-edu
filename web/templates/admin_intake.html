@@ -1,0 +1,270 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Анкеты учеников</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+  </p>
+  <p class="empty-hint">Анкеты, присланные через формы. Поправьте ФИО/группы/аккаунты, уберите мусорные, затем «Пробный запуск» покажет, кто в кого сольётся и в какие группы попадёт. «Слить анкеты» применяет merge (как раньше). После merge нажмите «Сгенерировать таблицы».</p>
+</section>
+
+<section class="admin-block">
+  <div class="filter-bar">
+    <input type="search" id="intake-filter" class="filter-input" placeholder="Фильтр по ФИО…" autocomplete="off" spellcheck="false" />
+    <span class="filter-count" id="intake-count"></span>
+  </div>
+  <div id="intake-list"></div>
+  <div class="empty-state" id="intake-empty" hidden><span class="empty-state-icon" aria-hidden="true">📮</span><p>Анкет пока нет — появятся после заполнения форм учениками.</p></div>
+  <p class="empty-hint" id="intake-nomatch" hidden>Ничего не найдено.</p>
+
+  <div class="admin-editor-tools" style="margin-top:0.9rem;">
+    <button type="button" id="intake-dryrun" class="admin-btn admin-btn--secondary">Пробный запуск (что куда)</button>
+    <button type="button" id="intake-merge" class="admin-btn" disabled>Слить анкеты</button>
+    <span id="intake-status" class="admin-editor-status"></span>
+  </div>
+  <div id="intake-preview" style="margin-top:0.8rem;"></div>
+
+  <details style="margin-top:1rem;" id="intake-json-details">
+    <summary class="empty-hint" style="cursor:pointer;">Режим эксперта (JSON)</summary>
+    <textarea id="intake-json" class="account-list" rows="14" spellcheck="false" style="margin-top:0.5rem;font-family:ui-monospace,monospace;"></textarea>
+    <div class="admin-editor-tools" style="margin-top:0.4rem;">
+      <button type="button" id="intake-json-apply" class="admin-btn admin-btn--secondary">Применить JSON к форме</button>
+      <span id="intake-json-status" class="admin-editor-status"></span>
+    </div>
+  </details>
+</section>
+
+<script>
+  (function () {
+    var KNOWN_SITES = ["informatics", "codeforces", "acmp"];
+    var RESERVED = { "": 1, id: 1, full_name: 1, public_name: 1, accounts: 1, group: 1, groups: 1, token: 1 };
+
+    var listNode = document.getElementById("intake-list");
+    var emptyNode = document.getElementById("intake-empty");
+    var noMatch = document.getElementById("intake-nomatch");
+    var filter = document.getElementById("intake-filter");
+    var countNode = document.getElementById("intake-count");
+    var statusNode = document.getElementById("intake-status");
+    var dryBtn = document.getElementById("intake-dryrun");
+    var mergeBtn = document.getElementById("intake-merge");
+    var previewNode = document.getElementById("intake-preview");
+    var jsonDetails = document.getElementById("intake-json-details");
+    var jsonArea = document.getElementById("intake-json");
+    var jsonStatus = document.getElementById("intake-json-status");
+
+    var records = []; // сырые объекты анкет (неизвестные поля сохраняются как есть)
+
+    function setStatus(msg, err) {
+      statusNode.textContent = msg;
+      statusNode.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+    function escapeHtml(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+      });
+    }
+    function invalidateDryRun() {
+      mergeBtn.disabled = true;
+      previewNode.innerHTML = "";
+    }
+
+    // Представление записи для формы: известные сайты — из accounts[] и из
+    // строковых полей; прочее (другие сайты/поля) остаётся в записи нетронутым.
+    function siteValue(rec, site) {
+      var v = "";
+      (rec.accounts || []).forEach(function (a) {
+        if (a && String(a.site).toLowerCase() === site) v = a.account_id;
+      });
+      if (!v && typeof rec[site] === "string") v = rec[site];
+      return v || "";
+    }
+    function extraSummary(rec) {
+      var parts = [];
+      (rec.accounts || []).forEach(function (a) {
+        if (a && KNOWN_SITES.indexOf(String(a.site).toLowerCase()) === -1) parts.push(a.site + ":" + a.account_id);
+      });
+      Object.keys(rec).forEach(function (k) {
+        var lk = k.toLowerCase();
+        if (RESERVED[lk] || KNOWN_SITES.indexOf(lk) !== -1) return;
+        if (typeof rec[k] === "string" && rec[k]) parts.push(k + ":" + rec[k]);
+      });
+      return parts;
+    }
+    function groupsValue(rec) {
+      if (Array.isArray(rec.groups)) return rec.groups.join(", ");
+      if (typeof rec.group === "string") return rec.group;
+      return "";
+    }
+
+    // Правки формы записываются обратно в записи (структура сохраняется).
+    function writeBack() {
+      listNode.querySelectorAll(".intake-card").forEach(function (card) {
+        var rec = records[parseInt(card.dataset.idx, 10)];
+        if (!rec) return;
+        rec.full_name = card.querySelector(".ic-name").value.trim();
+        var groups = card.querySelector(".ic-groups").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+        delete rec.group;
+        rec.groups = groups;
+        // Известные сайты: нормализуем в accounts[], строковые поля убираем.
+        var accounts = (rec.accounts || []).filter(function (a) {
+          return a && KNOWN_SITES.indexOf(String(a.site).toLowerCase()) === -1;
+        });
+        KNOWN_SITES.forEach(function (site) {
+          delete rec[site];
+          var v = card.querySelector(".ic-" + site).value.trim();
+          if (v) accounts.push({ site: site, account_id: v });
+        });
+        rec.accounts = accounts;
+      });
+    }
+    function collectJSON() {
+      writeBack();
+      return JSON.stringify(records, null, 2) + "\n";
+    }
+
+    function render() {
+      listNode.innerHTML = "";
+      records.forEach(function (rec, idx) {
+        var card = document.createElement("div");
+        card.className = "intake-card";
+        card.dataset.idx = String(idx);
+        var extras = extraSummary(rec);
+        card.innerHTML =
+          '<div class="intake-fields">' +
+          '<label><span>ФИО</span><input type="text" class="ic-name" value="' + escapeHtml(rec.full_name || "") + '" /></label>' +
+          '<label><span>Группы (через запятую)</span><input type="text" class="ic-groups" value="' + escapeHtml(groupsValue(rec)) + '" /></label>' +
+          KNOWN_SITES.map(function (site) {
+            return '<label><span>' + site + '</span><input type="text" class="ic-' + site + '" value="' + escapeHtml(siteValue(rec, site)) + '" /></label>';
+          }).join("") +
+          "</div>" +
+          (extras.length ? '<div class="intake-extra">' + extras.map(function (e) { return "<code>" + escapeHtml(e) + "</code>"; }).join(" ") + "</div>" : "") +
+          '<button type="button" class="admin-btn admin-btn--secondary intake-remove" title="Убрать анкету из merge">✕</button>';
+        listNode.appendChild(card);
+      });
+      emptyNode.hidden = records.length !== 0;
+      applyFilter();
+      invalidateDryRun();
+    }
+
+    function applyFilter() {
+      var q = (filter.value || "").trim().toLowerCase();
+      var shown = 0;
+      listNode.querySelectorAll(".intake-card").forEach(function (card) {
+        var name = (card.querySelector(".ic-name").value || "").toLowerCase();
+        var vis = !q || name.indexOf(q) !== -1;
+        card.classList.toggle("filtered-out", !vis);
+        if (vis) shown++;
+      });
+      countNode.textContent = q ? shown + " из " + records.length : String(records.length);
+      noMatch.hidden = shown !== 0 || records.length === 0;
+    }
+    filter.addEventListener("input", applyFilter);
+
+    listNode.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest(".intake-remove") : null;
+      if (!btn) return;
+      var card = btn.closest(".intake-card");
+      writeBack();
+      records.splice(parseInt(card.dataset.idx, 10), 1);
+      render();
+    });
+    listNode.addEventListener("input", invalidateDryRun);
+
+    function fetchJSON(url, opts) {
+      return fetch(url, opts).then(function (res) {
+        return res.json().then(function (p) {
+          if (!res.ok || p.ok === false) throw new Error(p.error || ("HTTP " + res.status));
+          return p;
+        });
+      });
+    }
+
+    // Портированный рендер превью merge (тот же вид, что был в админке).
+    function renderMergePreview(preview) {
+      var totalConflicts = 0;
+      var rows = (preview.students || []).map(function (st) {
+        var groups = (st.groups || []).map(function (g) {
+          return "<code>" + escapeHtml(g.slug) + "</code>" + (g.already_member ? ' <span class="grade-weight">(уже в группе)</span>' : ' <span class="text-ok">+ добавится</span>');
+        }).join(", ") || '<span class="grade-weight">— без групп</span>';
+        var conflicts = st.conflicts || [];
+        totalConflicts += conflicts.length;
+        var conflictKeys = {};
+        conflicts.forEach(function (c) { conflictKeys[(c.site + ":" + c.account_id).toLowerCase()] = true; });
+        var accounts = (st.accounts || []).map(function (a) {
+          var label = escapeHtml(a.site) + ":" + escapeHtml(a.account_id);
+          if (conflictKeys[(a.site + ":" + a.account_id).toLowerCase()]) {
+            return '<code class="acct-conflict" title="Эта учётка есть и у другого ученика">' + label + "</code>";
+          }
+          return "<code>" + label + "</code>";
+        }).join(" ");
+        var warn = conflicts.map(function (c) {
+          return "⚠ <code>" + escapeHtml(c.site) + ":" + escapeHtml(c.account_id) + "</code> уже у <strong>" + escapeHtml(c.other_name || c.other_id) + "</strong>";
+        }).join("<br>") || '<span class="grade-weight">—</span>';
+        return "<tr" + (conflicts.length ? ' class="merge-conflict-row"' : "") + "><td>" + escapeHtml(st.full_name) + "</td>" +
+          "<td><code>" + escapeHtml(st.final_id) + "</code> " + (st.is_new ? '<span class="text-ok">новый</span>' : '<span class="grade-weight">обновление</span>') + "</td>" +
+          "<td>" + groups + "</td><td>" + accounts + "</td><td>" + warn + "</td></tr>";
+      }).join("");
+      var head = '<p class="empty-hint">Пробный запуск (ничего не записано). Новых учеников: <strong>' + preview.added + "</strong>, обновлений: <strong>" + preview.updated + "</strong>.</p>";
+      if (totalConflicts > 0) {
+        head += '<p class="merge-conflict-note">⚠ Совпадений аккаунтов с другими учениками: <strong>' + totalConflicts + "</strong>. Проверьте — возможно, указана чужая учётка.</p>";
+      }
+      previewNode.innerHTML = head +
+        '<div class="table-wrap"><table class="standings-table"><thead><tr><th>Анкета (ФИО)</th><th>Итоговый ученик</th><th>Группы</th><th>Аккаунты</th><th>Предупреждения</th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="5">Пусто</td></tr>') + "</tbody></table></div>";
+    }
+
+    dryBtn.addEventListener("click", function () {
+      setStatus("Пробный запуск…", false);
+      fetchJSON("/api/admin/actions/intake/dry-run", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: collectJSON() })
+      }).then(function (p) {
+        renderMergePreview(p.preview || {});
+        mergeBtn.disabled = false;
+        setStatus("Проверьте таблицу ниже, затем «Слить анкеты».", false);
+      }).catch(function (err) { setStatus(err.message, true); });
+    });
+
+    mergeBtn.addEventListener("click", function () {
+      if (!confirm("Слить анкеты в базу учеников? Действие необратимо.")) return;
+      setStatus("Merge…", false);
+      fetchJSON("/api/admin/actions/intake/merge", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: collectJSON() })
+      }).then(function (p) {
+        if (p.action_success === false) throw new Error("merge завершился с ошибкой — детали в «Результате последнего действия» в админке");
+        setStatus("Готово. Обновляю…", false);
+        location.reload();
+      }).catch(function (err) { setStatus(err.message, true); });
+    });
+
+    // Режим эксперта: JSON ↔ форма.
+    jsonDetails.addEventListener("toggle", function () {
+      if (jsonDetails.open) jsonArea.value = collectJSON();
+    });
+    document.getElementById("intake-json-apply").addEventListener("click", function () {
+      try {
+        var parsed = JSON.parse(jsonArea.value || "[]");
+        if (!Array.isArray(parsed)) throw new Error("ожидается JSON-массив анкет");
+        records = parsed;
+        render();
+        jsonStatus.textContent = "Применено.";
+        jsonStatus.className = "admin-editor-status admin-editor-status--ok";
+      } catch (e) {
+        jsonStatus.textContent = "Ошибка JSON: " + e.message;
+        jsonStatus.className = "admin-editor-status admin-editor-status--error";
+      }
+    });
+
+    // Загрузка: существующий prepare-endpoint (staging создаётся/возвращается).
+    setStatus("Загрузка анкет…", false);
+    fetchJSON("/api/admin/actions/intake/prepare", { method: "POST" })
+      .then(function (p) {
+        records = JSON.parse(p.content || "[]");
+        if (!Array.isArray(records)) records = [];
+        render();
+        setStatus("", false);
+      })
+      .catch(function (err) { setStatus(err.message, true); });
+  })();
+</script>
+{{end}}

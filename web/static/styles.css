@@ -2081,3 +2081,73 @@ table.rows-collapsed tbody tr:nth-child(n + 31) {
 .course-chip--stuck b {
   color: var(--warn);
 }
+
+/* ── Страница участников: темп курса ─────────────────────────────────────── */
+.course-progress--mini {
+  height: 1.25rem;
+  min-width: 9rem;
+  max-width: 12rem;
+}
+
+.course-progress--mini .course-progress-label {
+  font-size: 0.72rem;
+}
+
+.progress-cell {
+  min-width: 9.5rem;
+}
+
+.speed-pill {
+  display: inline-block;
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.speed-pill--hi {
+  border-color: color-mix(in srgb, var(--solved-bg) 75%, var(--line) 25%);
+  background: color-mix(in srgb, var(--solved-bg) 30%, var(--surface) 70%);
+  color: var(--solved-text);
+}
+
+.speed-pill--lo {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line) 45%);
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface) 88%);
+  color: var(--warn);
+}
+
+.course-front-cell {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.signals-cell {
+  max-width: 22rem;
+}
+
+.signals-cell .course-chip {
+  margin: 0.1rem 0;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.sortable:hover {
+  color: var(--accent-strong);
+}
+
+th.sortable::after {
+  content: attr(data-dir);
+  font-size: 0.7rem;
+  margin-left: 0.2rem;
+}

@@ -4,7 +4,7 @@
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/{{.GroupSlug}}?token={{.Token}}">← К таблицам</a>
   </p>
-  <p class="empty-hint">Статистика по участникам группы (просмотр по токену). Активность и скорость — по посылкам Codeforces и Informatics. Данные на момент последней генерации.</p>
+  <p class="empty-hint">Темп курса по участникам (просмотр по токену). Скорость взвешена сложностью задач; ×1 — средний темп по курсу. Клик по заголовку — сортировка; по умолчанию — по скорости.</p>
 </section>
 
 <section class="contest-block">
@@ -16,33 +16,45 @@
     <span class="filter-count" id="participants-count"></span>
   </div>
   <div class="table-wrap">
-    <table class="standings-table data-table">
+    <table class="standings-table data-table" id="participants-table">
       <thead>
         <tr>
           <th class="student-col">Ученик</th>
-          <th class="count-col">Решено</th>
-          <th class="count-col">Сегодня</th>
-          <th class="count-col">Посылок</th>
-          <th class="count-col">За 7 дней</th>
-          <th class="count-col">За 30 дней</th>
-          <th class="count-col">Активных дней</th>
-          <th>Последняя активность</th>
+          <th class="sortable" data-sort="progress" title="Доля пройденного (по сложности задач)">Прогресс</th>
+          <th class="sortable count-col" data-sort="speed" title="×1 — средний темп по курсу; меньше — медленнее, больше — быстрее">Скорость</th>
+          <th class="sortable count-col" data-sort="recent" title="Скорость, взвешенная по времени: свежие занятия важнее">По времени</th>
+          <th class="sortable count-col" data-sort="hours" title="Активные часы на задачах курса (без перерывов между занятиями)">Часов</th>
+          <th class="sortable count-col" data-sort="weekly" title="Среднее по активным неделям за 8 недель">≈ч/нед</th>
+          <th title="Самая дальняя решённая задача курса">Сейчас на</th>
+          <th title="Застрял: активного времени уже в несколько раз больше типичного. Пропустил: были попытки, ушёл дальше.">Сигналы</th>
         </tr>
       </thead>
       <tbody id="participants-tbody">
         {{range .Rows}}
-        <tr data-filter-text="{{.PublicName}}">
+        <tr data-filter-text="{{.PublicName}}"
+            {{if .Course}}data-progress="{{.Course.Progress}}" data-speed="{{if .Course.LowData}}-1{{else}}{{.Course.Speed}}{{end}}" data-recent="{{.Course.SpeedRecent}}" data-hours="{{.Course.ActiveHours}}" data-weekly="{{.Course.WeeklyHours}}"{{else}}data-progress="-1" data-speed="-1" data-recent="-1" data-hours="-1" data-weekly="-1"{{end}}>
           <td class="student-name"><a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a></td>
-          {{if .HasProfile}}
-          <td class="solved-count">{{.Stats.TotalSolved}}</td>
-          <td class="solved-count">{{.Stats.SolvedToday}}</td>
-          <td class="solved-count">{{.Stats.TotalSubmissions}}</td>
-          <td class="solved-count">{{.Stats.Submissions7d}}</td>
-          <td class="solved-count">{{.Stats.Submissions30d}}</td>
-          <td class="solved-count">{{.Stats.ActiveDays}}</td>
-          <td>{{with contestGeneratedAt .Stats.LastActivity}}{{.}}{{else}}—{{end}}</td>
+          {{if .Course}}
+          <td class="progress-cell">
+            <div class="course-progress course-progress--mini" title="Решено {{.Course.SolvedCount}} из {{.Course.TotalCount}}">
+              <div class="course-progress-fill" style="width:{{pct .Course.Progress}}%;"></div>
+              <span class="course-progress-label">{{pct .Course.Progress}}%</span>
+            </div>
+          </td>
+          <td class="solved-count">
+            {{if .Course.LowData}}<span class="grade-weight" title="Нужно ≥5 решённых и ≥2 ч активного времени">мало данных</span>
+            {{else}}<span class="speed-pill {{if ge .Course.Speed 1.2}}speed-pill--hi{{else if lt .Course.Speed 0.8}}speed-pill--lo{{end}}">×{{numText .Course.Speed}}</span>{{end}}
+          </td>
+          <td class="solved-count">{{if .Course.SpeedRecent}}×{{numText .Course.SpeedRecent}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
+          <td class="solved-count">{{numText .Course.ActiveHours}}</td>
+          <td class="solved-count">{{if .Course.WeeklyHours}}≈{{numText .Course.WeeklyHours}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
+          <td class="course-front-cell" title="{{.Course.Front}}">{{.Course.Front}}</td>
+          <td class="signals-cell">
+            {{range .Course.Stuck}}<span class="course-chip course-chip--stuck" title="Застрял: {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}}">⚠ {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+            {{range .Course.Abandoned}}<span class="course-chip" title="Пропустил ({{numText .Minutes}} мин попыток){{if .Name}} · {{.Name}}{{end}}">↩ {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+          </td>
           {{else}}
-          <td class="solved-count" colspan="7"><span class="grade-weight">профиль появится после генерации</span></td>
+          <td colspan="7"><span class="grade-weight">{{if .HasProfile}}нет посылок по курсу{{else}}профиль появится после генерации{{end}}</span></td>
           {{end}}
         </tr>
         {{end}}
@@ -54,4 +66,42 @@
   <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">👥</span><p>В группе пока нет участников.</p></div>
   {{end}}
 </section>
+
+<script>
+  // Сортировка по клику на заголовок: числовые data-атрибуты строк; повторный
+  // клик меняет направление. «Нет данных» (-1) всегда внизу при убывании.
+  (function () {
+    var table = document.getElementById("participants-table");
+    if (!table) return;
+    var tbody = document.getElementById("participants-tbody");
+    var current = { key: "speed", desc: true };
+    function apply() {
+      var rows = [].slice.call(tbody.rows);
+      rows.sort(function (a, b) {
+        var va = parseFloat(a.getAttribute("data-" + current.key)) || -1;
+        var vb = parseFloat(b.getAttribute("data-" + current.key)) || -1;
+        if (va === vb) return 0;
+        // «Нет данных» — всегда в конец, независимо от направления.
+        if (va < 0) return 1;
+        if (vb < 0) return -1;
+        return current.desc ? vb - va : va - vb;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+      table.querySelectorAll("th.sortable").forEach(function (th) {
+        var on = th.getAttribute("data-sort") === current.key;
+        th.classList.toggle("sorted", on);
+        th.setAttribute("data-dir", on ? (current.desc ? "▼" : "▲") : "");
+      });
+    }
+    table.querySelectorAll("th.sortable").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var key = th.getAttribute("data-sort");
+        if (current.key === key) current.desc = !current.desc;
+        else current = { key: key, desc: true };
+        apply();
+      });
+    });
+    apply();
+  })();
+</script>
 {{end}}

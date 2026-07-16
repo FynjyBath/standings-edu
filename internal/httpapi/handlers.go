@@ -527,9 +527,38 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 				row.PublicName = profile.PublicName
 			}
 			row.Stats = profile.Stats
+			// Темп именно этого курса (группы) — основной контент страницы.
+			for i := range profile.CourseStats {
+				if profile.CourseStats[i].GroupSlug == slug {
+					cs := profile.CourseStats[i]
+					row.Course = &cs
+					break
+				}
+			}
 		}
 		rows = append(rows, row)
 	}
+
+	// Сортировка «по уму»: сначала ученики с посчитанной скоростью (по убыванию),
+	// затем «мало данных» (по прогрессу), затем без профиля — по имени.
+	sort.SliceStable(rows, func(a, b int) bool {
+		ra, rb := rows[a], rows[b]
+		ka, kb := participantSortKey(ra), participantSortKey(rb)
+		if ka != kb {
+			return ka < kb
+		}
+		switch ka {
+		case 0:
+			if ra.Course.Speed != rb.Course.Speed {
+				return ra.Course.Speed > rb.Course.Speed
+			}
+		case 1:
+			if ra.Course.Progress != rb.Course.Progress {
+				return ra.Course.Progress > rb.Course.Progress
+			}
+		}
+		return strings.ToLower(ra.PublicName) < strings.ToLower(rb.PublicName)
+	})
 
 	page := GroupParticipantsPageData{
 		PageTitle:  title + " — участники",
@@ -541,6 +570,19 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_participants.html", page); err != nil {
 		h.logger.Printf("ERROR render group participants slug=%s err=%v", slug, err)
+	}
+}
+
+// participantSortKey: 0 — есть скорость, 1 — есть курс-статы без скорости,
+// 2 — нет данных по курсу.
+func participantSortKey(r ParticipantRow) int {
+	switch {
+	case r.Course != nil && !r.Course.LowData && r.Course.Speed > 0:
+		return 0
+	case r.Course != nil:
+		return 1
+	default:
+		return 2
 	}
 }
 
@@ -905,6 +947,9 @@ type ParticipantRow struct {
 	PublicName string
 	HasProfile bool
 	Stats      domain.StudentActivityStats
+	// Course — темп именно этого курса (группы) из профиля ученика; nil — не
+	// посчитан (нет посылок или профиль ещё не сгенерирован).
+	Course *domain.StudentCourseStats
 }
 
 type GroupParticipantsPageData struct {

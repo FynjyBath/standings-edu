@@ -25,7 +25,7 @@
 
   <details style="margin-top:1rem;" id="intake-json-details">
     <summary class="empty-hint" style="cursor:pointer;">Режим эксперта (JSON)</summary>
-    <textarea id="intake-json" class="account-list" rows="14" spellcheck="false" style="margin-top:0.5rem;font-family:ui-monospace,monospace;"></textarea>
+    <div id="intake-json" class="admin-editor" style="margin-top:0.5rem;" aria-label="JSON editor"></div>
     <div class="admin-editor-tools" style="margin-top:0.4rem;">
       <button type="button" id="intake-json-apply" class="admin-btn admin-btn--secondary">Применить JSON к форме</button>
       <span id="intake-json-status" class="admin-editor-status"></span>
@@ -33,9 +33,15 @@
   </details>
 </section>
 
+<script src="/static/vendor/ace/ace.js"></script>
+<script src="/static/vendor/ace/mode-json.js"></script>
+<script src="/static/vendor/ace/theme-github.js"></script>
+<script src="/static/vendor/ace/theme-tomorrow_night.js"></script>
+
 <script>
   (function () {
-    var KNOWN_SITES = ["informatics", "codeforces", "acmp"];
+    var BASE_SITES = ["informatics", "codeforces", "acmp"];
+    var siteColumns = BASE_SITES.slice(); // + все сайты, встретившиеся в анкетах
     var RESERVED = { "": 1, id: 1, full_name: 1, public_name: 1, accounts: 1, group: 1, groups: 1, token: 1 };
 
     var listNode = document.getElementById("intake-list");
@@ -48,10 +54,53 @@
     var mergeBtn = document.getElementById("intake-merge");
     var previewNode = document.getElementById("intake-preview");
     var jsonDetails = document.getElementById("intake-json-details");
-    var jsonArea = document.getElementById("intake-json");
+    var jsonRoot = document.getElementById("intake-json");
     var jsonStatus = document.getElementById("intake-json-status");
 
+    // Режим эксперта: тот же ACE-редактор, что в JSON-редакторе админки.
+    // Инициализируется лениво при первом открытии details.
+    var jsonEditor = null;
+    function ensureJSONEditor() {
+      if (jsonEditor || !jsonRoot) return jsonEditor;
+      if (!window.ace) {
+        jsonStatus.textContent = "ACE editor не загрузился";
+        jsonStatus.className = "admin-editor-status admin-editor-status--error";
+        return null;
+      }
+      jsonEditor = ace.edit(jsonRoot);
+      jsonEditor.session.setMode("ace/mode/json");
+      jsonEditor.session.setUseWorker(false);
+      jsonEditor.setOptions({ fontSize: "14px", tabSize: 2, useSoftTabs: true, showPrintMargin: false, wrap: false });
+      function updateTheme() {
+        var isDark = document.documentElement.getAttribute("data-theme") === "dark";
+        jsonEditor.setTheme(isDark ? "ace/theme/tomorrow_night" : "ace/theme/github");
+      }
+      updateTheme();
+      new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+      return jsonEditor;
+    }
+
     var records = []; // сырые объекты анкет (неизвестные поля сохраняются как есть)
+
+    // Колонки аккаунтов: базовые сайты + все сайты, указанные хотя бы у одной
+    // анкеты (и как accounts[], и как строковые поля) — всё редактируемо.
+    function computeSiteColumns() {
+      var set = {};
+      BASE_SITES.forEach(function (s) { set[s] = true; });
+      records.forEach(function (rec) {
+        (rec.accounts || []).forEach(function (a) {
+          if (a && a.site) set[String(a.site).toLowerCase()] = true;
+        });
+        Object.keys(rec).forEach(function (k) {
+          var lk = k.toLowerCase();
+          if (!RESERVED[lk] && typeof rec[k] === "string") set[lk] = true;
+        });
+      });
+      siteColumns = BASE_SITES.slice();
+      Object.keys(set).sort().forEach(function (s) {
+        if (BASE_SITES.indexOf(s) === -1) siteColumns.push(s);
+      });
+    }
 
     function setStatus(msg, err) {
       statusNode.textContent = msg;
@@ -77,43 +126,38 @@
       if (!v && typeof rec[site] === "string") v = rec[site];
       return v || "";
     }
-    function extraSummary(rec) {
-      var parts = [];
-      (rec.accounts || []).forEach(function (a) {
-        if (a && KNOWN_SITES.indexOf(String(a.site).toLowerCase()) === -1) parts.push(a.site + ":" + a.account_id);
-      });
-      Object.keys(rec).forEach(function (k) {
-        var lk = k.toLowerCase();
-        if (RESERVED[lk] || KNOWN_SITES.indexOf(lk) !== -1) return;
-        if (typeof rec[k] === "string" && rec[k]) parts.push(k + ":" + rec[k]);
-      });
-      return parts;
-    }
     function groupsValue(rec) {
       if (Array.isArray(rec.groups)) return rec.groups.join(", ");
       if (typeof rec.group === "string") return rec.group;
       return "";
     }
 
-    // Правки формы записываются обратно в записи (структура сохраняется).
+    // Правки формы записываются обратно в записи. Пустое поле (или из одних
+    // пробелов) НИЧЕГО не меняет по этому полю — существующее значение записи
+    // остаётся как было (удалять можно через «Режим эксперта»).
     function writeBack() {
       listNode.querySelectorAll(".intake-card").forEach(function (card) {
         var rec = records[parseInt(card.dataset.idx, 10)];
         if (!rec) return;
-        rec.full_name = card.querySelector(".ic-name").value.trim();
-        var groups = card.querySelector(".ic-groups").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
-        delete rec.group;
-        rec.groups = groups;
-        // Известные сайты: нормализуем в accounts[], строковые поля убираем.
-        var accounts = (rec.accounts || []).filter(function (a) {
-          return a && KNOWN_SITES.indexOf(String(a.site).toLowerCase()) === -1;
-        });
-        KNOWN_SITES.forEach(function (site) {
+        var name = card.querySelector(".ic-name").value.trim();
+        if (name) rec.full_name = name;
+        var groupsRaw = card.querySelector(".ic-groups").value.trim();
+        if (groupsRaw) {
+          delete rec.group;
+          rec.groups = groupsRaw.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+        }
+        siteColumns.forEach(function (site) {
+          var input = card.querySelector('[data-site="' + site + '"]');
+          var v = input ? input.value.trim() : "";
+          if (!v) return; // пусто — поле записи не трогаем
+          // Устанавливаем аккаунт: заменяем в accounts[] запись этого сайта,
+          // строковый вариант поля убираем (то же значение в единой форме).
           delete rec[site];
-          var v = card.querySelector(".ic-" + site).value.trim();
-          if (v) accounts.push({ site: site, account_id: v });
+          rec.accounts = (rec.accounts || []).filter(function (a) {
+            return !(a && String(a.site).toLowerCase() === site);
+          });
+          rec.accounts.push({ site: site, account_id: v });
         });
-        rec.accounts = accounts;
       });
     }
     function collectJSON() {
@@ -123,20 +167,20 @@
 
     function render() {
       listNode.innerHTML = "";
+      computeSiteColumns();
+      var gridCols = "minmax(180px, 1.4fr) minmax(140px, 1fr) repeat(" + siteColumns.length + ", minmax(110px, 0.8fr))";
       records.forEach(function (rec, idx) {
         var card = document.createElement("div");
         card.className = "intake-card";
         card.dataset.idx = String(idx);
-        var extras = extraSummary(rec);
         card.innerHTML =
-          '<div class="intake-fields">' +
+          '<div class="intake-fields" style="grid-template-columns:' + gridCols + ';">' +
           '<label><span>ФИО</span><input type="text" class="ic-name" value="' + escapeHtml(rec.full_name || "") + '" /></label>' +
           '<label><span>Группы (через запятую)</span><input type="text" class="ic-groups" value="' + escapeHtml(groupsValue(rec)) + '" /></label>' +
-          KNOWN_SITES.map(function (site) {
-            return '<label><span>' + site + '</span><input type="text" class="ic-' + site + '" value="' + escapeHtml(siteValue(rec, site)) + '" /></label>';
+          siteColumns.map(function (site) {
+            return '<label><span>' + escapeHtml(site) + '</span><input type="text" data-site="' + escapeHtml(site) + '" value="' + escapeHtml(siteValue(rec, site)) + '" /></label>';
           }).join("") +
           "</div>" +
-          (extras.length ? '<div class="intake-extra">' + extras.map(function (e) { return "<code>" + escapeHtml(e) + "</code>"; }).join(" ") + "</div>" : "") +
           '<button type="button" class="admin-btn admin-btn--secondary intake-remove" title="Убрать анкету из merge">✕</button>';
         listNode.appendChild(card);
       });
@@ -239,11 +283,18 @@
 
     // Режим эксперта: JSON ↔ форма.
     jsonDetails.addEventListener("toggle", function () {
-      if (jsonDetails.open) jsonArea.value = collectJSON();
+      if (!jsonDetails.open) return;
+      var ed = ensureJSONEditor();
+      if (ed) {
+        ed.setValue(collectJSON(), -1);
+        ed.resize();
+      }
     });
     document.getElementById("intake-json-apply").addEventListener("click", function () {
+      var ed = ensureJSONEditor();
+      if (!ed) return;
       try {
-        var parsed = JSON.parse(jsonArea.value || "[]");
+        var parsed = JSON.parse(ed.getValue() || "[]");
         if (!Array.isArray(parsed)) throw new Error("ожидается JSON-массив анкет");
         records = parsed;
         render();

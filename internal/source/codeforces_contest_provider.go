@@ -68,6 +68,43 @@ func ParseCodeforcesContestID(rawURL string) (int, bool) {
 	return 0, false
 }
 
+// ParseCodeforcesProblemURL распознаёт ссылку на ОТДЕЛЬНУЮ задачу codeforces и
+// возвращает contest_id и индекс задачи (буква/номер). Формы:
+//   - /contest/<id>/problem/<idx>
+//   - /gym/<id>/problem/<idx>
+//   - /problemset/problem/<id>/<idx>
+func ParseCodeforcesProblemURL(rawURL string) (contestID int, index string, ok bool) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return 0, "", false
+	}
+	if host := strings.ToLower(u.Hostname()); host != "codeforces.com" && host != "www.codeforces.com" {
+		return 0, "", false
+	}
+	seg := make([]string, 0)
+	for _, s := range strings.Split(u.Path, "/") {
+		if s = strings.TrimSpace(s); s != "" {
+			seg = append(seg, s)
+		}
+	}
+	// /problemset/problem/<id>/<idx>
+	if len(seg) == 4 && strings.EqualFold(seg[0], "problemset") && strings.EqualFold(seg[1], "problem") {
+		if id, err := strconv.Atoi(seg[2]); err == nil && id > 0 && seg[3] != "" {
+			return id, seg[3], true
+		}
+		return 0, "", false
+	}
+	// /contest/<id>/problem/<idx> или /gym/<id>/problem/<idx>
+	for i := 0; i+3 < len(seg); i++ {
+		if (strings.EqualFold(seg[i], "contest") || strings.EqualFold(seg[i], "gym")) && strings.EqualFold(seg[i+2], "problem") {
+			if id, err := strconv.Atoi(seg[i+1]); err == nil && id > 0 && seg[i+3] != "" {
+				return id, seg[i+3], true
+			}
+		}
+	}
+	return 0, "", false
+}
+
 func (p *CodeforcesContestProvider) BuildStandings(ctx context.Context, input ContestProviderInput) (domain.GeneratedContestStandings, error) {
 	if p == nil || p.client == nil {
 		return domain.GeneratedContestStandings{}, fmt.Errorf("codeforces contest provider client is not configured")

@@ -61,6 +61,12 @@ type StatementExpander interface {
 	FetchStatementProblems(ctx context.Context, statementID int) ([]InformaticsStatementProblem, error)
 }
 
+// InformaticsTaskTitler реализуют клиенты informatics — возвращает название
+// отдельной задачи (по chapterid) для подсказки в заголовке колонки.
+type InformaticsTaskTitler interface {
+	FetchTaskTitle(ctx context.Context, chapterID int) (string, error)
+}
+
 // TaskURLObserver реализуют клиенты, которым нужно заранее знать ссылки задач,
 // чтобы решить, что скачивать (ejudge: из ссылок берутся contest_id для забора
 // прогонов). Билд сообщает каждую ссылку задачи до сбора статусов учеников.

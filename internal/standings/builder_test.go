@@ -106,7 +106,7 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 
 	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
 	students := []domain.Student{{ID: "s1", PublicName: "Ученик"}}
-	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
+	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil)
 
 	if out.FrozenAt == nil || !out.FrozenAt.Equal(freezeAt) {
 		t.Fatalf("FrozenAt not set: %+v", out.FrozenAt)
@@ -132,7 +132,7 @@ func TestBuildTaskContestStandingsFrozen(t *testing.T) {
 
 	// Без заморозки: всё видно, поздняя задача после конца — дорешка.
 	contest.FreezeTime = nil
-	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
+	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil)
 	if out.FrozenAt != nil {
 		t.Fatalf("FrozenAt must be nil without freeze: %+v", out.FrozenAt)
 	}
@@ -184,7 +184,7 @@ func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
 	}
 
 	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
-	out := b.buildTaskContestStandings(contest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
+	out := b.buildTaskContestStandings(contest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil)
 
 	if out.ZeroPenalty != 5 {
 		t.Fatalf("contest zero_penalty not stored: %+v", out.ZeroPenalty)
@@ -218,7 +218,7 @@ func TestBuildTaskContestStandingsZeroPenaltyAndPracticeScores(t *testing.T) {
 	// edu-контест: штраф игнорируется, Penalty пуст.
 	eduContest := contest
 	eduContest.ScoreSystem = domain.ScoreSystemEdu
-	out = b.buildTaskContestStandings(eduContest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
+	out = b.buildTaskContestStandings(eduContest, []domain.Student{{ID: "s1", PublicName: "У"}}, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil)
 	if out.ZeroPenalty != 0 || out.Rows[0].Penalty != nil {
 		t.Fatalf("edu must ignore zero_penalty: %+v", out.Rows[0].Penalty)
 	}
@@ -303,7 +303,7 @@ func TestBuildTaskContestAcceptedMark(t *testing.T) {
 	st.solved[u[0]] = struct{}{}
 	st.solved[u[1]] = struct{}{}
 	st.okSolved[u[1]] = struct{}{}
-	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil)
+	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil)
 	row := out.Rows[0]
 	if row.Accepted == nil || !row.Accepted[0] || row.Accepted[1] {
 		t.Fatalf("no-window accepted marks wrong: %+v", row.Accepted)
@@ -317,7 +317,7 @@ func TestBuildTaskContestAcceptedMark(t *testing.T) {
 	st2 := newAccountStatuses()
 	st2.timed[u[0]] = []source.TimedSubmission{{At: inTime, Solved: true, Accepted: true}}
 	st2.timed[u[1]] = []source.TimedSubmission{{At: inTime, Solved: true, Accepted: false}}
-	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st2}, nil, nil, nil)
+	out = b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st2}, nil, nil, nil, nil)
 	row = out.Rows[0]
 	if row.Accepted == nil || !row.Accepted[0] || row.Accepted[1] {
 		t.Fatalf("windowed accepted marks wrong: %+v", row.Accepted)

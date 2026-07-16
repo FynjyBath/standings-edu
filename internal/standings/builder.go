@@ -396,7 +396,8 @@ func (b *Builder) buildGroupStandings(
 			expanded := b.expandCodeforcesContestRefs(ctx, data, pg.group, contest, pg.students)
 			statementRefs := b.expandInformaticsStatementRefs(ctx, pg.group, contest)
 			ejudgeRefs := b.expandEjudgeContestRefs(ctx, pg.group, contest)
-			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs, ejudgeRefs)
+			infoTaskTitles := b.fetchInformaticsTaskTitles(ctx, pg.group, contest)
+			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs, ejudgeRefs, infoTaskTitles)
 			generated.GeneratedAt = &now
 			out.Contests = append(out.Contests, generated)
 		case domain.ContestTypeProvider:
@@ -543,7 +544,13 @@ func (b *Builder) expandCodeforcesContestRefs(ctx context.Context, data *domain.
 	seen := make(map[int]struct{})
 	for _, subcontest := range contest.Subcontests {
 		for _, rawTaskURL := range subcontest.Tasks {
-			if cid, ok := source.ParseCodeforcesContestID(rawTaskURL); ok {
+			cid, ok := source.ParseCodeforcesContestID(rawTaskURL)
+			if !ok {
+				// Отдельная ссылка на задачу CF (…/problem/…): разворачиваем её
+				// контест, чтобы взять название задачи для подсказки.
+				cid, _, ok = source.ParseCodeforcesProblemURL(rawTaskURL)
+			}
+			if ok {
 				if _, dup := seen[cid]; !dup {
 					seen[cid] = struct{}{}
 					ids = append(ids, cid)
@@ -656,6 +663,52 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 			})
 		}
 		out[sid] = refs
+	}
+	return out
+}
+
+// fetchInformaticsTaskTitles для каждой ссылки на ОТДЕЛЬНУЮ задачу informatics
+// (chapterid) читает её название со страницы задачи. Ключ — исходная ссылка
+// задачи. Пусто/nil — названий нет (клиент не настроен или chapterid не распознан).
+func (b *Builder) fetchInformaticsTaskTitles(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[string]string {
+	type ref struct {
+		url     string
+		chapter int
+	}
+	refs := make([]ref, 0)
+	seen := make(map[string]struct{})
+	for _, subcontest := range contest.Subcontests {
+		for _, rawTaskURL := range subcontest.Tasks {
+			chapter, ok := source.ParseInformaticsTaskChapterID(rawTaskURL)
+			if !ok {
+				continue
+			}
+			if _, dup := seen[rawTaskURL]; dup {
+				continue
+			}
+			seen[rawTaskURL] = struct{}{}
+			refs = append(refs, ref{url: rawTaskURL, chapter: chapter})
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(refs))
+	for _, r := range refs {
+		_, client, ok := b.sources.ResolveSiteByTaskURL(r.url)
+		titler, canTitle := client.(source.InformaticsTaskTitler)
+		if !ok || !canTitle {
+			continue
+		}
+		title, err := titler.FetchTaskTitle(ctx, r.chapter)
+		if err != nil {
+			b.logger.Printf("WARN group=%s contest=%s informatics task title chapter=%d failed: %v", group.Slug, contest.ID, r.chapter, err)
+			continue
+		}
+		if t := strings.TrimSpace(title); t != "" {
+			out[r.url] = t
+		}
 	}
 	return out
 }
@@ -802,7 +855,7 @@ func linkableAccounts(accounts []domain.Account) map[string]string {
 	return out
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]expandedEjudgeProblem) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]expandedEjudgeProblem, infoTaskTitles map[string]string) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	var windowStart, windowEnd time.Time
@@ -917,12 +970,34 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 				continue
 			}
 
+			// Отдельная ссылка на задачу CF (…/problem/…): имя берём из
+			// развёрнутого контеста по индексу задачи.
+			if cid, index, ok := source.ParseCodeforcesProblemURL(rawTaskURL); ok {
+				name := ""
+				if cs := expanded[cid]; cs != nil {
+					for _, t := range cs.Tasks {
+						if strings.EqualFold(t.Label, index) {
+							name = t.Name
+							break
+						}
+					}
+				}
+				addNormalTask(rawTaskURL, false, name)
+				continue
+			}
+
 			// Сборник informatics: разворачиваем в отдельные задачи-колонки
 			// (ссылка на саму задачу, без сборника). Каждая — обычная задача.
 			if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
 				for _, problem := range statementRefs[sid] {
 					addNormalTask(problem.URL, problem.Hidden, problem.Name)
 				}
+				continue
+			}
+
+			// Отдельная задача informatics (chapterid): имя — с её страницы.
+			if _, ok := source.ParseInformaticsTaskChapterID(rawTaskURL); ok {
+				addNormalTask(rawTaskURL, false, infoTaskTitles[rawTaskURL])
 				continue
 			}
 
@@ -1120,7 +1195,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	if frozen {
 		fullContest := contest
 		fullContest.FreezeTime = nil
-		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs, ejudgeRefs)
+		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs, ejudgeRefs, infoTaskTitles)
 		out.RowsFull = full.Rows
 	}
 

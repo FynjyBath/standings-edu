@@ -951,7 +951,73 @@ var (
 	informaticsWSRe            = regexp.MustCompile(`\s+`)
 	// Скрытая (затемнённая) задача сборника — название в <span class="dimmed_text">.
 	informaticsHiddenProblemRe = regexp.MustCompile(`(?i)dimmed_text`)
+	// Заголовок страницы задачи: «<title>Задача №1209. Клавиатура</title>» —
+	// вытаскиваем название после «Задача №N.».
+	informaticsTaskTitleRe = regexp.MustCompile(`(?is)<title>\s*Задача\s*№\s*\d+\s*\.?\s*(.*?)\s*</title>`)
 )
+
+// ParseInformaticsTaskChapterID распознаёт ссылку на ОТДЕЛЬНУЮ задачу informatics
+// (mod/statements/view.php?chapterid=<N>) и возвращает её chapterid. Ссылка на
+// сборник (id без chapterid) сюда не подходит — для неё есть отдельный разбор.
+func ParseInformaticsTaskChapterID(rawURL string) (int, bool) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return 0, false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "informatics.msk.ru", "www.informatics.msk.ru",
+		"informatics.mccme.ru", "www.informatics.mccme.ru":
+	default:
+		return 0, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(u.Path), "/mod/statements/view.php") {
+		return 0, false
+	}
+	id, err := strconv.Atoi(strings.TrimSpace(u.Query().Get("chapterid")))
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+// FetchTaskTitle читает страницу задачи informatics и возвращает её название
+// (для подсказки в заголовке колонки). Пустая строка — название не распозналось.
+func (c *InformaticsAPIClient) FetchTaskTitle(ctx context.Context, chapterID int) (string, error) {
+	if chapterID <= 0 {
+		return "", fmt.Errorf("informatics chapter id must be > 0")
+	}
+	if err := c.ensureLoggedIn(ctx, false); err != nil {
+		return "", err
+	}
+	pageURL := fmt.Sprintf("%s/mod/statements/view.php?chapterid=%d", c.baseURL, chapterID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return "", err
+	}
+	res, err := doHTTPWithRetry(c.httpClient, req, defaultHTTPRetryAttempts)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 1024))
+		return "", fmt.Errorf("informatics task status=%d body=%q", res.StatusCode, strings.TrimSpace(string(body)))
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	return parseInformaticsTaskTitle(body), nil
+}
+
+// parseInformaticsTaskTitle извлекает название задачи из <title> страницы.
+func parseInformaticsTaskTitle(body []byte) string {
+	m := informaticsTaskTitleRe.FindSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(m[1]))
+}
 
 // FetchStatementProblems разворачивает сборник informatics (id) в упорядоченный
 // список задач: читает страницу сборника и разбирает оглавление. Активная

@@ -1994,3 +1994,90 @@ table.rows-collapsed tbody tr:nth-child(n + 31) {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ── Темп курса в профиле ученика ────────────────────────────────────────── */
+.course-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.course-progress {
+  position: relative;
+  flex: 1 1 16rem;
+  max-width: 30rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent 30%);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.course-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 55%, var(--solved-bg) 45%),
+    var(--solved-bg));
+  border-radius: 999px;
+}
+
+.course-progress-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.course-front {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.course-signal {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.course-signal--stuck {
+  color: var(--warn);
+}
+
+.course-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent 30%);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.course-chip a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.course-chip a:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.course-chip--stuck {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line) 45%);
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface) 88%);
+}
+
+.course-chip--stuck b {
+  color: var(--warn);
+}

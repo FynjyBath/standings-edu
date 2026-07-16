@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,6 +65,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"gradeText":               gradeText,
 			"grade2Text":              grade2Text,
 			"numText":                 numText,
+			"pct":                     func(v float64) int { return int(math.Round(v * 100)) },
 			"submissionTime":          submissionTime,
 			"submissionLink":          submissionLink,
 			"siteName":                siteName,

@@ -94,7 +94,26 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 		result[pg.group.Slug] = standings
 	}
 
-	profiles := b.buildStudentProfiles(students, statusByStudent, time.Now().UTC())
+	now := time.Now().UTC()
+	profiles := b.buildStudentProfiles(students, statusByStudent, now)
+
+	// Темп курса по каждой группе — в профили учеников (для преподавателя).
+	for _, pg := range prepared {
+		std, ok := result[pg.group.Slug]
+		if !ok {
+			continue
+		}
+		stats := computeCourseStats(std, pg.students, statusByStudent, now)
+		for sid, cs := range stats {
+			if p := profiles[sid]; p != nil && cs != nil {
+				p.CourseStats = append(p.CourseStats, *cs)
+			}
+		}
+	}
+	for _, p := range profiles {
+		sort.Slice(p.CourseStats, func(i, j int) bool { return p.CourseStats[i].GroupSlug < p.CourseStats[j].GroupSlug })
+	}
+
 	return result, profiles, nil
 }
 

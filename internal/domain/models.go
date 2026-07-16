@@ -921,6 +921,47 @@ type GeneratedGroupSolvedSummaryRow struct {
 // generated/students/<id>.json. Лента и скорость строятся по посылкам с
 // временем (Codeforces, Informatics); ACMP времени не отдаёт — по нему только
 // счётчики «решено/попыток».
+// StudentCourseStats — темп прохождения курса (страницы группы) учеником:
+// сессии по посылкам, эмпирические веса задач, взвешенная скорость. Модель и
+// параметры описаны в docs/course_speed.pdf. Видна только преподавателю.
+type StudentCourseStats struct {
+	GroupSlug  string `json:"group_slug"`
+	GroupTitle string `json:"group_title"`
+	// Progress — доля пройденного по весу, 0..1.
+	Progress float64 `json:"progress"`
+	// SolvedCount/TotalCount — решено задач курса / всего задач с весом.
+	SolvedCount int `json:"solved_count"`
+	TotalCount  int `json:"total_count"`
+	// Speed — скорость за всё время (×типичного темпа когорты); ноль — мало данных.
+	Speed float64 `json:"speed,omitempty"`
+	// SpeedRecent — «текущая форма» с экспоненциальным забыванием (полупериод 28 дней).
+	SpeedRecent float64 `json:"speed_recent,omitempty"`
+	// ActiveHours — активное время на задачах курса, часов.
+	ActiveHours float64 `json:"active_hours"`
+	// WeeklyHours — типичная недельная активность (медиана за 8 недель), часов.
+	WeeklyHours float64 `json:"weekly_hours,omitempty"`
+	// ForecastWeeks — прогноз до конца курса (недель); ноль — не оценить.
+	ForecastWeeks float64 `json:"forecast_weeks,omitempty"`
+	// Front — самая дальняя решённая задача курса («Контест · A»).
+	Front string `json:"front,omitempty"`
+	// Stuck — текущие «застревания»: активного времени уже больше z*×типичного.
+	Stuck []CourseTaskSignal `json:"stuck,omitempty"`
+	// Abandoned — задачи с попытками, брошенные (дальше решено ≥2 задач курса).
+	Abandoned []CourseTaskSignal `json:"abandoned,omitempty"`
+	// LowData — данных мало (активного времени/решённых меньше порога): скорость
+	// не показываем, только прогресс.
+	LowData bool `json:"low_data,omitempty"`
+}
+
+// CourseTaskSignal — сигнальная задача курса для преподавателя.
+type CourseTaskSignal struct {
+	Label   string  `json:"label"` // «Контест · A»
+	Name    string  `json:"name,omitempty"`
+	URL     string  `json:"url,omitempty"`
+	Ratio   float64 `json:"ratio,omitempty"`   // T_ij / w_j (для застреваний)
+	Minutes float64 `json:"minutes,omitempty"` // активное время на задаче
+}
+
 type GeneratedStudentProfile struct {
 	StudentID     string                 `json:"student_id"`
 	PublicName    string                 `json:"public_name"`
@@ -932,6 +973,8 @@ type GeneratedStudentProfile struct {
 	Stats         StudentActivityStats   `json:"stats"`
 	DailyActivity []StudentDayCount      `json:"daily_activity,omitempty"`
 	Recent        []StudentSubmission    `json:"recent,omitempty"`
+	// CourseStats — темп по каждому курсу (группе) ученика; для преподавателя.
+	CourseStats []StudentCourseStats `json:"course_stats,omitempty"`
 }
 
 // StudentSubmission — одна посылка ученика с временем (для ленты).

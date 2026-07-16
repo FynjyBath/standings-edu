@@ -7,11 +7,11 @@
   <h2>Действия</h2>
   <div class="admin-actions">
     <form method="post" action="/api/admin/actions/generate">
-      <button type="submit" class="admin-btn">Сгенерировать все таблицы</button>
+      <button type="submit" class="admin-btn">Сгенерировать таблицы</button>
     </form>
     <form method="post" action="/api/admin/actions/generate">
       <input type="hidden" name="refresh_tasks" value="1" />
-      <button type="submit" class="admin-btn admin-btn--secondary" title="То же, но состав задач (оглавления сборников, названия) перечитывается с сайтов, а не из кэша. Медленнее; нужно после изменения сборников.">Сгенерировать + обновить задачи</button>
+      <button type="submit" class="admin-btn admin-btn--secondary" title="То же, но состав задач (оглавления сборников, названия) перечитывается с сайтов, а не из кэша. Медленнее; нужно после изменения сборников.">Сгенерировать таблицы + обновить список задач</button>
     </form>
     <button type="button" id="admin-intake-prepare" class="admin-btn">Редактировать анкеты для merge</button>
     <a class="admin-btn admin-btn--secondary" href="/standings/admin/export">Экспорт</a>

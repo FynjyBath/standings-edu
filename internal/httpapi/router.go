@@ -69,6 +69,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /standings/{group_name}/participants", handlers.GroupParticipantsPage)
 	mux.HandleFunc("GET /standings/{group_name}/student", handlers.GroupStudentProfilePage)
 	mux.HandleFunc("GET /standings/{group_name}/summary", handlers.GroupSummaryAllPage)
+	mux.HandleFunc("GET /standings/{group_name}/summary-data", handlers.GroupSummaryData)
+	mux.HandleFunc("GET /standings/{group_name}/contest-fragment", handlers.GroupContestFragment)
 	mux.HandleFunc("GET /standings/{group_name}/summary-edu", handlers.GroupSummaryEduPage)
 	mux.HandleFunc("GET /standings/{group_name}/summary-olymp", handlers.GroupSummaryOlympPage)
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {

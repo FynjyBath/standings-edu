@@ -21,7 +21,6 @@
   <p class="empty-hint" id="summary-empty" style="display:none;">Нет контестов для выбранной таблицы.</p>
 </section>
 
-<script id="summary-data" type="application/json">{{.StandingsJSON}}</script>
 <script>
   (function () {
     var root = document.getElementById("summary-root");
@@ -31,21 +30,25 @@
       return;
     }
 
-    var raw = document.getElementById("summary-data");
-    if (!raw) {
-      empty.style.display = "";
-      return;
-    }
+    // Данные грузятся отдельным запросом (не встраиваются в HTML): страница
+    // лёгкая, JSON жмётся и кэшируется по обычным правилам.
+    var pageSlug = {{.GroupSlug}};
+    var pageToken = root.getAttribute("data-token") || "";
+    empty.textContent = "Загрузка данных…";
+    empty.style.display = "";
+    fetch("/standings/" + encodeURIComponent(pageSlug) + "/summary-data" + (pageToken ? "?token=" + encodeURIComponent(pageToken) : ""))
+      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(function (standings) {
+        empty.style.display = "none";
+        empty.textContent = "Нет контестов для выбранной таблицы.";
+        initSummary(standings);
+      })
+      .catch(function (err) {
+        empty.textContent = "Ошибка загрузки данных сводной: " + err.message;
+        empty.style.display = "";
+      });
 
-    var standings;
-    try {
-      standings = JSON.parse(raw.textContent || "{}");
-    } catch (e) {
-      empty.textContent = "Ошибка чтения данных summary.";
-      empty.style.display = "";
-      return;
-    }
-
+    function initSummary(standings) {
     var ALL_TAB = "Все"; // "Все"
     var allContests = Array.isArray(standings.contests) ? standings.contests : [];
 
@@ -550,6 +553,7 @@
     }
 
     selectTab(activeTab);
+    }
   })();
 </script>
 {{end}}

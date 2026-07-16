@@ -1,10 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -46,6 +46,8 @@ type Handlers struct {
 	// (students.json, group.json, contests.json группы, grades_manual, intake
 	// merge), чтобы два одновременных запроса не потеряли запись друг друга.
 	dataMu sync.Mutex
+	// pageCache — готовый HTML публичных страниц групп (см. page_cache.go).
+	pageCache groupPageCache
 }
 
 // SerializeDataWrite оборачивает мутирующий data-файлы админ-хендлер общим
@@ -361,6 +363,21 @@ func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+
+	// Публичный вид (без токена) отдаём из кэша готового HTML, если входы не
+	// менялись; серверное время в HTML подставляется актуальное.
+	cacheVersion := ""
+	if token == "" {
+		if v, ok := h.groupPageVersion(slug); ok {
+			cacheVersion = v
+			if html, hit := h.cachedGroupPage(slug, v); hit {
+				writeCachedHTML(w, html)
+				return
+			}
+		}
+	}
+
 	standings, err := h.loadGroupStandings(slug)
 	if err != nil {
 		if errors.Is(err, storage.ErrInvalidGroupSlug) {
@@ -377,7 +394,6 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	unfrozen := h.applyFreezeView(&standings, slug, r)
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	tokenValid := token != "" && h.groupTokenValid(slug, token)
 	page := GroupPageData{
 		PageTitle:       standings.GroupTitle,
@@ -391,9 +407,76 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 		page.Token = token
 		h.juryStandingsExtras(slug, &page)
 	}
+
+	if cacheVersion != "" {
+		// Рендер в буфер: кладём в кэш и отдаём с актуальным server-now.
+		rec := &bufferingResponseWriter{header: make(http.Header)}
+		if err := h.renderer.Render(rec, http.StatusOK, "group_standings.html", page); err != nil {
+			h.logger.Printf("ERROR render group standings slug=%s err=%v", slug, err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		h.storeGroupPage(slug, cacheVersion, nextTimeBoundary(&standings, time.Now()), rec.buf.Bytes())
+		writeCachedHTML(w, rec.buf.Bytes())
+		return
+	}
+
 	if err := h.renderer.Render(w, http.StatusOK, "group_standings.html", page); err != nil {
 		h.logger.Printf("ERROR render group standings slug=%s err=%v", slug, err)
 	}
+}
+
+// bufferingResponseWriter копит ответ в память (для кэша готового HTML).
+type bufferingResponseWriter struct {
+	header http.Header
+	buf    bytes.Buffer
+	status int
+}
+
+func (b *bufferingResponseWriter) Header() http.Header         { return b.header }
+func (b *bufferingResponseWriter) WriteHeader(code int)        { b.status = code }
+func (b *bufferingResponseWriter) Write(p []byte) (int, error) { return b.buf.Write(p) }
+
+// GroupContestFragment отдаёт HTML-блок одной таблицы контеста для ленивой
+// подгрузки на странице группы. Только публичный вид: ленивые заглушки
+// рендерятся лишь без токена (жюри получает полную страницу сразу).
+func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	contestID := strings.TrimSpace(r.URL.Query().Get("id"))
+	if contestID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	standings, err := h.loadGroupStandings(slug)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidGroupSlug) || errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		h.logger.Printf("ERROR load contest fragment slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	h.applyFreezeView(&standings, slug, r)
+
+	for i := range standings.Contests {
+		if standings.Contests[i].ID != contestID {
+			continue
+		}
+		data := map[string]any{
+			"Contest":       standings.Contests[i],
+			"TokenValid":    false,
+			"JuryCanManage": false,
+			"JuryKonduits":  map[string]bool(nil),
+			"GroupSlug":     standings.GroupSlug,
+			"Token":         "",
+		}
+		if err := h.renderer.RenderFragment(w, http.StatusOK, "group_standings.html", "contestBlockBody", data); err != nil {
+			h.logger.Printf("ERROR render contest fragment slug=%s id=%s err=%v", slug, contestID, err)
+		}
+		return
+	}
+	http.NotFound(w, r)
 }
 
 // combinedMemberTitles возвращает названия групп-участниц объединённой группы
@@ -619,12 +702,6 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 	}
 
 	unfrozen := h.applyFreezeView(&standings, slug, r)
-	standingsJSON, err := json.Marshal(standings)
-	if err != nil {
-		h.logger.Printf("ERROR marshal standings summary slug=%s mode=%s err=%v", slug, mode, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 
 	modeTitle := "summary-edu"
 	if mode == "olymp" {
@@ -633,14 +710,15 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		modeTitle = "summary"
 	}
 
+	// Данные сводной страница загружает отдельным запросом (/summary-data):
+	// HTML остаётся лёгким, а JSON жмётся и грузится параллельно.
 	page := GroupSummaryPageData{
-		PageTitle:     standings.GroupTitle + " — " + modeTitle,
-		GroupTitle:    standings.GroupTitle,
-		GroupSlug:     standings.GroupSlug,
-		Mode:          mode,
-		StandingsJSON: template.JS(string(standingsJSON)),
-		Footer:        h.buildFooterInfo(),
-		UnfrozenView:  unfrozen,
+		PageTitle:    standings.GroupTitle + " — " + modeTitle,
+		GroupTitle:   standings.GroupTitle,
+		GroupSlug:    standings.GroupSlug,
+		Mode:         mode,
+		Footer:       h.buildFooterInfo(),
+		UnfrozenView: unfrozen,
 	}
 	if unfrozen {
 		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
@@ -648,6 +726,24 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 	if err := h.renderer.Render(w, http.StatusOK, "group_summary.html", page); err != nil {
 		h.logger.Printf("ERROR render group summary slug=%s mode=%s err=%v", slug, mode, err)
 	}
+}
+
+// GroupSummaryData отдаёт JSON standings для сводной — ровно те же данные, что
+// раньше встраивались в HTML сводной (с теми же правилами видимости по токену).
+func (h *Handlers) GroupSummaryData(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	standings, err := h.loadGroupStandings(slug)
+	if err != nil {
+		if errors.Is(err, storage.ErrInvalidGroupSlug) || errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		h.logger.Printf("ERROR load summary data slug=%s err=%v", slug, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	h.applyFreezeView(&standings, slug, r)
+	writeJSON(w, http.StatusOK, standings)
 }
 
 func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
@@ -831,12 +927,11 @@ type GroupGradesPageData struct {
 }
 
 type GroupSummaryPageData struct {
-	PageTitle     string
-	GroupTitle    string
-	GroupSlug     string
-	Mode          string
-	StandingsJSON template.JS
-	Footer        FooterInfo
-	UnfrozenView  bool
-	Token         string
+	PageTitle    string
+	GroupTitle   string
+	GroupSlug    string
+	Mode         string
+	Footer       FooterInfo
+	UnfrozenView bool
+	Token        string
 }

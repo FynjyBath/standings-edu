@@ -5,10 +5,12 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"standings-edu/internal/domain"
@@ -27,6 +29,18 @@ func loadMoscowLocation() *time.Location {
 type TemplateRenderer struct {
 	templatesDir string
 	funcMap      template.FuncMap
+
+	// Кэш распарсенных наборов шаблонов по имени страницы. Инвалидация — по
+	// отпечатку mtime/size всех входящих файлов, поэтому правка шаблона
+	// подхватывается без рестарта, как и раньше, но парсинг не повторяется на
+	// каждый запрос.
+	cacheMu sync.RWMutex
+	cache   map[string]cachedTemplate
+}
+
+type cachedTemplate struct {
+	fingerprint string
+	tmpl        *template.Template
 }
 
 func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
@@ -56,18 +70,23 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"dayLabel":                dayLabel,
 			"sub":                     func(a, b int) int { return a - b },
 			"barHeight":               barHeight,
+			// dict собирает map для передачи нескольких значений в {{template}}
+			// (контекст выносимых блоков, напр. таблицы контеста).
+			"dict": func(kv ...any) map[string]any {
+				m := make(map[string]any, len(kv)/2)
+				for i := 0; i+1 < len(kv); i += 2 {
+					if k, ok := kv[i].(string); ok {
+						m[k] = kv[i+1]
+					}
+				}
+				return m
+			},
 		},
 	}
 }
 
 func (r *TemplateRenderer) Render(w http.ResponseWriter, statusCode int, pageTemplate string, data any) error {
-	files := []string{filepath.Join(r.templatesDir, "layout.html")}
-	// Общие partial-шаблоны (переиспользуемые блоки, напр. форма контеста).
-	partials, _ := filepath.Glob(filepath.Join(r.templatesDir, "*.partial.html"))
-	files = append(files, partials...)
-	files = append(files, filepath.Join(r.templatesDir, pageTemplate))
-
-	tmpl, err := template.New("layout.html").Funcs(r.funcMap).ParseFiles(files...)
+	tmpl, err := r.load(pageTemplate)
 	if err != nil {
 		// Ошибка парсинга (например, шаблоны новее бинарника и используют
 		// незнакомую функцию) — отвечаем явной 500, а не пустой страницей.
@@ -81,6 +100,64 @@ func (r *TemplateRenderer) Render(w http.ResponseWriter, statusCode int, pageTem
 		return fmt.Errorf("render template: %w", err)
 	}
 	return nil
+}
+
+// RenderFragment исполняет отдельный define из набора страницы pageTemplate без
+// layout-обёртки (для отдаваемых по частям кусков страницы, напр. таблицы
+// контеста при ленивой подгрузке).
+func (r *TemplateRenderer) RenderFragment(w http.ResponseWriter, statusCode int, pageTemplate, defineName string, data any) error {
+	tmpl, err := r.load(pageTemplate)
+	if err != nil {
+		http.Error(w, "internal error: template parse failed", http.StatusInternalServerError)
+		return fmt.Errorf("parse templates: %w", err)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(statusCode)
+	if err := tmpl.ExecuteTemplate(w, defineName, data); err != nil {
+		return fmt.Errorf("render fragment %s: %w", defineName, err)
+	}
+	return nil
+}
+
+// load возвращает распарсенный набор шаблонов страницы из кэша; отпечаток по
+// mtime/size файлов, поэтому изменения на диске подхватываются автоматически.
+func (r *TemplateRenderer) load(pageTemplate string) (*template.Template, error) {
+	files := []string{filepath.Join(r.templatesDir, "layout.html")}
+	// Общие partial-шаблоны (переиспользуемые блоки, напр. форма контеста).
+	partials, _ := filepath.Glob(filepath.Join(r.templatesDir, "*.partial.html"))
+	files = append(files, partials...)
+	files = append(files, filepath.Join(r.templatesDir, pageTemplate))
+
+	var fp strings.Builder
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			fp.WriteString(f + "|missing;")
+			continue
+		}
+		fmt.Fprintf(&fp, "%s|%d|%d;", f, info.Size(), info.ModTime().UnixNano())
+	}
+	fingerprint := fp.String()
+
+	r.cacheMu.RLock()
+	if c, ok := r.cache[pageTemplate]; ok && c.fingerprint == fingerprint {
+		r.cacheMu.RUnlock()
+		return c.tmpl, nil
+	}
+	r.cacheMu.RUnlock()
+
+	tmpl, err := template.New("layout.html").Funcs(r.funcMap).ParseFiles(files...)
+	if err != nil {
+		return nil, err
+	}
+
+	r.cacheMu.Lock()
+	if r.cache == nil {
+		r.cache = make(map[string]cachedTemplate)
+	}
+	r.cache[pageTemplate] = cachedTemplate{fingerprint: fingerprint, tmpl: tmpl}
+	r.cacheMu.Unlock()
+	return tmpl, nil
 }
 
 // TaskCell — подготовленная к рендеру ячейка задачи в строке standings.

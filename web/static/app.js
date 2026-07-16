@@ -178,13 +178,48 @@
     // контест не подсвечиваем по просьбе: без scroll-spy и без is-current.
   }
 
+  // ── 4. Свёртка длинных таблиц ────────────────────────────────────────────
+  // <table data-collapse-rows="30">: если строк больше порога — показываются
+  // первые 30 и кнопка «Показать всех (N)». Работает и для таблиц с двумя tbody
+  // (обычный вид/без дорешки): порог применяется к каждому tbody через CSS.
+  function initRowCollapse(scope) {
+    var tables = (scope || document).querySelectorAll("table[data-collapse-rows]");
+    [].forEach.call(tables, function (table) {
+      if (table.dataset.collapseReady) return;
+      table.dataset.collapseReady = "1";
+      var limit = parseInt(table.getAttribute("data-collapse-rows"), 10) || 30;
+      var maxRows = 0;
+      [].forEach.call(table.tBodies, function (tb) {
+        if (tb.rows.length > maxRows) maxRows = tb.rows.length;
+      });
+      if (maxRows <= limit) return;
+
+      table.classList.add("rows-collapsed");
+      var wrap = table.closest(".table-wrap") || table;
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "rows-expand-btn";
+      btn.textContent = "Показать всех (" + maxRows + ")";
+      btn.addEventListener("click", function () {
+        table.classList.remove("rows-collapsed");
+        btn.remove();
+      });
+      wrap.insertAdjacentElement("afterend", btn);
+    });
+  }
+
   function sel(s) { return s ? document.querySelector(s) : null; }
 
   function init() {
     initTableFilters();
     initSearchableSelects();
     initContestTOC();
+    initRowCollapse(document);
   }
+  // Для динамически вставленных фрагментов (ленивые таблицы контестов).
+  window.standingsInitScope = function (scope) {
+    initRowCollapse(scope);
+  };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {

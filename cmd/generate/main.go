@@ -27,6 +27,7 @@ func main() {
 		moodleCreds      = flag.String("moodle-creds-file", "./data/credentials/moodle_credentials.json", "path to optional moodle credentials JSON (base_url + token or username/password)")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 		codeforcesState  = flag.String("codeforces-state", "", "path to persisted codeforces submission_id state file (default: <out>/cache/codeforces_user_status_state.json)")
+		refreshTasks     = flag.Bool("refresh-tasks", false, "re-fetch contest task lists/titles from sites instead of using the on-disk tasks cache")
 	)
 	flag.Parse()
 
@@ -64,6 +65,9 @@ func main() {
 			logger.Fatalf("failed to init informatics client: %v", err)
 		}
 	} else {
+		// Кэш состава задач (оглавления сборников, названия задач) — на диске
+		// рядом с state; -refresh-tasks принудительно перечитывает с сайта.
+		infClient.ConfigureTasksCache(filepath.Join(*outDir, "cache", "informatics_tasks_cache.json"), *refreshTasks)
 		registry.RegisterSite("informatics", infClient)
 	}
 

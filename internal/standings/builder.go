@@ -73,6 +73,13 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 
 	requiredSites := b.collectRequiredTaskSites(prepared)
 	students := uniqueStudents(prepared)
+
+	// Прогрев кэша состава задач: уникальные сборники/задачи informatics по всем
+	// группам качаются параллельно ОДИН раз; дальнейшие развороты в цикле групп
+	// берут их из кэша клиента (без этого один сборник качался бы на каждую
+	// группу заново, последовательно).
+	b.warmInformaticsTaskCaches(ctx, prepared)
+
 	statusByStudent, err := b.collectStudentsTaskStatuses(ctx, students, requiredSites)
 	if err != nil {
 		return nil, nil, err
@@ -665,6 +672,69 @@ func (b *Builder) expandInformaticsStatementRefs(ctx context.Context, group doma
 		out[sid] = refs
 	}
 	return out
+}
+
+// warmInformaticsTaskCaches параллельно прогревает кэш состава задач informatics:
+// собирает УНИКАЛЬНЫЕ сборники (statement id) и отдельные задачи (chapterid) по
+// всем пересобираемым контестам всех групп и качает их с конкуренцией
+// maxConcurrent. Ошибки не фатальны: развороты в цикле групп повторят запрос и
+// обработают ошибку своим обычным путём.
+func (b *Builder) warmInformaticsTaskCaches(ctx context.Context, prepared []preparedGroup) {
+	statementIDs := make(map[int]string) // id -> пример ссылки (для резолва клиента)
+	chapterIDs := make(map[int]string)
+	for _, pg := range prepared {
+		for _, contest := range pg.contests {
+			for _, subcontest := range contest.Subcontests {
+				for _, rawTaskURL := range subcontest.Tasks {
+					if sid, ok := source.ParseInformaticsStatementID(rawTaskURL); ok {
+						statementIDs[sid] = rawTaskURL
+					} else if cid, ok := source.ParseInformaticsTaskChapterID(rawTaskURL); ok {
+						chapterIDs[cid] = rawTaskURL
+					}
+				}
+			}
+		}
+	}
+	if len(statementIDs) == 0 && len(chapterIDs) == 0 {
+		return
+	}
+
+	sem := make(chan struct{}, b.maxConcurrent)
+	var wg sync.WaitGroup
+	run := func(job func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+			job()
+		}()
+	}
+	started := time.Now()
+	for sid, u := range statementIDs {
+		sid, u := sid, u
+		run(func() {
+			_, client, ok := b.sources.ResolveSiteByTaskURL(u)
+			if expander, can := client.(source.StatementExpander); ok && can {
+				_, _ = expander.FetchStatementProblems(ctx, sid)
+			}
+		})
+	}
+	for cid, u := range chapterIDs {
+		cid, u := cid, u
+		run(func() {
+			_, client, ok := b.sources.ResolveSiteByTaskURL(u)
+			if titler, can := client.(source.InformaticsTaskTitler); ok && can {
+				_, _ = titler.FetchTaskTitle(ctx, cid)
+			}
+		})
+	}
+	wg.Wait()
+	b.logger.Printf("INFO informatics task caches warmed: statements=%d tasks=%d in %v", len(statementIDs), len(chapterIDs), time.Since(started))
 }
 
 // fetchInformaticsTaskTitles для каждой ссылки на ОТДЕЛЬНУЮ задачу informatics

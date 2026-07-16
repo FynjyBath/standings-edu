@@ -2,6 +2,124 @@
 {{if .IsIOI}}<td class="score-cell{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}} style="--score-alpha: {{.Alpha}};">{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>{{else}}<td class="status-cell {{.Status}}{{if .Practice}} practice{{end}}{{if .Accepted}} accepted{{end}}"{{if .Accepted}} title="Зачтено"{{end}}>{{if .SubmissionURL}}<a class="cell-link" href="{{.SubmissionURL}}" target="_blank" rel="noopener noreferrer" title="Посылки ученика по задаче">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>{{end}}
 {{- end}}
 
+{{define "contestBlockBody"}}
+{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$canManage := .JuryCanManage}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}
+{{- with $contest}}
+    <div class="contest-block-head">
+      <h2>{{.Title}}</h2>
+      <div class="contest-head-right">
+        {{if and .StartTime .EndTime}}
+        <span class="contest-status" data-start="{{timeISO .StartTime}}" data-end="{{timeISO .EndTime}}"></span>
+        {{end}}
+        {{if .FrozenAt}}<span class="pinned-badge">❄ Заморожено</span>{{end}}
+      </div>
+    </div>
+    {{if .FrozenAt}}
+    <p class="empty-hint">Результаты после {{contestGeneratedAt .FrozenAt}} скрыты до разморозки.</p>
+    {{end}}
+    {{if and $tokenValid $canManage}}
+    <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
+      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="up" title="Поднять контест выше">↑</button>
+      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="down" title="Опустить контест ниже">↓</button>
+      {{if index $konduits .ID}}
+      <a class="admin-btn admin-btn--secondary" href="/standings/{{$slug}}/jury-konduit?id={{.ID}}&token={{$token}}">✏️ Заполнить кондуит</a>
+      {{end}}
+    </div>
+    {{end}}
+    {{if $uv}}
+    <div class="uv-toggle-row">
+      <button type="button" class="uv-toggle" aria-pressed="false">👁 Скрыть дорешку</button>
+    </div>
+    {{end}}
+    {{if .ZeroPenalty}}
+    <p class="empty-hint">Штраф за задачу без баллов: −{{.ZeroPenalty}}.</p>
+    {{end}}
+    {{if contestNotStarted .StartTime}}
+    <p class="empty-hint">Контест ещё не начался — ссылки на задачи появятся {{contestGeneratedAt .StartTime}}.</p>
+    {{end}}
+    {{if .Materials}}
+    <div class="contest-materials-block">
+      <p class="contest-materials-title">Полезные ссылки:</p>
+      <ul class="contest-materials-list">
+        {{range .Materials}}
+        <li><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a></li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+    <div class="table-wrap">
+      <table class="standings-table{{if $uv}} has-upsolving{{end}}" data-collapse-rows="30"{{if $uv}} data-contest="{{.ID}}"{{end}}>
+        <thead>
+          <tr>
+            <th rowspan="2" class="count-col">Место</th>
+            <th rowspan="2" class="student-col">Ученик</th>
+            <th rowspan="2" class="count-col">{{if eq .ScoreSystem "ioi"}}Баллы{{else}}Решено{{end}}</th>
+            {{if hasPenaltyColumn .Rows}}
+            <th rowspan="2" class="count-col">Штраф</th>
+            {{end}}
+            {{if .Subcontests}}
+              {{range .Subcontests}}
+              <th colspan="{{.TaskCount}}" class="subcontest-head">{{.Title}}</th>
+              {{end}}
+            {{end}}
+            {{if and (eq .ContestType "provider") (hasProviderStatusColumn .Rows)}}
+            <th rowspan="2" class="count-col">Статус</th>
+            {{end}}
+          </tr>
+          <tr>
+            {{if .Subcontests}}
+              {{range .Subcontests}}
+                {{range .Tasks}}
+                <th class="task-col{{if .Hidden}} task-hidden{{end}}"{{if .Hidden}} title="Скрытая задача — видна только по токену{{if .Name}}: {{.Name}}{{end}}"{{else if .Name}} title="{{.Name}}"{{end}}>
+                  {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}{{if .Hidden}} 🔒{{end}}
+                </th>
+                {{end}}
+              {{end}}
+            {{end}}
+          </tr>
+        </thead>
+        {{$hasPenalty := hasPenaltyColumn $contest.Rows}}
+        {{$hasProviderStatus := and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}
+        <tbody class="uv-body-full">
+          {{range .Rows}}
+          <tr>
+            <td class="solved-count">{{placeText .Place}}</td>
+            <td class="student-name">{{if $tokenValid}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}&token={{$token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
+            <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
+            {{if $hasPenalty}}<td class="solved-count">{{penaltyText .Penalty}}</td>{{end}}
+            {{range taskCells $contest .}}{{template "uvTaskCell" .}}{{end}}
+            {{if $hasProviderStatus}}<td class="provider-status-cell">{{.ProviderStatus}}</td>{{end}}
+          </tr>
+          {{end}}
+        </tbody>
+        {{if $uv}}
+        <tbody class="uv-body-window" hidden>
+          {{range $uv.Rows}}
+          <tr>
+            <td class="solved-count">{{placeText .Place}}</td>
+            <td class="student-name">{{if $tokenValid}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}&token={{$token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
+            <td class="solved-count">{{.Count}}</td>
+            {{if $hasPenalty}}<td class="solved-count">{{.Penalty}}</td>{{end}}
+            {{range .Cells}}{{template "uvTaskCell" .}}{{end}}
+            {{if $hasProviderStatus}}<td class="provider-status-cell">{{.ProviderStatus}}</td>{{end}}
+          </tr>
+          {{end}}
+        </tbody>
+        {{end}}
+      </table>
+    </div>
+    {{if not .Rows}}
+    <p class="empty-hint">В группе нет учеников.</p>
+    {{end}}
+    {{if not .Tasks}}
+    <p class="empty-hint">В контесте нет задач.</p>
+    {{end}}
+    {{if contestGeneratedAt .GeneratedAt}}
+    <p class="contest-generated-at" data-updated="{{contestGeneratedAtISO .GeneratedAt}}">Последнее обновление: {{contestGeneratedAt .GeneratedAt}}</p>
+    {{end}}
+{{end}}
+{{end}}
+
 {{define "content"}}
 <section class="page-head">
   <h1>{{.Standings.GroupTitle}}</h1>
@@ -93,7 +211,7 @@
     <span class="pinned-badge honor-board-badge" aria-hidden="true"></span>
   </summary>
   <div class="table-wrap">
-    <table class="standings-table">
+    <table class="standings-table" data-collapse-rows="30">
       <thead>
         <tr>
           <th class="student-col">Ученик</th>
@@ -120,121 +238,25 @@
 {{end}}
 
 {{if .Standings.Contests}}
-  {{range .Standings.Contests}}
-  {{$contest := .}}
-  {{$uv := upsolvingView $contest}}
-  <section class="contest-block" id="contest-{{.ID}}">
+  {{$lazyAll := and (gt (len .Standings.Contests) 10) (not .TokenValid)}}
+  {{range $i, $contest := .Standings.Contests}}
+  <section class="contest-block{{if and $lazyAll (ge $i 8)}} contest-lazy{{end}}" id="contest-{{$contest.ID}}"{{if and $lazyAll (ge $i 8)}} data-lazy-id="{{$contest.ID}}"{{end}}>
+    {{if and $lazyAll (ge $i 8)}}
+    {{/* Ленивая заглушка: голова с чипом статуса, таблица подгрузится при прокрутке. */}}
     <div class="contest-block-head">
-      <h2>{{.Title}}</h2>
+      <h2>{{$contest.Title}}</h2>
       <div class="contest-head-right">
-        {{if and .StartTime .EndTime}}
-        <span class="contest-status" data-start="{{timeISO .StartTime}}" data-end="{{timeISO .EndTime}}"></span>
+        {{if and $contest.StartTime $contest.EndTime}}
+        <span class="contest-status" data-start="{{timeISO $contest.StartTime}}" data-end="{{timeISO $contest.EndTime}}"></span>
         {{end}}
-        {{if .FrozenAt}}<span class="pinned-badge">❄ Заморожено</span>{{end}}
+        {{if $contest.FrozenAt}}<span class="pinned-badge">❄ Заморожено</span>{{end}}
       </div>
     </div>
-    {{if .FrozenAt}}
-    <p class="empty-hint">Результаты после {{contestGeneratedAt .FrozenAt}} скрыты до разморозки.</p>
-    {{end}}
-    {{if and $.TokenValid $.JuryCanManage}}
-    <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
-      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="up" title="Поднять контест выше">↑</button>
-      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="down" title="Опустить контест ниже">↓</button>
-      {{if index $.JuryKonduits .ID}}
-      <a class="admin-btn admin-btn--secondary" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}&token={{$.Token}}">✏️ Заполнить кондуит</a>
-      {{end}}
+    <div class="lazy-placeholder">
+      <button type="button" class="rows-expand-btn lazy-load-btn">Показать таблицу</button>
     </div>
-    {{end}}
-    {{if $uv}}
-    <div class="uv-toggle-row">
-      <button type="button" class="uv-toggle" aria-pressed="false">👁 Скрыть дорешку</button>
-    </div>
-    {{end}}
-    {{if .ZeroPenalty}}
-    <p class="empty-hint">Штраф за задачу без баллов: −{{.ZeroPenalty}}.</p>
-    {{end}}
-    {{if contestNotStarted .StartTime}}
-    <p class="empty-hint">Контест ещё не начался — ссылки на задачи появятся {{contestGeneratedAt .StartTime}}.</p>
-    {{end}}
-    {{if .Materials}}
-    <div class="contest-materials-block">
-      <p class="contest-materials-title">Полезные ссылки:</p>
-      <ul class="contest-materials-list">
-        {{range .Materials}}
-        <li><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a></li>
-        {{end}}
-      </ul>
-    </div>
-    {{end}}
-    <div class="table-wrap">
-      <table class="standings-table{{if $uv}} has-upsolving{{end}}"{{if $uv}} data-contest="{{.ID}}"{{end}}>
-        <thead>
-          <tr>
-            <th rowspan="2" class="count-col">Место</th>
-            <th rowspan="2" class="student-col">Ученик</th>
-            <th rowspan="2" class="count-col">{{if eq .ScoreSystem "ioi"}}Баллы{{else}}Решено{{end}}</th>
-            {{if hasPenaltyColumn .Rows}}
-            <th rowspan="2" class="count-col">Штраф</th>
-            {{end}}
-            {{if .Subcontests}}
-              {{range .Subcontests}}
-              <th colspan="{{.TaskCount}}" class="subcontest-head">{{.Title}}</th>
-              {{end}}
-            {{end}}
-            {{if and (eq .ContestType "provider") (hasProviderStatusColumn .Rows)}}
-            <th rowspan="2" class="count-col">Статус</th>
-            {{end}}
-          </tr>
-          <tr>
-            {{if .Subcontests}}
-              {{range .Subcontests}}
-                {{range .Tasks}}
-                <th class="task-col{{if .Hidden}} task-hidden{{end}}"{{if .Hidden}} title="Скрытая задача — видна только по токену{{if .Name}}: {{.Name}}{{end}}"{{else if .Name}} title="{{.Name}}"{{end}}>
-                  {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}{{if .Hidden}} 🔒{{end}}
-                </th>
-                {{end}}
-              {{end}}
-            {{end}}
-          </tr>
-        </thead>
-        {{$hasPenalty := hasPenaltyColumn $contest.Rows}}
-        {{$hasProviderStatus := and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}
-        <tbody class="uv-body-full">
-          {{range .Rows}}
-          <tr>
-            <td class="solved-count">{{placeText .Place}}</td>
-            <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
-            <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
-            {{if $hasPenalty}}<td class="solved-count">{{penaltyText .Penalty}}</td>{{end}}
-            {{range taskCells $contest .}}{{template "uvTaskCell" .}}{{end}}
-            {{if $hasProviderStatus}}<td class="provider-status-cell">{{.ProviderStatus}}</td>{{end}}
-          </tr>
-          {{end}}
-        </tbody>
-        {{if $uv}}
-        <tbody class="uv-body-window" hidden>
-          {{range $uv.Rows}}
-          <tr>
-            <td class="solved-count">{{placeText .Place}}</td>
-            <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
-            <td class="solved-count">{{.Count}}</td>
-            {{if $hasPenalty}}<td class="solved-count">{{.Penalty}}</td>{{end}}
-            {{range .Cells}}{{template "uvTaskCell" .}}{{end}}
-            {{if $hasProviderStatus}}<td class="provider-status-cell">{{.ProviderStatus}}</td>{{end}}
-          </tr>
-          {{end}}
-        </tbody>
-        {{end}}
-      </table>
-    </div>
-    {{if not .Rows}}
-    <p class="empty-hint">В группе нет учеников.</p>
-    {{end}}
-    {{if not .Tasks}}
-    <p class="empty-hint">В контесте нет задач.</p>
-    {{end}}
-    {{if contestGeneratedAt .GeneratedAt}}
-    <p class="contest-generated-at" data-updated="{{contestGeneratedAtISO .GeneratedAt}}">Последнее обновление: {{contestGeneratedAt .GeneratedAt}}</p>
+    {{else}}
+    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "JuryCanManage" $.JuryCanManage "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token)}}
     {{end}}
   </section>
   {{end}}
@@ -276,20 +298,25 @@
       if (m > 0) return m + " мин";
       return "меньше минуты";
     }
-    var nodes = [].slice.call(document.querySelectorAll(".contest-status")).map(function (el) {
-      return { el: el, start: Date.parse(el.getAttribute("data-start") || ""), end: Date.parse(el.getAttribute("data-end") || "") };
-    }).filter(function (n) { return !isNaN(n.start) && !isNaN(n.end); });
-    if (!nodes.length) return;
-    nodes.forEach(function (x) {
-      var s = new Date(x.start), e = new Date(x.end);
-      x.startLabel = sameDay(s, e) ? hhmm(s) : dayMon(s) + " " + hhmm(s);
-      x.endLabel = dayMon(e) + " " + hhmm(e);
-      // Подсказка — полное окно контеста в местном поясе.
-      x.title = sameDay(s, e)
-        ? dayMon(s) + ", " + hhmm(s) + " – " + hhmm(e)
-        : dayMon(s) + " " + hhmm(s) + " – " + x.endLabel;
-      x.el.title = x.title;
-    });
+    var nodes = [];
+    // collectStatus навешивает отсчёт на чипы в scope; вызывается повторно для
+    // лениво подгруженных блоков (уже обработанные помечаются, дубликатов нет).
+    function collectStatus(scope) {
+      [].forEach.call((scope || document).querySelectorAll(".contest-status"), function (el) {
+        if (el.dataset.statusReady) return;
+        el.dataset.statusReady = "1";
+        var x = { el: el, start: Date.parse(el.getAttribute("data-start") || ""), end: Date.parse(el.getAttribute("data-end") || "") };
+        if (isNaN(x.start) || isNaN(x.end)) return;
+        var s = new Date(x.start), e = new Date(x.end);
+        x.startLabel = sameDay(s, e) ? hhmm(s) : dayMon(s) + " " + hhmm(s);
+        x.endLabel = dayMon(e) + " " + hhmm(e);
+        // Подсказка — полное окно контеста в местном поясе.
+        x.el.title = sameDay(s, e)
+          ? dayMon(s) + ", " + hhmm(s) + " – " + hhmm(e)
+          : dayMon(s) + " " + hhmm(s) + " – " + x.endLabel;
+        nodes.push(x);
+      });
+    }
     function tick() {
       var now = Date.now() + skew;
       nodes.forEach(function (x) {
@@ -301,8 +328,10 @@
         x.el.textContent = txt;
       });
     }
+    collectStatus(document);
     tick();
     setInterval(tick, 1000);
+    window.groupCollectStatus = function (scope) { collectStatus(scope); tick(); };
   })();
 </script>
 
@@ -313,28 +342,106 @@
   // показывает нужный.
   (function () {
     var slug = {{.Standings.GroupSlug}};
-    document.querySelectorAll(".uv-toggle").forEach(function (btn) {
-      var section = btn.closest(".contest-block");
-      if (!section) return;
-      var table = section.querySelector("table.has-upsolving");
-      if (!table) return;
-      var full = table.querySelector(".uv-body-full");
-      var win = table.querySelector(".uv-body-window");
-      if (!full || !win) return;
-      var key = "hideUpsolving:" + slug + ":" + (table.dataset.contest || "");
-      function apply(hide) {
-        full.hidden = hide;
-        win.hidden = !hide;
-        btn.textContent = hide ? "👁 Показать дорешку" : "👁 Скрыть дорешку";
-        btn.setAttribute("aria-pressed", hide ? "true" : "false");
-      }
-      apply(localStorage.getItem(key) === "1");
-      btn.addEventListener("click", function () {
-        var hide = win.hidden; // сейчас окно скрыто → включаем режим «без дорешки»
-        apply(hide);
-        try { localStorage.setItem(key, hide ? "1" : "0"); } catch (e) {}
+    // initUV вызывается повторно для лениво подгруженных блоков.
+    function initUV(scope) {
+      (scope || document).querySelectorAll(".uv-toggle").forEach(function (btn) {
+        if (btn.dataset.uvReady) return;
+        btn.dataset.uvReady = "1";
+        var section = btn.closest(".contest-block");
+        if (!section) return;
+        var table = section.querySelector("table.has-upsolving");
+        if (!table) return;
+        var full = table.querySelector(".uv-body-full");
+        var win = table.querySelector(".uv-body-window");
+        if (!full || !win) return;
+        var key = "hideUpsolving:" + slug + ":" + (table.dataset.contest || "");
+        function apply(hide) {
+          full.hidden = hide;
+          win.hidden = !hide;
+          btn.textContent = hide ? "👁 Показать дорешку" : "👁 Скрыть дорешку";
+          btn.setAttribute("aria-pressed", hide ? "true" : "false");
+        }
+        apply(localStorage.getItem(key) === "1");
+        btn.addEventListener("click", function () {
+          var hide = win.hidden; // сейчас окно скрыто → включаем режим «без дорешки»
+          apply(hide);
+          try { localStorage.setItem(key, hide ? "1" : "0"); } catch (e) {}
+        });
       });
+    }
+    initUV(document);
+    window.groupInitUV = initUV;
+  })();
+</script>
+
+<script>
+  // Ленивая подгрузка таблиц контестов: заглушки (.contest-lazy) получают HTML
+  // блока с /contest-fragment при приближении к вьюпорту, по кнопке или сразу,
+  // если на контест ведёт якорь. После вставки блок дополнительно
+  // инициализируется (чип статуса, дорешка, свёртка длинных таблиц).
+  (function () {
+    var lazies = [].slice.call(document.querySelectorAll(".contest-lazy[data-lazy-id]"));
+    if (!lazies.length) return;
+    var slug = {{.Standings.GroupSlug}};
+
+    function initScope(sec) {
+      if (window.groupCollectStatus) window.groupCollectStatus(sec);
+      if (window.groupInitUV) window.groupInitUV(sec);
+      if (window.standingsInitScope) window.standingsInitScope(sec);
+    }
+    function load(sec) {
+      if (sec.dataset.lazyLoading) return;
+      sec.dataset.lazyLoading = "1";
+      var ph = sec.querySelector(".lazy-placeholder");
+      if (ph) ph.textContent = "Загрузка…";
+      fetch("/standings/" + encodeURIComponent(slug) + "/contest-fragment?id=" + encodeURIComponent(sec.dataset.lazyId))
+        .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.text(); })
+        .then(function (html) {
+          sec.innerHTML = html;
+          sec.classList.remove("contest-lazy");
+          initScope(sec);
+        })
+        .catch(function () {
+          delete sec.dataset.lazyLoading;
+          if (ph) {
+            ph.textContent = "";
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "rows-expand-btn lazy-load-btn";
+            btn.textContent = "Не удалось загрузить — попробовать ещё раз";
+            ph.appendChild(btn);
+          }
+        });
+    }
+
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest(".lazy-load-btn") : null;
+      if (!btn) return;
+      var sec = btn.closest(".contest-lazy");
+      if (sec) load(sec);
     });
+
+    // Якорь на отложенный контест — грузим сразу.
+    var hash = (location.hash || "").replace(/^#/, "");
+    if (hash) {
+      var target = document.getElementById(hash);
+      if (target && target.classList.contains("contest-lazy")) load(target);
+    }
+
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) {
+            io.unobserve(en.target);
+            load(en.target);
+          }
+        });
+      }, { rootMargin: "600px 0px 600px 0px" });
+      lazies.forEach(function (sec) { io.observe(sec); });
+    } else {
+      // Без IntersectionObserver — грузим всё сразу (как раньше, одной страницей).
+      lazies.forEach(load);
+    }
   })();
 </script>
 

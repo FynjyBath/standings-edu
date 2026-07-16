@@ -1906,3 +1906,26 @@ button.summary-link-btn {
   color: var(--muted);
   font-size: 0.82rem;
 }
+
+/* ── Свёртка длинных таблиц (>30 строк) ──────────────────────────────────── */
+table.rows-collapsed tbody tr:nth-child(n + 31) {
+  display: none;
+}
+
+.rows-expand-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line) 55%);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface) 93%);
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rows-expand-btn:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface) 86%);
+}

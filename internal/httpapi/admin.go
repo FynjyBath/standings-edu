@@ -300,8 +300,12 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	// refresh_tasks=1 — перечитать состав задач (оглавления сборников, названия)
+	// с сайтов, минуя дисковый кэш; без него генерация быстрая, из кэша.
+	refreshTasks := r.FormValue("refresh_tasks") == "1"
 	result := h.runAdminAction("generate", func() AdminActionResult {
-		return h.executeGenerateAction()
+		return h.executeGenerateAction(refreshTasks)
 	})
 	h.setAdminResult(result)
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
@@ -715,19 +719,18 @@ func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult
 	return runner()
 }
 
-func (h *Handlers) executeGenerateAction() AdminActionResult {
+func (h *Handlers) executeGenerateAction(refreshTasks bool) AdminActionResult {
 	generateBinary := filepath.Join(h.admin.cfg.ProjectRoot, "bin", "generate")
-	commands := []adminCommand{
-		{
-			Path: generateBinary,
-			Args: []string{
-				"-data-dir", h.admin.cfg.DataDir,
-				"-generated-dir", h.admin.cfg.GeneratedDir,
-				"-informatics-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "informatics_credentials.json"),
-				"-codeforces-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "codeforces_credentials.json"),
-			},
-		},
+	args := []string{
+		"-data-dir", h.admin.cfg.DataDir,
+		"-generated-dir", h.admin.cfg.GeneratedDir,
+		"-informatics-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "informatics_credentials.json"),
+		"-codeforces-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "codeforces_credentials.json"),
 	}
+	if refreshTasks {
+		args = append(args, "-refresh-tasks")
+	}
+	commands := []adminCommand{{Path: generateBinary, Args: args}}
 	return h.runCommandSequence("generate", commands)
 }
 

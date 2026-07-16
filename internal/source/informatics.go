@@ -85,6 +85,42 @@ type InformaticsAPIClient struct {
 	stateMu      sync.Mutex
 	stateLoaded  bool
 	accountState map[string]informaticsAccountState
+
+	// Кэш «состава задач»: оглавления сборников и названия отдельных задач.
+	// Меняются редко, поэтому переживают процессы (файл) и по умолчанию
+	// обновляются не чаще informaticsTasksCacheTTL; tasksRefresh=true (кнопка
+	// «обновить задачи») принудительно перечитывает всё с сайта.
+	tasksCachePath string
+	tasksRefresh   bool
+	tcMu           sync.Mutex
+	tcLoaded       bool
+	tasksCache     informaticsTasksCacheFile
+}
+
+// informaticsTasksCacheTTL — как долго доверяем закэшированному составу
+// сборника/названию задачи без перечитывания сайта.
+const informaticsTasksCacheTTL = 24 * time.Hour
+
+type informaticsTasksCacheFile struct {
+	Statements map[string]informaticsCachedStatement `json:"statements,omitempty"`
+	Titles     map[string]informaticsCachedTitle     `json:"titles,omitempty"`
+}
+
+type informaticsCachedStatement struct {
+	Problems  []InformaticsStatementProblem `json:"problems"`
+	FetchedAt time.Time                     `json:"fetched_at"`
+}
+
+type informaticsCachedTitle struct {
+	Title     string    `json:"title"`
+	FetchedAt time.Time `json:"fetched_at"`
+}
+
+// ConfigureTasksCache включает дисковый кэш состава задач (path) и, при
+// refresh=true, принудительное перечитывание с сайта (кэш при этом обновляется).
+func (c *InformaticsAPIClient) ConfigureTasksCache(path string, refresh bool) {
+	c.tasksCachePath = strings.TrimSpace(path)
+	c.tasksRefresh = refresh
 }
 
 func NewInformaticsAPIClientFromFileWithState(path string, statePath string) (*InformaticsAPIClient, error) {
@@ -986,6 +1022,16 @@ func (c *InformaticsAPIClient) FetchTaskTitle(ctx context.Context, chapterID int
 	if chapterID <= 0 {
 		return "", fmt.Errorf("informatics chapter id must be > 0")
 	}
+	key := strconv.Itoa(chapterID)
+	if !c.tasksRefresh {
+		c.tcMu.Lock()
+		c.loadTasksCacheLocked()
+		rec, ok := c.tasksCache.Titles[key]
+		c.tcMu.Unlock()
+		if ok && time.Since(rec.FetchedAt) <= informaticsTasksCacheTTL {
+			return rec.Title, nil
+		}
+	}
 	if err := c.ensureLoggedIn(ctx, false); err != nil {
 		return "", err
 	}
@@ -1007,7 +1053,18 @@ func (c *InformaticsAPIClient) FetchTaskTitle(ctx context.Context, chapterID int
 	if err != nil {
 		return "", err
 	}
-	return parseInformaticsTaskTitle(body), nil
+	title := parseInformaticsTaskTitle(body)
+	if title != "" {
+		c.tcMu.Lock()
+		c.loadTasksCacheLocked()
+		if c.tasksCache.Titles == nil {
+			c.tasksCache.Titles = make(map[string]informaticsCachedTitle)
+		}
+		c.tasksCache.Titles[key] = informaticsCachedTitle{Title: title, FetchedAt: time.Now().UTC()}
+		c.persistTasksCacheLocked()
+		c.tcMu.Unlock()
+	}
+	return title, nil
 }
 
 // parseInformaticsTaskTitle извлекает название задачи из <title> страницы.
@@ -1026,22 +1083,130 @@ func (c *InformaticsAPIClient) FetchStatementProblems(ctx context.Context, state
 	if statementID <= 0 {
 		return nil, fmt.Errorf("informatics statement id must be > 0")
 	}
+	key := strconv.Itoa(statementID)
+	if cached, ok := c.cachedStatement(key); ok {
+		return cached, nil
+	}
+
 	if err := c.ensureLoggedIn(ctx, false); err != nil {
 		return nil, err
 	}
 
 	body, err := c.fetchStatementPage(ctx, statementID)
 	if err != nil {
+		// Сайт недоступен — отдаём устаревший кэш, если он есть (лучше старый
+		// состав, чем пропавшие колонки).
+		if stale, ok := c.staleStatement(key); ok {
+			log.Printf("WARN informatics statement id=%d: fetch failed (%v); использую кэш", statementID, err)
+			return stale, nil
+		}
 		return nil, err
 	}
 	problems, err := parseInformaticsStatementProblems(body)
 	if err != nil {
+		if stale, ok := c.staleStatement(key); ok {
+			log.Printf("WARN informatics statement id=%d: parse failed (%v); использую кэш", statementID, err)
+			return stale, nil
+		}
 		return nil, err
 	}
 	if len(problems) == 0 {
 		return nil, fmt.Errorf("informatics statement id=%d: no problems parsed", statementID)
 	}
+	c.storeStatement(key, problems)
 	return problems, nil
+}
+
+// cachedStatement возвращает свежую запись кэша (учитывая TTL и tasksRefresh).
+func (c *InformaticsAPIClient) cachedStatement(key string) ([]InformaticsStatementProblem, bool) {
+	if c.tasksRefresh {
+		return nil, false
+	}
+	c.tcMu.Lock()
+	defer c.tcMu.Unlock()
+	c.loadTasksCacheLocked()
+	rec, ok := c.tasksCache.Statements[key]
+	if !ok || time.Since(rec.FetchedAt) > informaticsTasksCacheTTL {
+		return nil, false
+	}
+	return cloneStatementProblems(rec.Problems), true
+}
+
+// staleStatement — запись кэша любой давности (fallback при недоступном сайте).
+func (c *InformaticsAPIClient) staleStatement(key string) ([]InformaticsStatementProblem, bool) {
+	c.tcMu.Lock()
+	defer c.tcMu.Unlock()
+	c.loadTasksCacheLocked()
+	rec, ok := c.tasksCache.Statements[key]
+	if !ok {
+		return nil, false
+	}
+	return cloneStatementProblems(rec.Problems), true
+}
+
+func (c *InformaticsAPIClient) storeStatement(key string, problems []InformaticsStatementProblem) {
+	c.tcMu.Lock()
+	defer c.tcMu.Unlock()
+	c.loadTasksCacheLocked()
+	if c.tasksCache.Statements == nil {
+		c.tasksCache.Statements = make(map[string]informaticsCachedStatement)
+	}
+	c.tasksCache.Statements[key] = informaticsCachedStatement{Problems: cloneStatementProblems(problems), FetchedAt: time.Now().UTC()}
+	c.persistTasksCacheLocked()
+}
+
+func cloneStatementProblems(in []InformaticsStatementProblem) []InformaticsStatementProblem {
+	out := make([]InformaticsStatementProblem, len(in))
+	copy(out, in)
+	return out
+}
+
+// loadTasksCacheLocked лениво читает файл кэша (один раз на процесс).
+func (c *InformaticsAPIClient) loadTasksCacheLocked() {
+	if c.tcLoaded {
+		return
+	}
+	c.tcLoaded = true
+	if c.tasksCachePath == "" {
+		return
+	}
+	b, err := os.ReadFile(c.tasksCachePath)
+	if err != nil {
+		return // нет файла — пустой кэш
+	}
+	_ = json.Unmarshal(b, &c.tasksCache)
+}
+
+// persistTasksCacheLocked атомарно сохраняет кэш (как state-файл).
+func (c *InformaticsAPIClient) persistTasksCacheLocked() {
+	if c.tasksCachePath == "" {
+		return
+	}
+	b, err := json.MarshalIndent(c.tasksCache, "", "  ")
+	if err != nil {
+		return
+	}
+	b = append(b, '\n')
+	if err := os.MkdirAll(filepath.Dir(c.tasksCachePath), 0o755); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(c.tasksCachePath), "informatics-tasks-*.tmp")
+	if err != nil {
+		return
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return
+	}
+	if err := os.Rename(tmpPath, c.tasksCachePath); err != nil {
+		_ = os.Remove(tmpPath)
+	}
 }
 
 func (c *InformaticsAPIClient) fetchStatementPage(ctx context.Context, statementID int) ([]byte, error) {

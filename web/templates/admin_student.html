@@ -63,11 +63,11 @@
     {{if .LowData}}
     <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">скорость (нужно ≥5 решённых и ≥2 ч)</span></div>
     {{else}}
-    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Speed}}</span><span class="stat-label">скорость (от типичного темпа)</span></div>
-    {{if .SpeedRecent}}<div class="stat-card"><span class="stat-value">×{{numText .SpeedRecent}}</span><span class="stat-label">форма за месяц</span></div>{{end}}
+    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Speed}}</span><span class="stat-label">скорость: &lt;1 — ниже среднего, &gt;1 — выше</span></div>
+    {{if .SpeedRecent}}<div class="stat-card"><span class="stat-value">×{{numText .SpeedRecent}}</span><span class="stat-label">скорость, взвешенная по времени (свежее — важнее)</span></div>{{end}}
     {{end}}
     <div class="stat-card"><span class="stat-value">{{numText .ActiveHours}}</span><span class="stat-label">активных часов на курсе</span></div>
-    {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">{{numText .WeeklyHours}}</span><span class="stat-label">часов в неделю (медиана)</span></div>{{end}}
+    {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">≈{{numText .WeeklyHours}}</span><span class="stat-label">часов в неделю (среднее по активным неделям за 8 недель)</span></div>{{end}}
     {{if .ForecastWeeks}}<div class="stat-card"><span class="stat-value">≈{{numText .ForecastWeeks}}</span><span class="stat-label">недель до конца курса</span></div>{{end}}
   </div>
   {{if .Stuck}}
@@ -80,7 +80,6 @@
     {{range .Abandoned}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена">{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
   </p>
   {{end}}
-  <p class="empty-hint">Скорость взвешена сложностью задач (типичное активное время когорты); перерывы между занятиями не учитываются (сессии рвутся паузой &gt; 2 ч). Подробности модели — docs/course_speed.pdf.</p>
 </section>
 {{end}}
 

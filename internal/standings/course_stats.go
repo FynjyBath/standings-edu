@@ -600,6 +600,9 @@ const (
 	courseFastWindow    = 5
 	courseFastShare     = 0.1
 	courseFastMinWeight = 30.0
+	// Перерыв больше этого рвёт серию first-try: эпизод — компактная вспышка,
+	// а не растянутый на месяцы стиль решения.
+	courseStreakMaxGapDays = 14.0
 )
 
 // cohortFirstTryRates считает по когорте долю решивших задачу с первой посылки.
@@ -679,7 +682,7 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 	used := make(map[string]struct{}) // задачи, уже вошедшие в какой-то флаг
 
 	appendFlag := func(text string, evs []solvedCourseEvent) {
-		f := domain.CourseFlag{Text: text, At: evs[0].at}
+		f := domain.CourseFlag{Text: text, At: evs[0].at, Until: evs[len(evs)-1].at}
 		for _, e := range evs {
 			used[e.task.norm] = struct{}{}
 			if len(f.Tasks) < 6 {
@@ -704,7 +707,10 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 	}
 
 	// 1. Серия «с первой попытки» на нелёгких задачах: непрерывная по хронологии
-	// цепочка first-try решений, среди которых достаточно нелёгких.
+	// цепочка first-try решений, среди которых достаточно нелёгких. Большой
+	// перерыв (courseStreakMaxGapDays) тоже рвёт цепочку: «серия» через месяцы —
+	// не эпизод, а просто стиль решения, и склеенные через годы серии делали
+	// список посылок эпизода бессмысленным.
 	streak := make([]solvedCourseEvent, 0)
 	hard := 0
 	flushStreak := func() {
@@ -718,6 +724,9 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 		if !e.firstTry {
 			flushStreak()
 			continue
+		}
+		if len(streak) > 0 && e.at.Sub(streak[len(streak)-1].at).Hours() > 24*courseStreakMaxGapDays {
+			flushStreak()
 		}
 		streak = append(streak, e)
 		if n := ftN[e.task.norm]; n >= courseFirstTryMinCohort && ftRate[e.task.norm] < courseEasyFirstTryRate {

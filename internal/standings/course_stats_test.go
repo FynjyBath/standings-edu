@@ -275,6 +275,10 @@ func TestDetectCourseFlags(t *testing.T) {
 	if f.Key == "" {
 		t.Fatalf("флаг должен нести стабильный ключ для отметки «проверено»: %+v", f)
 	}
+	// Окно эпизода: Until — последнее событие (по нему фильтруется лента посылок).
+	if f.Until.Before(f.At) || f.Until.Sub(f.At) > time.Hour {
+		t.Fatalf("окно эпизода неверно: at=%v until=%v", f.At, f.Until)
+	}
 	// Честные ученики — без флагов.
 	for i := 0; i < 8; i++ {
 		if n := len(stats[fmt.Sprintf("s%d", i)].Flags); n != 0 {
@@ -438,6 +442,35 @@ func TestDetectCourseFlagsOldEpisodesKept(t *testing.T) {
 	if fresh["cheat"].Flags[0].Key != old["cheat"].Flags[0].Key {
 		t.Fatalf("ключ флага должен быть стабилен во времени: %q != %q",
 			fresh["cheat"].Flags[0].Key, old["cheat"].Flags[0].Key)
+	}
+}
+
+// Перерыв больше courseStreakMaxGapDays рвёт серию first-try: «серия»,
+// растянутая через месяцы, — стиль решения, а не эпизод.
+func TestDetectCourseFlagsStreakBreaksOnLongGap(t *testing.T) {
+	base := time.Date(2026, 3, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(120 * 24 * time.Hour)
+
+	std, students, statuses, norms := newCheaterCohort(base)
+	// Переделываем читера: 3 first-try сразу и ещё 3 — через 30 дней. Без
+	// разрыва это была бы серия из 6; с разрывом обе половины короче порога.
+	cheat := newAccountStatuses()
+	for i := 0; i < 6; i++ {
+		at := base.Add(time.Duration(2*i) * time.Minute)
+		if i >= 3 {
+			at = at.Add(30 * 24 * time.Hour)
+		}
+		cheat.timed[norms[i]] = []source.TimedSubmission{{At: at, Solved: true}}
+		cheat.solved[norms[i]] = struct{}{}
+		cheat.attempted[norms[i]] = struct{}{}
+	}
+	statuses["cheat"] = cheat
+
+	stats := computeCourseStats(std, students, statuses, now, nil)
+	for _, f := range stats["cheat"].Flags {
+		if strings.Contains(f.Text, "с первой попытки") {
+			t.Fatalf("серия с 30-дневным перерывом не должна флаговаться: %+v", f)
+		}
 	}
 }
 

@@ -971,6 +971,7 @@ type CourseFlag struct {
 	Text  string    `json:"text"`            // краткое описание с числами
 	Tasks []string  `json:"tasks,omitempty"` // метки задач эпизода («Контест · A»)
 	At    time.Time `json:"at,omitempty"`    // начало эпизода
+	Until time.Time `json:"until,omitempty"` // конец эпизода (последнее событие)
 	// TaskURLs — нормализованные URL всех задач эпизода: по ним посылки эпизода
 	// исключаются из подсчёта темпа, если преподаватель отметил «перенос» или
 	// «нарушение».

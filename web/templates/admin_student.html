@@ -1,4 +1,4 @@
-{{define "flagSubsBtn"}}{{if .TaskURLs}}<button type="button" class="flag-subs-btn" data-flag-tasks="{{join .TaskURLs " "}}" data-flag-text="{{.Text}}" title="Показать посылки эпизода в ленте ниже">⤵ посылки</button>{{end}}{{end}}
+{{define "flagSubsBtn"}}{{if .TaskURLs}}<button type="button" class="flag-subs-btn" data-flag-tasks="{{join .TaskURLs " "}}" data-flag-from="{{unixMs .At}}" data-flag-to="{{unixMs .Until}}" data-flag-text="{{.Text}}" title="Показать посылки эпизода в ленте ниже">⤵ посылки</button>{{end}}{{end}}
 
 {{define "flagClearBtn"}}{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}{{end}}
 
@@ -89,7 +89,7 @@
     <div class="flag-list">
     {{range .Flags}}
     {{if not .ReviewedAt}}
-    <span class="course-chip course-chip--flag" title="{{join .Tasks ", "}}">{{.Text}} · {{submissionTime .At}}
+    <span class="course-chip course-chip--flag" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}
       <span class="flag-review-actions">{{template "flagSubsBtn" .}}
         {{- if .Key}}
         <button type="button" class="flag-review-btn flag-review-btn--legit" data-flag-key="{{.Key}}" data-resolution="legit" title="Реально решил сам: посылки корректные, эпизод вернётся в подсчёт темпа">✓ сам решил</button>
@@ -99,11 +99,11 @@
       </span>
     </span>
     {{else if eq .Resolution "violation"}}
-    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{submissionTime .At}}<span class="flag-review-note flag-review-note--violation">нарушение · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note flag-review-note--violation">нарушение · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{else if eq .Resolution "transfer"}}
-    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">⇄ перенос · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">⇄ перенос · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{else}}
-    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">✓ сам решил · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">✓ сам решил · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{end}}
     {{end}}
     </div>
@@ -128,7 +128,7 @@
       <thead><tr><th>Время (MSK)</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
       <tbody id="subs-body">
         {{range $p.Recent}}
-        <tr class="{{if .Solved}}is-solved{{end}}" data-task="{{.TaskURL}}" data-filter-text="{{siteName .Site}} {{.Label}} {{if .Solved}}решено{{else}}попытка{{end}}">
+        <tr class="{{if .Solved}}is-solved{{end}}" data-task="{{.TaskURL}}" data-at="{{unixMs .At}}" data-filter-text="{{siteName .Site}} {{.Label}} {{if .Solved}}решено{{else}}попытка{{end}}">
           <td>{{submissionTime .At}}</td>
           <td class="site-tag">{{siteName .Site}}</td>
           <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer" title="{{if $sub}}Посылки ученика по задаче на сайте{{else}}Открыть задачу{{end}}">{{.Label}}</a></td>
@@ -185,7 +185,17 @@
     var episodeText = document.getElementById("subs-episode-text");
     var episodeClear = document.getElementById("subs-episode-clear");
     var rows = [].slice.call(body.querySelectorAll("tr"));
-    var episode = null; // множество нормализованных URL задач эпизода
+    // Эпизод: задачи + временное окно [from, to] — показываются только посылки,
+    // относящиеся к самому эпизоду, а не вся история этих задач за годы.
+    var episode = null;
+    function inEpisode(r) {
+      if (!episode) return true;
+      if (!episode.tasks.has(r.getAttribute("data-task"))) return false;
+      if (!episode.from) return true;
+      var at = parseInt(r.getAttribute("data-at"), 10) || 0;
+      var margin = 60 * 1000;
+      return at >= episode.from - margin && at <= episode.to + margin;
+    }
     function apply() {
       var q = (search.value || "").trim().toLowerCase();
       var onlySolved = solvedOnly.checked;
@@ -193,8 +203,7 @@
       rows.forEach(function (r) {
         var okText = !q || (r.getAttribute("data-filter-text") || "").toLowerCase().indexOf(q) !== -1;
         var okSolved = !onlySolved || r.classList.contains("is-solved");
-        var okEpisode = !episode || episode.has(r.getAttribute("data-task"));
-        var vis = okText && okSolved && okEpisode;
+        var vis = okText && okSolved && inEpisode(r);
         r.classList.toggle("filtered-out", !vis);
         if (vis) shown++;
       });
@@ -203,10 +212,10 @@
       if (count) count.textContent = filtering ? (shown + " из " + rows.length) : String(rows.length);
       if (empty) empty.hidden = shown !== 0;
     }
-    function setEpisode(tasks, label) {
-      episode = tasks;
+    function setEpisode(ep, label) {
+      episode = ep;
       if (episodeChip) {
-        episodeChip.hidden = !tasks;
+        episodeChip.hidden = !ep;
         if (episodeText) episodeText.textContent = label || "";
       }
       apply();
@@ -224,7 +233,10 @@
       btn.addEventListener("click", function () {
         var tasks = (btn.getAttribute("data-flag-tasks") || "").split(" ").filter(Boolean);
         if (!tasks.length) return;
-        setEpisode(new Set(tasks), btn.getAttribute("data-flag-text") || "эпизод");
+        var from = parseInt(btn.getAttribute("data-flag-from"), 10) || 0;
+        var to = parseInt(btn.getAttribute("data-flag-to"), 10) || 0;
+        setEpisode({ tasks: new Set(tasks), from: from > 0 && to > 0 ? from : 0, to: to },
+          btn.getAttribute("data-flag-text") || "эпизод");
         var bar = search.closest(".filter-bar");
         (bar || body).scrollIntoView({ behavior: "smooth", block: "start" });
       });

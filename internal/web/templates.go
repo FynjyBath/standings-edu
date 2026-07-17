@@ -66,6 +66,8 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"numText":                 numText,
 			"pct":                     func(v float64) int { return int(math.Round(v * 100)) },
 			"submissionTime":          submissionTime,
+			"flagPeriod":              flagPeriod,
+			"unixMs":                  func(t time.Time) int64 { return t.UnixMilli() },
 			"join":                    strings.Join,
 			"submissionLink":          submissionLink,
 			"siteName":                siteName,
@@ -461,6 +463,15 @@ func submissionTime(t time.Time) string {
 		return ""
 	}
 	return t.In(moscowLocation).Format("02.01.2006 15:04")
+}
+
+// flagPeriod — период эпизода флага: одна метка для компактного эпизода,
+// диапазон «от — до», если эпизод растянут больше чем на сутки.
+func flagPeriod(at, until time.Time) string {
+	if until.IsZero() || until.Sub(at) < 24*time.Hour {
+		return submissionTime(at)
+	}
+	return submissionTime(at) + " — " + submissionTime(until)
 }
 
 // siteName — человекочитаемое имя сайта для профиля участника.

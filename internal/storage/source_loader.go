@@ -48,12 +48,42 @@ func (l *SourceLoader) Load() (*domain.SourceData, error) {
 // loadFlagReviews читает отметки проверки флагов нечестности. Файл опционален;
 // ошибка чтения не валит генерацию (отметки просто не применятся).
 func (l *SourceLoader) loadFlagReviews() map[string]domain.FlagReview {
-	out := map[string]domain.FlagReview{}
-	path := filepath.Join(l.DataDir, "flag_reviews.json")
-	if err := fileutil.ReadJSON(path, &out); err != nil && !errors.Is(err, os.ErrNotExist) {
+	out, err := LoadFlagReviews(l.DataDir)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARN load flag reviews: %v\n", err)
 	}
 	return out
+}
+
+// LoadFlagReviews — единый ридер data/flag_reviews.json (генерация и отдача
+// страниц пользуются им же). Отсутствующий файл — пустая карта без ошибки.
+// Заодно мигрирует ключи старого формата (время|задача) на стабильный отпечаток
+// состава эпизода — по снапшоту флага в отметке; на диске миграция закрепится
+// при следующей записи файла.
+func LoadFlagReviews(dataDir string) (map[string]domain.FlagReview, error) {
+	out := map[string]domain.FlagReview{}
+	if strings.TrimSpace(dataDir) == "" {
+		return out, nil
+	}
+	path := filepath.Join(dataDir, "flag_reviews.json")
+	if err := fileutil.ReadJSON(path, &out); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]domain.FlagReview{}, nil
+		}
+		return map[string]domain.FlagReview{}, err
+	}
+	migrated := make(map[string]domain.FlagReview, len(out))
+	for key, rev := range out {
+		if rev.Flag != nil && len(rev.Flag.TaskURLs) > 0 {
+			if parts := strings.SplitN(key, "|", 3); len(parts) == 3 {
+				flagKey := domain.CourseFlagKey(rev.Flag.TaskURLs)
+				rev.Flag.Key = flagKey
+				key = domain.FlagReviewKey(parts[0], parts[1], flagKey)
+			}
+		}
+		migrated[key] = rev
+	}
+	return migrated, nil
 }
 
 func (l *SourceLoader) loadStudents() (map[string]domain.Student, error) {

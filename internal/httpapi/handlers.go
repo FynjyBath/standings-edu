@@ -518,7 +518,7 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 	}
 
 	studentIDs := h.resolveGroupStudentIDs(slug)
-	reviews := h.loadFlagReviews()
+	reviews := h.loadFlagReviewIndex()
 	rows := make([]ParticipantRow, 0, len(studentIDs))
 	for _, id := range studentIDs {
 		row := ParticipantRow{StudentID: id, PublicName: id}

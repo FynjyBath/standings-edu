@@ -66,6 +66,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"numText":                 numText,
 			"pct":                     func(v float64) int { return int(math.Round(v * 100)) },
 			"submissionTime":          submissionTime,
+			"join":                    strings.Join,
 			"submissionLink":          submissionLink,
 			"siteName":                siteName,
 			"dayLabel":                dayLabel,

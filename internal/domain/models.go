@@ -2,8 +2,11 @@ package domain
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -1023,6 +1026,78 @@ func (r FlagReview) NormalizedResolution() string {
 // FlagReviewKey — ключ отметки в data/flag_reviews.json.
 func FlagReviewKey(studentID, groupSlug, flagKey string) string {
 	return studentID + "|" + groupSlug + "|" + flagKey
+}
+
+// CourseFlagKey — стабильный ключ эпизода: отпечаток СОСТАВА задач (а не
+// времени первого решения, которое сдвигается при перетестировании на сайтах).
+func CourseFlagKey(taskURLs []string) string {
+	s := append([]string(nil), taskURLs...)
+	sort.Strings(s)
+	sum := sha256.Sum256([]byte(strings.Join(s, "\n")))
+	return hex.EncodeToString(sum[:8])
+}
+
+// FlagTasksMatch — считать ли два эпизода одним и тем же при неточном
+// совпадении ключей: пересечение задач покрывает не меньше половины каждого.
+func FlagTasksMatch(a, b []string) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	set := make(map[string]struct{}, len(a))
+	for _, x := range a {
+		set[x] = struct{}{}
+	}
+	inter := 0
+	for _, x := range b {
+		if _, ok := set[x]; ok {
+			inter++
+		}
+	}
+	return inter*2 >= len(a) && inter*2 >= len(b)
+}
+
+// StudentFlagReviews — отметки, проиндексированные ученик → группа → ключ
+// флага. Строится один раз на запрос/генерацию вместо префикс-сканов всего
+// файла на каждого ученика.
+type StudentFlagReviews map[string]map[string]map[string]FlagReview
+
+// IndexFlagReviews раскладывает плоскую карту отметок по ученикам и группам.
+// Ключи неожиданного формата пропускаются.
+func IndexFlagReviews(reviews map[string]FlagReview) StudentFlagReviews {
+	out := make(StudentFlagReviews)
+	for key, rev := range reviews {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		byGroup := out[parts[0]]
+		if byGroup == nil {
+			byGroup = make(map[string]map[string]FlagReview)
+			out[parts[0]] = byGroup
+		}
+		byKey := byGroup[parts[1]]
+		if byKey == nil {
+			byKey = make(map[string]FlagReview)
+			byGroup[parts[1]] = byKey
+		}
+		byKey[parts[2]] = rev
+	}
+	return out
+}
+
+// MatchFlagReview находит отметку для флага: по точному ключу, иначе — по
+// составу задач снапшота (эпизод мог сменить ключ при сдвиге данных).
+// Возвращает ключ найденной отметки (в рамках byKey), саму отметку и признак.
+func MatchFlagReview(byKey map[string]FlagReview, flag CourseFlag) (string, FlagReview, bool) {
+	if rev, ok := byKey[flag.Key]; ok {
+		return flag.Key, rev, true
+	}
+	for key, rev := range byKey {
+		if rev.Flag != nil && FlagTasksMatch(flag.TaskURLs, rev.Flag.TaskURLs) {
+			return key, rev, true
+		}
+	}
+	return "", FlagReview{}, false
 }
 
 // OpenFlags — непроверенные флаги (для счётчика 🚩 в списке участников).

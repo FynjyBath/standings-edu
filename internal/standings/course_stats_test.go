@@ -208,13 +208,11 @@ func TestComputeCourseStatsSpeedCalibration(t *testing.T) {
 	}
 }
 
-// Детекторы нечестности: серия first-try на нелёгких, «пулемёт», «резко
-// быстрее»; честный ученик — без флагов.
-func TestDetectCourseFlags(t *testing.T) {
-	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
-	now := base.Add(7 * 24 * time.Hour)
-
-	// Курс из 10 задач, один контест.
+// newCheaterCohort — общая фикстура детекторов: курс из 10 задач одним
+// контестом, 8 «нормальных» учеников (решают каждую задачу за ~20 минут со
+// второй попытки — first-try rate 0, все задачи «нелёгкие») и «читер» (первые
+// 6 задач first-try пачкой с паузами по 2 минуты).
+func newCheaterCohort(base time.Time) (domain.GeneratedGroupStandings, []domain.Student, map[string]*accountStatuses, []string) {
 	tasks := make([]domain.GeneratedTask, 10)
 	norms := make([]string, 10)
 	for i := range tasks {
@@ -226,8 +224,6 @@ func TestDetectCourseFlags(t *testing.T) {
 
 	students := make([]domain.Student, 0)
 	statuses := map[string]*accountStatuses{}
-	// Когорта из 8 «нормальных»: решают каждую задачу за ~20 минут СО ВТОРОЙ
-	// попытки (first-try rate = 0 → все задачи «нелёгкие»).
 	for i := 0; i < 8; i++ {
 		id := fmt.Sprintf("s%d", i)
 		students = append(students, domain.Student{ID: id})
@@ -235,8 +231,8 @@ func TestDetectCourseFlags(t *testing.T) {
 		cur := base
 		for _, norm := range norms {
 			st.timed[norm] = []source.TimedSubmission{
-				{At: cur.Add(10 * time.Minute)},               // попытка
-				{At: cur.Add(20 * time.Minute), Solved: true}, // решение
+				{At: cur.Add(10 * time.Minute)},
+				{At: cur.Add(20 * time.Minute), Solved: true},
 			}
 			st.solved[norm] = struct{}{}
 			st.attempted[norm] = struct{}{}
@@ -244,8 +240,6 @@ func TestDetectCourseFlags(t *testing.T) {
 		}
 		statuses[id] = st
 	}
-
-	// «Читер»: первые 6 задач — first-try пачкой с паузами по 2 минуты.
 	cheat := newAccountStatuses()
 	for i := 0; i < 6; i++ {
 		at := base.Add(time.Duration(2*i) * time.Minute)
@@ -255,6 +249,16 @@ func TestDetectCourseFlags(t *testing.T) {
 	}
 	students = append(students, domain.Student{ID: "cheat"})
 	statuses["cheat"] = cheat
+	return std, students, statuses, norms
+}
+
+// Детекторы нечестности: серия first-try на нелёгких, «пулемёт», «резко
+// быстрее»; честный ученик — без флагов.
+func TestDetectCourseFlags(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(7 * 24 * time.Hour)
+
+	std, students, statuses, _ := newCheaterCohort(base)
 
 	stats := computeCourseStats(std, students, statuses, now, nil)
 	if n := len(stats["cheat"].Flags); n == 0 {
@@ -348,42 +352,7 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
 	now := base.Add(7 * 24 * time.Hour)
 
-	tasks := make([]domain.GeneratedTask, 10)
-	norms := make([]string, 10)
-	for i := range tasks {
-		norms[i] = fmt.Sprintf("t%d", i)
-		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
-	}
-	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
-
-	students := make([]domain.Student, 0)
-	statuses := map[string]*accountStatuses{}
-	for i := 0; i < 8; i++ {
-		id := fmt.Sprintf("s%d", i)
-		students = append(students, domain.Student{ID: id})
-		st := newAccountStatuses()
-		cur := base
-		for _, norm := range norms {
-			st.timed[norm] = []source.TimedSubmission{
-				{At: cur.Add(10 * time.Minute)},
-				{At: cur.Add(20 * time.Minute), Solved: true},
-			}
-			st.solved[norm] = struct{}{}
-			st.attempted[norm] = struct{}{}
-			cur = cur.Add(20 * time.Minute)
-		}
-		statuses[id] = st
-	}
-	cheat := newAccountStatuses()
-	for i := 0; i < 6; i++ {
-		at := base.Add(time.Duration(2*i) * time.Minute)
-		cheat.timed[norms[i]] = []source.TimedSubmission{{At: at, Solved: true}}
-		cheat.solved[norms[i]] = struct{}{}
-		cheat.attempted[norms[i]] = struct{}{}
-	}
-	students = append(students, domain.Student{ID: "cheat"})
-	statuses["cheat"] = cheat
+	std, students, statuses, _ := newCheaterCohort(base)
 
 	// Базлайн — без отметок: флаг детектируется, но его эпизод по умолчанию
 	// УЖЕ исключён из темпа (неразмеченному не доверяем).
@@ -401,9 +370,9 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 
 	run := func(resolution string) map[string]*domain.StudentCourseStats {
 		snap := flag
-		return computeCourseStats(std, students, statuses, now, map[string]domain.FlagReview{
+		return computeCourseStats(std, students, statuses, now, domain.IndexFlagReviews(map[string]domain.FlagReview{
 			domain.FlagReviewKey("cheat", "g", flag.Key): {At: now, Resolution: resolution, Flag: &snap},
-		})
+		}))
 	}
 	hasFlag := func(cs *domain.StudentCourseStats) bool {
 		for _, f := range cs.Flags {
@@ -455,42 +424,7 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 func TestDetectCourseFlagsOldEpisodesKept(t *testing.T) {
 	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
 
-	tasks := make([]domain.GeneratedTask, 10)
-	norms := make([]string, 10)
-	for i := range tasks {
-		norms[i] = fmt.Sprintf("t%d", i)
-		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
-	}
-	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
-
-	students := make([]domain.Student, 0)
-	statuses := map[string]*accountStatuses{}
-	for i := 0; i < 8; i++ {
-		id := fmt.Sprintf("s%d", i)
-		students = append(students, domain.Student{ID: id})
-		st := newAccountStatuses()
-		cur := base
-		for _, norm := range norms {
-			st.timed[norm] = []source.TimedSubmission{
-				{At: cur.Add(10 * time.Minute)},
-				{At: cur.Add(20 * time.Minute), Solved: true},
-			}
-			st.solved[norm] = struct{}{}
-			st.attempted[norm] = struct{}{}
-			cur = cur.Add(20 * time.Minute)
-		}
-		statuses[id] = st
-	}
-	cheat := newAccountStatuses()
-	for i := 0; i < 6; i++ {
-		at := base.Add(time.Duration(2*i) * time.Minute)
-		cheat.timed[norms[i]] = []source.TimedSubmission{{At: at, Solved: true}}
-		cheat.solved[norms[i]] = struct{}{}
-		cheat.attempted[norms[i]] = struct{}{}
-	}
-	students = append(students, domain.Student{ID: "cheat"})
-	statuses["cheat"] = cheat
+	std, students, statuses, _ := newCheaterCohort(base)
 
 	// И через неделю, и спустя год флаги на месте (и с тем же стабильным ключом).
 	fresh := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour), nil)
@@ -504,6 +438,96 @@ func TestDetectCourseFlagsOldEpisodesKept(t *testing.T) {
 	if fresh["cheat"].Flags[0].Key != old["cheat"].Flags[0].Key {
 		t.Fatalf("ключ флага должен быть стабилен во времени: %q != %q",
 			fresh["cheat"].Flags[0].Key, old["cheat"].Flags[0].Key)
+	}
+}
+
+// Ключ флага стабилен при перетестировании: сдвиг времени первой решающей
+// посылки (informatics переписывает вердикты) не меняет ключ — он считается от
+// состава задач эпизода, и отметка преподавателя не отвязывается.
+func TestFlagKeyStableAcrossRetest(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(7 * 24 * time.Hour)
+
+	std, students, statuses, norms := newCheaterCohort(base)
+	before := computeCourseStats(std, students, statuses, now, nil)
+	if len(before["cheat"].Flags) == 0 {
+		t.Fatal("прекондиция: у читера должны быть флаги")
+	}
+	key := before["cheat"].Flags[0].Key
+
+	// «Перетестирование»: у первой задачи эпизода появилась более ранняя
+	// решающая посылка — время первого решения сдвинулось.
+	statuses["cheat"].timed[norms[0]] = append(statuses["cheat"].timed[norms[0]],
+		source.TimedSubmission{At: base.Add(-30 * time.Minute), Solved: true})
+	after := computeCourseStats(std, students, statuses, now, nil)
+	if len(after["cheat"].Flags) == 0 {
+		t.Fatalf("флаг должен детектироваться и после сдвига: %+v", after["cheat"])
+	}
+	if after["cheat"].Flags[0].Key != key {
+		t.Fatalf("ключ должен быть стабилен при сдвиге времени: %q != %q", after["cheat"].Flags[0].Key, key)
+	}
+}
+
+// «Сам решил» побеждает по задаче: при пересечении эпизодов задача из
+// legit-эпизода не исключается из темпа чужим флагом.
+func TestLegitWinsOnOverlappingEpisodes(t *testing.T) {
+	students := []domain.Student{{ID: "s1"}}
+	legitFlag := domain.CourseFlag{TaskURLs: []string{"t1", "t2"}}
+	legitFlag.Key = domain.CourseFlagKey(legitFlag.TaskURLs)
+	otherFlag := domain.CourseFlag{TaskURLs: []string{"t2", "t3", "t4"}}
+	otherFlag.Key = domain.CourseFlagKey(otherFlag.TaskURLs)
+
+	snap := legitFlag
+	reviews := domain.IndexFlagReviews(map[string]domain.FlagReview{
+		domain.FlagReviewKey("s1", "g", legitFlag.Key): {Resolution: domain.FlagResolutionLegit, Flag: &snap},
+	})
+	flags := map[string][]domain.CourseFlag{"s1": {legitFlag, otherFlag}}
+
+	out := unreviewedFlagExclusions("g", students, flags, reviews)
+	if _, excluded := out["s1"]["t2"]; excluded {
+		t.Fatalf("t2 защищена «сам решил» и не должна исключаться: %+v", out["s1"])
+	}
+	for _, norm := range []string{"t3", "t4"} {
+		if _, excluded := out["s1"][norm]; !excluded {
+			t.Fatalf("%s из неразмеченного эпизода должна исключаться: %+v", norm, out["s1"])
+		}
+	}
+	if _, excluded := out["s1"]["t1"]; excluded {
+		t.Fatalf("t1 из legit-эпизода не должна исключаться: %+v", out["s1"])
+	}
+
+	// То же для фазы 1: «перенос»-снапшот с пересечением не трогает legit-задачу.
+	transferSnap := otherFlag
+	reviews = domain.IndexFlagReviews(map[string]domain.FlagReview{
+		domain.FlagReviewKey("s1", "g", legitFlag.Key):    {Resolution: domain.FlagResolutionLegit, Flag: &snap},
+		domain.FlagReviewKey("s1", "g", transferSnap.Key): {Resolution: domain.FlagResolutionTransfer, Flag: &transferSnap},
+	})
+	out = reviewedExclusions("g", students, reviews)
+	if _, excluded := out["s1"]["t2"]; excluded {
+		t.Fatalf("фаза 1: t2 защищена «сам решил»: %+v", out["s1"])
+	}
+	if _, excluded := out["s1"]["t3"]; !excluded {
+		t.Fatalf("фаза 1: t3 из «переноса» должна исключаться: %+v", out["s1"])
+	}
+}
+
+// Мягкое сопоставление: отметка, сохранённая под старым ключом, привязывается к
+// флагу по составу задач снапшота — legit продолжает действовать.
+func TestFlagReviewSoftMatchByTasks(t *testing.T) {
+	students := []domain.Student{{ID: "s1"}}
+	flag := domain.CourseFlag{TaskURLs: []string{"t1", "t2", "t3"}}
+	flag.Key = domain.CourseFlagKey(flag.TaskURLs)
+
+	// Снапшот с чуть отличающимся составом (эпизод «подрос») и СТАРЫМ ключом.
+	snap := domain.CourseFlag{Key: "1700000000|t1", TaskURLs: []string{"t1", "t2"}}
+	reviews := domain.IndexFlagReviews(map[string]domain.FlagReview{
+		domain.FlagReviewKey("s1", "g", snap.Key): {Resolution: domain.FlagResolutionLegit, Flag: &snap},
+	})
+	flags := map[string][]domain.CourseFlag{"s1": {flag}}
+
+	out := unreviewedFlagExclusions("g", students, flags, reviews)
+	if len(out["s1"]) != 0 {
+		t.Fatalf("legit по мягкому сопоставлению должен вернуть эпизод в темп: %+v", out["s1"])
 	}
 }
 

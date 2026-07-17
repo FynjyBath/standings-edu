@@ -1,4 +1,6 @@
-{{define "flagSubsBtn"}}{{if .TaskURLs}}<button type="button" class="flag-subs-btn" data-flag-tasks="{{range $i, $u := .TaskURLs}}{{if $i}} {{end}}{{$u}}{{end}}" data-flag-text="{{.Text}}" title="Показать посылки эпизода в ленте ниже">⤵ посылки</button>{{end}}{{end}}
+{{define "flagSubsBtn"}}{{if .TaskURLs}}<button type="button" class="flag-subs-btn" data-flag-tasks="{{join .TaskURLs " "}}" data-flag-text="{{.Text}}" title="Показать посылки эпизода в ленте ниже">⤵ посылки</button>{{end}}{{end}}
+
+{{define "flagClearBtn"}}{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}{{end}}
 
 {{define "content"}}
 {{$p := .Profile}}
@@ -87,7 +89,7 @@
     <div class="flag-list">
     {{range .Flags}}
     {{if not .ReviewedAt}}
-    <span class="course-chip course-chip--flag" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}
+    <span class="course-chip course-chip--flag" title="{{join .Tasks ", "}}">{{.Text}} · {{submissionTime .At}}
       <span class="flag-review-actions">{{template "flagSubsBtn" .}}
         {{- if .Key}}
         <button type="button" class="flag-review-btn flag-review-btn--legit" data-flag-key="{{.Key}}" data-resolution="legit" title="Реально решил сам: посылки корректные, эпизод вернётся в подсчёт темпа">✓ сам решил</button>
@@ -97,11 +99,11 @@
       </span>
     </span>
     {{else if eq .Resolution "violation"}}
-    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">⛔ {{.Text}} · {{submissionTime .At}}<span class="flag-review-note flag-review-note--violation">нарушение · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}</span>
+    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{submissionTime .At}}<span class="flag-review-note flag-review-note--violation">нарушение · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{else if eq .Resolution "transfer"}}
-    <span class="course-chip course-chip--flag-done" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">⇄ перенос · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">⇄ перенос · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{else}}
-    <span class="course-chip course-chip--flag-done" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">✓ сам решил · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">✓ сам решил · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{end}}
     {{end}}
     </div>
@@ -209,7 +211,13 @@
       }
       apply();
     }
-    search.addEventListener("input", apply);
+    // Текстовый ввод — с дебаунсом: лента может быть на тысячи строк, и полный
+    // обход на каждое нажатие клавиши заметно подтормаживает.
+    var debounceTimer = null;
+    search.addEventListener("input", function () {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(apply, 150);
+    });
     solvedOnly.addEventListener("change", apply);
     if (episodeClear) episodeClear.addEventListener("click", function () { setEpisode(null, ""); });
     document.querySelectorAll(".flag-subs-btn").forEach(function (btn) {

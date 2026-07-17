@@ -194,7 +194,7 @@ func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusB
 // детектируются флаги (они и показываются: неразмеченные и «сам решил»
 // детектируются заново с теми же ключами); фаза 2 — из данных дополнительно
 // убираются эпизоды флагов без отметки «сам решил», и темп считается по ним.
-func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time, reviews map[string]domain.FlagReview) map[string]*domain.StudentCourseStats {
+func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time, reviews domain.StudentFlagReviews) map[string]*domain.StudentCourseStats {
 	tasks := courseTasksFromStandings(std)
 	if len(tasks) == 0 {
 		return nil
@@ -255,50 +255,81 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 	return out
 }
 
+// addNorms добавляет задачи в per-student множество с ленивой инициализацией.
+func addNorms(out map[string]map[string]struct{}, id string, norms []string) {
+	for _, norm := range norms {
+		if out[id] == nil {
+			out[id] = make(map[string]struct{})
+		}
+		out[id][norm] = struct{}{}
+	}
+}
+
+// legitNorms — задачи эпизодов, размеченных «сам решил»: по конкретной задаче
+// разметка «сам решил» побеждает любой другой эпизод (задача остаётся в темпе).
+func legitNorms(byKey map[string]domain.FlagReview) map[string]struct{} {
+	var out map[string]struct{}
+	for _, rev := range byKey {
+		if rev.Flag == nil || rev.NormalizedResolution() != domain.FlagResolutionLegit {
+			continue
+		}
+		for _, norm := range rev.Flag.TaskURLs {
+			if out == nil {
+				out = make(map[string]struct{})
+			}
+			out[norm] = struct{}{}
+		}
+	}
+	return out
+}
+
+// subtractNorms убирает из per-student множества задачи из keep.
+func subtractNorms(set map[string]map[string]struct{}, id string, keep map[string]struct{}) {
+	for norm := range keep {
+		delete(set[id], norm)
+	}
+	if len(set[id]) == 0 {
+		delete(set, id)
+	}
+}
+
 // reviewedExclusions — задачи эпизодов, размеченных «перенос»/«нарушение»
-// (по снапшотам флагов в отметках), по ученикам.
-func reviewedExclusions(groupSlug string, students []domain.Student, reviews map[string]domain.FlagReview) map[string]map[string]struct{} {
+// (по снапшотам флагов в отметках), по ученикам; задачи legit-эпизодов
+// не исключаются даже при пересечении.
+func reviewedExclusions(groupSlug string, students []domain.Student, reviews domain.StudentFlagReviews) map[string]map[string]struct{} {
 	if len(reviews) == 0 {
 		return nil
 	}
 	out := make(map[string]map[string]struct{})
 	for _, s := range students {
-		prefix := domain.FlagReviewKey(s.ID, groupSlug, "")
-		for key, rev := range reviews {
-			if !strings.HasPrefix(key, prefix) || rev.Flag == nil {
+		byKey := reviews[s.ID][groupSlug]
+		for _, rev := range byKey {
+			if rev.Flag == nil || !domain.FlagResolutionExcludesTempo(rev.NormalizedResolution()) {
 				continue
 			}
-			if !domain.FlagResolutionExcludesTempo(rev.NormalizedResolution()) {
-				continue
-			}
-			for _, norm := range rev.Flag.TaskURLs {
-				if out[s.ID] == nil {
-					out[s.ID] = make(map[string]struct{})
-				}
-				out[s.ID][norm] = struct{}{}
-			}
+			addNorms(out, s.ID, rev.Flag.TaskURLs)
 		}
+		subtractNorms(out, s.ID, legitNorms(byKey))
 	}
 	return out
 }
 
 // unreviewedFlagExclusions — задачи эпизодов задетектированных флагов БЕЗ
 // отметки «сам решил»: до разметки эпизоду не доверяем и в темпе не учитываем.
-func unreviewedFlagExclusions(groupSlug string, students []domain.Student, flagsByStudent map[string][]domain.CourseFlag, reviews map[string]domain.FlagReview) map[string]map[string]struct{} {
+// Отметка ищется по точному ключу, иначе по составу задач снапшота (ключ мог
+// смениться при сдвиге данных).
+func unreviewedFlagExclusions(groupSlug string, students []domain.Student, flagsByStudent map[string][]domain.CourseFlag, reviews domain.StudentFlagReviews) map[string]map[string]struct{} {
 	out := make(map[string]map[string]struct{})
 	for _, s := range students {
+		byKey := reviews[s.ID][groupSlug]
 		for _, f := range flagsByStudent[s.ID] {
-			if rev, ok := reviews[domain.FlagReviewKey(s.ID, groupSlug, f.Key)]; ok &&
+			if _, rev, ok := domain.MatchFlagReview(byKey, f); ok &&
 				rev.NormalizedResolution() == domain.FlagResolutionLegit {
 				continue // проверено: реально сам решил — время учитывается
 			}
-			for _, norm := range f.TaskURLs {
-				if out[s.ID] == nil {
-					out[s.ID] = make(map[string]struct{})
-				}
-				out[s.ID][norm] = struct{}{}
-			}
+			addNorms(out, s.ID, f.TaskURLs)
 		}
+		subtractNorms(out, s.ID, legitNorms(byKey))
 	}
 	if len(out) == 0 {
 		return nil
@@ -648,11 +679,7 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 	used := make(map[string]struct{}) // задачи, уже вошедшие в какой-то флаг
 
 	appendFlag := func(text string, evs []solvedCourseEvent) {
-		f := domain.CourseFlag{
-			Key:  fmt.Sprintf("%d|%s", evs[0].at.Unix(), evs[0].task.norm),
-			Text: text,
-			At:   evs[0].at,
-		}
+		f := domain.CourseFlag{Text: text, At: evs[0].at}
 		for _, e := range evs {
 			used[e.task.norm] = struct{}{}
 			if len(f.Tasks) < 6 {
@@ -661,6 +688,9 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 			// TaskURLs — без ограничения: по ним эпизод исключается из темпа.
 			f.TaskURLs = append(f.TaskURLs, e.task.norm)
 		}
+		// Ключ — отпечаток состава эпизода: стабилен при перетестировании
+		// (время первого решения на сайтах может сдвигаться).
+		f.Key = domain.CourseFlagKey(f.TaskURLs)
 		flags = append(flags, f)
 	}
 	overlaps := func(evs []solvedCourseEvent) bool {

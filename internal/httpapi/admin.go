@@ -178,7 +178,7 @@ func (h *Handlers) fillStudentProfilePage(page *AdminStudentProfilePageData, id 
 		}
 		profile.CourseStats = courses
 	}
-	applyFlagReviews(h.loadFlagReviews(), id, profile.CourseStats)
+	applyFlagReviews(h.loadFlagReviewIndex(), id, profile.CourseStats)
 	page.Profile = profile
 	if profile.PublicName != "" {
 		page.PageTitle = "Профиль — " + profile.PublicName

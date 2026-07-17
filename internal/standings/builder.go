@@ -98,12 +98,14 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	profiles := b.buildStudentProfiles(students, statusByStudent, now)
 
 	// Темп курса по каждой группе — в профили учеников (для преподавателя).
+	// Отметки индексируются по ученикам один раз на всю генерацию.
+	reviewIdx := domain.IndexFlagReviews(data.FlagReviews)
 	for _, pg := range prepared {
 		std, ok := result[pg.group.Slug]
 		if !ok {
 			continue
 		}
-		stats := computeCourseStats(std, pg.students, statusByStudent, now, data.FlagReviews)
+		stats := computeCourseStats(std, pg.students, statusByStudent, now, reviewIdx)
 		for sid, cs := range stats {
 			if p := profiles[sid]; p != nil && cs != nil {
 				p.CourseStats = append(p.CourseStats, *cs)

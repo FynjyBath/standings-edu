@@ -62,7 +62,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"contestGeneratedAtISO":   contestGeneratedAtISO,
 			"timeISO":                 timeISO,
 			"gradeText":               gradeText,
-			"grade2Text":              grade2Text,
+			"gradeFixed":              gradeFixed,
 			"numText":                 numText,
 			"pct":                     func(v float64) int { return int(math.Round(v * 100)) },
 			"submissionTime":          submissionTime,
@@ -448,13 +448,18 @@ func gradeText(v *float64) string {
 	return numText(*v)
 }
 
-// grade2Text — оценка всегда с двумя знаками после запятой (для колонки точного
-// итога). Пусто, если оценки нет.
-func grade2Text(v *float64) string {
+// gradeFixed — оценка с фиксированным числом знаков после запятой (round из
+// конфига оценок; nil у старых generated — 2): столбцы и точный итог выглядят
+// единообразно («7.50», а не «7.5»/«8»). Пусто, если оценки нет.
+func gradeFixed(v *float64, decimals *int) string {
 	if v == nil {
 		return ""
 	}
-	return strconv.FormatFloat(*v, 'f', 2, 64)
+	d := 2
+	if decimals != nil && *decimals >= 0 {
+		d = *decimals
+	}
+	return strconv.FormatFloat(*v, 'f', d, 64)
 }
 
 // submissionTime форматирует время посылки в MSK для ленты профиля.

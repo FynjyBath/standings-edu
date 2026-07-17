@@ -114,9 +114,10 @@ func Build(cfg *domain.GradesConfig, standings domain.GeneratedGroupStandings, r
 	})
 
 	return &domain.GeneratedGrades{
-		Title:   strings.TrimSpace(cfg.Title),
-		Columns: columns,
-		Rows:    rows,
+		Title:    strings.TrimSpace(cfg.Title),
+		Columns:  columns,
+		Rows:     rows,
+		Decimals: &decimals,
 	}
 }
 

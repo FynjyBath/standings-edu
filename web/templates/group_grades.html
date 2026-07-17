@@ -35,9 +35,9 @@
         <tr data-filter-text="{{.PublicName}}">
           <td class="student-name">{{.PublicName}}</td>
           {{range .Values}}
-          <td class="solved-count">{{gradeText .}}</td>
+          <td class="solved-count">{{gradeFixed . $.Grades.Decimals}}</td>
           {{end}}
-          <td class="solved-count"><span class="grade-weight">{{grade2Text .FinalRaw}}</span></td>
+          <td class="solved-count"><span class="grade-weight">{{gradeFixed .FinalRaw $.Grades.Decimals}}</span></td>
           <td class="solved-count"><strong>{{gradeText .Final}}</strong></td>
         </tr>
         {{end}}

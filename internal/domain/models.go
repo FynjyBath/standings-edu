@@ -894,6 +894,9 @@ type GeneratedGrades struct {
 	Title   string                 `json:"title,omitempty"`
 	Columns []GeneratedGradeColumn `json:"columns"`
 	Rows    []GeneratedGradeRow    `json:"rows"`
+	// Decimals — знаков после запятой (round из конфига): все оценки на странице
+	// показываются с одинаковым числом знаков. nil (старые generated) — 2.
+	Decimals *int `json:"decimals,omitempty"`
 }
 
 type GeneratedGradeColumn struct {

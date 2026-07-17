@@ -67,6 +67,15 @@ func TestBuildFinalRawUnrounded(t *testing.T) {
 	if row.FinalRaw == nil || *row.FinalRaw < 3.3333 || *row.FinalRaw > 3.3334 {
 		t.Fatalf("FinalRaw must be unrounded ~3.3333: %v", row.FinalRaw)
 	}
+	// Decimals — число знаков для единообразного показа всех оценок страницы.
+	if got.Decimals == nil || *got.Decimals != 1 {
+		t.Fatalf("Decimals must carry cfg round (default 1): %v", got.Decimals)
+	}
+	two := 2
+	cfg.Round = &two
+	if got2 := Build(cfg, domain.GeneratedGroupStandings{}, roster, manual); got2.Decimals == nil || *got2.Decimals != 2 {
+		t.Fatalf("Decimals must follow cfg.Round=2: %v", got2.Decimals)
+	}
 }
 
 // Коэффициент дорешки: вклад задачи = max(основной, дорешка×k); штраф за нули

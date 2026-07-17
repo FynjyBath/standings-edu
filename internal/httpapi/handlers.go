@@ -531,6 +531,7 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 				row.PublicName = profile.PublicName
 			}
 			row.Stats = profile.Stats
+			row.Accounts = profile.Accounts
 			// Темп именно этого курса (группы) — основной контент страницы.
 			applyFlagReviews(reviews, id, profile.CourseStats)
 			for i := range profile.CourseStats {
@@ -984,6 +985,9 @@ type ParticipantRow struct {
 	PublicName string
 	HasProfile bool
 	Stats      domain.StudentActivityStats
+	// Accounts — аккаунты ученика: для ссылок «посылки ученика по задаче» у
+	// сигналов застревания/пропуска.
+	Accounts []domain.Account
 	// Course — темп именно этого курса (группы) из профиля ученика; nil — не
 	// посчитан (нет посылок или профиль ещё не сгенерирован).
 	Course *domain.StudentCourseStats

@@ -76,12 +76,12 @@
   </div>
   {{if .Stuck}}
   <p class="course-signal course-signal--stuck">⚠ Застрял:
-    {{range .Stuck}}<span class="course-chip course-chip--stuck" title="Активного времени {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}}">{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}} <b>×{{numText .Ratio}}</b></span> {{end}}
+    {{range .Stuck}}{{$u := submissionLink .URL $p.Accounts}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Активного времени {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}} <b>×{{numText .Ratio}}</b></span> {{end}}
   </p>
   {{end}}
   {{if .Abandoned}}
   <p class="course-signal">↩ Пропустил (стоит вернуться):
-    {{range .Abandoned}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена">{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+    {{range .Abandoned}}{{$u := submissionLink .URL $p.Accounts}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
   </p>
   {{end}}
   {{if .Flags}}

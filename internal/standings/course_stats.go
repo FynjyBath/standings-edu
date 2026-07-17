@@ -200,8 +200,9 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		return nil
 	}
 
-	// Фаза 1: без эпизодов, размеченных как «перенос»/«нарушение».
-	statusByStudent = applyEpisodeExclusions(students, statusByStudent, reviewedExclusions(std.GroupSlug, students, reviews))
+	// Фаза 1: без эпизодов, размеченных как «перенос»/«нарушение». Отметки
+	// глобальны по ученику: разметка в любой группе действует и здесь.
+	statusByStudent = applyEpisodeExclusions(students, statusByStudent, reviewedExclusions(students, reviews))
 
 	times := make(map[string]studentTaskTime, len(students))
 	for _, s := range students {
@@ -224,7 +225,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 	}
 
 	// Фаза 2: дополнительно без эпизодов флагов, не размеченных «сам решил».
-	if extra := unreviewedFlagExclusions(std.GroupSlug, students, flagsByStudent, reviews); len(extra) > 0 {
+	if extra := unreviewedFlagExclusions(students, flagsByStudent, reviews); len(extra) > 0 {
 		statusByStudent = applyEpisodeExclusions(students, statusByStudent, extra)
 		for id := range extra {
 			st := statusByStudent[id]
@@ -296,13 +297,13 @@ func subtractNorms(set map[string]map[string]struct{}, id string, keep map[strin
 // reviewedExclusions — задачи эпизодов, размеченных «перенос»/«нарушение»
 // (по снапшотам флагов в отметках), по ученикам; задачи legit-эпизодов
 // не исключаются даже при пересечении.
-func reviewedExclusions(groupSlug string, students []domain.Student, reviews domain.StudentFlagReviews) map[string]map[string]struct{} {
+func reviewedExclusions(students []domain.Student, reviews domain.StudentFlagReviews) map[string]map[string]struct{} {
 	if len(reviews) == 0 {
 		return nil
 	}
 	out := make(map[string]map[string]struct{})
 	for _, s := range students {
-		byKey := reviews[s.ID][groupSlug]
+		byKey := reviews[s.ID]
 		for _, rev := range byKey {
 			if rev.Flag == nil || !domain.FlagResolutionExcludesTempo(rev.NormalizedResolution()) {
 				continue
@@ -318,10 +319,10 @@ func reviewedExclusions(groupSlug string, students []domain.Student, reviews dom
 // отметки «сам решил»: до разметки эпизоду не доверяем и в темпе не учитываем.
 // Отметка ищется по точному ключу, иначе по составу задач снапшота (ключ мог
 // смениться при сдвиге данных).
-func unreviewedFlagExclusions(groupSlug string, students []domain.Student, flagsByStudent map[string][]domain.CourseFlag, reviews domain.StudentFlagReviews) map[string]map[string]struct{} {
+func unreviewedFlagExclusions(students []domain.Student, flagsByStudent map[string][]domain.CourseFlag, reviews domain.StudentFlagReviews) map[string]map[string]struct{} {
 	out := make(map[string]map[string]struct{})
 	for _, s := range students {
-		byKey := reviews[s.ID][groupSlug]
+		byKey := reviews[s.ID]
 		for _, f := range flagsByStudent[s.ID] {
 			if _, rev, ok := domain.MatchFlagReview(byKey, f); ok &&
 				rev.NormalizedResolution() == domain.FlagResolutionLegit {

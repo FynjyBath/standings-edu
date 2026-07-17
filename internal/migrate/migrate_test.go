@@ -622,12 +622,21 @@ func TestRoundTripFlagReviews(t *testing.T) {
 			grp = &bundle.Groups[i]
 		}
 	}
-	if grp == nil || len(grp.FlagReviews) != 1 {
-		t.Fatalf("в бандле должна быть ровно одна отметка группы grp: %+v", grp)
+	// Отметки глобальны по ученику: с участником группы едут ВСЕ его отметки
+	// (в т.ч. поставленная в другой группе) — они действуют на его темп всюду.
+	if grp == nil || len(grp.FlagReviews) != 2 {
+		t.Fatalf("в бандле должны быть обе отметки участника grp: %+v", grp)
 	}
-	br := grp.FlagReviews[0]
-	if br.StudentID != "ivanov" || br.FlagKey != flagKey || br.Review.Resolution != "transfer" || br.Review.Flag == nil {
+	byKey := map[string]BundleFlagReview{}
+	for _, br := range grp.FlagReviews {
+		byKey[br.FlagKey] = br
+	}
+	br := byKey[flagKey]
+	if br.StudentID != "ivanov" || br.Review.Resolution != "transfer" || br.Review.Flag == nil {
 		t.Fatalf("отметка бандла неверна: %+v", br)
+	}
+	if byKey["zzz"].Review.Resolution != "violation" {
+		t.Fatalf("отметка из другой группы тоже должна ехать с учеником: %+v", grp.FlagReviews)
 	}
 
 	// Экспорт только контестов — отметки не едут (это данные участников).
@@ -653,24 +662,27 @@ func TestRoundTripFlagReviews(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantKey := "ivanov-old|grp|" + flagKey
+	wantKey := "ivanov-old|" + flagKey
 	rev, ok := got[wantKey]
 	if !ok || rev.Resolution != "transfer" || rev.Comment != "перенос с ejudge" || rev.Flag == nil {
 		t.Fatalf("отметка должна импортироваться под финальным id: %v", got)
 	}
+	if _, ok := got["ivanov-old|zzz"]; !ok {
+		t.Fatalf("вторая отметка ученика тоже должна импортироваться: %v", got)
+	}
 	for k := range got {
-		if strings.HasPrefix(k, "ivanov|") || strings.Contains(k, "|other|") {
-			t.Fatalf("чужие/неремапленные ключи не должны попадать: %v", got)
+		if strings.HasPrefix(k, "ivanov|") {
+			t.Fatalf("неремапленные ключи не должны попадать: %v", got)
 		}
 	}
 	found := false
 	for _, g := range rep.Groups {
-		if g.Slug == "grp" && g.FlagReviewsAdded == 1 {
+		if g.Slug == "grp" && g.FlagReviewsAdded == 2 {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("отчёт должен показать +1 проверку флагов: %+v", rep.Groups)
+		t.Fatalf("отчёт должен показать +2 проверки флагов: %+v", rep.Groups)
 	}
 
 	// Существующая отметка не перезаписывается повторным импортом.

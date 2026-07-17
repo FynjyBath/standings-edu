@@ -62,7 +62,7 @@ func TestJuryFlagReviewSetAndClear(t *testing.T) {
 	if err := fileutil.ReadJSON(filepath.Join(dataDir, "flag_reviews.json"), &reviews); err != nil {
 		t.Fatal(err)
 	}
-	rev, ok := reviews["s1|g1|"+fxKey1]
+	rev, ok := reviews["s1|"+fxKey1]
 	if !ok || rev.Comment != "перенёс с ejudge" || rev.Resolution != domain.FlagResolutionTransfer || rev.At.IsZero() {
 		t.Fatalf("review not stored: %+v", reviews)
 	}
@@ -120,7 +120,7 @@ func TestFlagReviewOldKeyMigration(t *testing.T) {
 	}
 
 	got := h.loadFlagReviews()
-	rev, ok := got["s1|g1|"+fxKey1]
+	rev, ok := got["s1|"+fxKey1]
 	if !ok || rev.Flag == nil || rev.Flag.Key != fxKey1 {
 		t.Fatalf("old key must migrate to composition key: %v", got)
 	}
@@ -235,6 +235,7 @@ func TestAdminFlagReviewKeepsOldRecords(t *testing.T) {
 		"s1|g1|ancient-legit":     {At: ancient, Resolution: domain.FlagResolutionLegit},
 		"s1|g1|ancient-violation": {At: ancient, Resolution: domain.FlagResolutionViolation},
 	}
+	// Старые групповые ключи мигрируют в глобальные «ученик|ключ», группа — в Group.
 	if err := fileutil.WriteJSON(filepath.Join(dataDir, "flag_reviews.json"), old, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -246,9 +247,48 @@ func TestAdminFlagReviewKeepsOldRecords(t *testing.T) {
 		t.Fatalf("admin set review: %d %v", code, resp)
 	}
 	got := h.loadFlagReviews()
-	for _, key := range []string{"s1|g1|" + fxKey1, "s1|g1|ancient-legit", "s1|g1|ancient-violation"} {
+	// Старые групповые ключи мигрируют в глобальные «ученик|ключ», группа — в Group.
+	for _, key := range []string{"s1|" + fxKey1, "s1|ancient-legit", "s1|ancient-violation"} {
 		if _, ok := got[key]; !ok {
 			t.Fatalf("record %q must be kept: %v", key, got)
 		}
+	}
+	if g := got["s1|ancient-violation"].Group; g != "g1" {
+		t.Fatalf("группа старого ключа должна переехать в Group: %q", g)
+	}
+}
+
+// Отметка глобальна по ученику: эпизод общего контеста, размеченный в g1,
+// сереет и в разрезе g2; воскрешённый снапшот показывается один раз — в группе,
+// где размечали.
+func TestFlagReviewSyncsAcrossGroups(t *testing.T) {
+	h, _ := juryFlagSetup(t)
+
+	code, resp := juryPost(t, h.JuryFlagReviewSet, map[string]any{
+		"slug": "g1", "token": "tok",
+		"student_id": "s1", "group_slug": "g1", "flag_key": fxKey1,
+		"resolution": "transfer", "comment": "перенос",
+	})
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("set: %d %v", code, resp)
+	}
+
+	shared := domain.CourseFlag{Key: fxKey1, Text: "серия", TaskURLs: []string{"t1", "t2"}}
+	stats := []domain.StudentCourseStats{
+		{GroupSlug: "g1", Flags: []domain.CourseFlag{shared}},
+		{GroupSlug: "g2", Flags: []domain.CourseFlag{shared}},
+	}
+	applyFlagReviews(h.loadFlagReviewIndex(), "s1", stats)
+	for i := range stats {
+		if f := stats[i].Flags[0]; f.ReviewedAt == nil || f.Resolution != domain.FlagResolutionTransfer {
+			t.Fatalf("отметка должна действовать в группе %s: %+v", stats[i].GroupSlug, f)
+		}
+	}
+
+	// Воскрешение после исчезновения флага — только в группе разметки (g1).
+	stats = []domain.StudentCourseStats{{GroupSlug: "g2"}, {GroupSlug: "g1"}}
+	applyFlagReviews(h.loadFlagReviewIndex(), "s1", stats)
+	if len(stats[0].Flags) != 0 || len(stats[1].Flags) != 1 {
+		t.Fatalf("снапшот должен воскреснуть один раз в g1: g2=%d g1=%d", len(stats[0].Flags), len(stats[1].Flags))
 	}
 }

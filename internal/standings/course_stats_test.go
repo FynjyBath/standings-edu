@@ -375,7 +375,7 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 	run := func(resolution string) map[string]*domain.StudentCourseStats {
 		snap := flag
 		return computeCourseStats(std, students, statuses, now, domain.IndexFlagReviews(map[string]domain.FlagReview{
-			domain.FlagReviewKey("cheat", "g", flag.Key): {At: now, Resolution: resolution, Flag: &snap},
+			domain.FlagReviewKey("cheat", flag.Key): {At: now, Resolution: resolution, Flag: &snap},
 		}))
 	}
 	hasFlag := func(cs *domain.StudentCourseStats) bool {
@@ -512,11 +512,11 @@ func TestLegitWinsOnOverlappingEpisodes(t *testing.T) {
 
 	snap := legitFlag
 	reviews := domain.IndexFlagReviews(map[string]domain.FlagReview{
-		domain.FlagReviewKey("s1", "g", legitFlag.Key): {Resolution: domain.FlagResolutionLegit, Flag: &snap},
+		domain.FlagReviewKey("s1", legitFlag.Key): {Resolution: domain.FlagResolutionLegit, Flag: &snap},
 	})
 	flags := map[string][]domain.CourseFlag{"s1": {legitFlag, otherFlag}}
 
-	out := unreviewedFlagExclusions("g", students, flags, reviews)
+	out := unreviewedFlagExclusions(students, flags, reviews)
 	if _, excluded := out["s1"]["t2"]; excluded {
 		t.Fatalf("t2 защищена «сам решил» и не должна исключаться: %+v", out["s1"])
 	}
@@ -532,10 +532,10 @@ func TestLegitWinsOnOverlappingEpisodes(t *testing.T) {
 	// То же для фазы 1: «перенос»-снапшот с пересечением не трогает legit-задачу.
 	transferSnap := otherFlag
 	reviews = domain.IndexFlagReviews(map[string]domain.FlagReview{
-		domain.FlagReviewKey("s1", "g", legitFlag.Key):    {Resolution: domain.FlagResolutionLegit, Flag: &snap},
-		domain.FlagReviewKey("s1", "g", transferSnap.Key): {Resolution: domain.FlagResolutionTransfer, Flag: &transferSnap},
+		domain.FlagReviewKey("s1", legitFlag.Key):    {Resolution: domain.FlagResolutionLegit, Flag: &snap},
+		domain.FlagReviewKey("s1", transferSnap.Key): {Resolution: domain.FlagResolutionTransfer, Flag: &transferSnap},
 	})
-	out = reviewedExclusions("g", students, reviews)
+	out = reviewedExclusions(students, reviews)
 	if _, excluded := out["s1"]["t2"]; excluded {
 		t.Fatalf("фаза 1: t2 защищена «сам решил»: %+v", out["s1"])
 	}
@@ -554,11 +554,11 @@ func TestFlagReviewSoftMatchByTasks(t *testing.T) {
 	// Снапшот с чуть отличающимся составом (эпизод «подрос») и СТАРЫМ ключом.
 	snap := domain.CourseFlag{Key: "1700000000|t1", TaskURLs: []string{"t1", "t2"}}
 	reviews := domain.IndexFlagReviews(map[string]domain.FlagReview{
-		domain.FlagReviewKey("s1", "g", snap.Key): {Resolution: domain.FlagResolutionLegit, Flag: &snap},
+		domain.FlagReviewKey("s1", snap.Key): {Resolution: domain.FlagResolutionLegit, Flag: &snap},
 	})
 	flags := map[string][]domain.CourseFlag{"s1": {flag}}
 
-	out := unreviewedFlagExclusions("g", students, flags, reviews)
+	out := unreviewedFlagExclusions(students, flags, reviews)
 	if len(out["s1"]) != 0 {
 		t.Fatalf("legit по мягкому сопоставлению должен вернуть эпизод в темп: %+v", out["s1"])
 	}

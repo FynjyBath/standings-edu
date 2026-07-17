@@ -203,28 +203,24 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 	groupsByStudent := make(map[string][]string)
 	contestIDs := make(map[string]struct{})
 
-	// Проверки флагов нечестности — по группам (ключ: ученик|группа|ключ флага).
+	// Проверки флагов нечестности — глобальны по ученику (ключ: ученик|ключ
+	// флага); в бандл группы попадают отметки её участников.
 	flagReviews, err := storage.LoadFlagReviews(dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("load flag reviews: %w", err)
 	}
-	reviewsByGroup := make(map[string][]BundleFlagReview)
+	reviewsByStudent := make(map[string][]BundleFlagReview)
 	for key, rev := range flagReviews {
-		parts := strings.SplitN(key, "|", 3)
-		if len(parts) != 3 {
+		parts := strings.SplitN(key, "|", 2)
+		if len(parts) != 2 {
 			continue
 		}
-		reviewsByGroup[parts[1]] = append(reviewsByGroup[parts[1]], BundleFlagReview{
-			StudentID: parts[0], FlagKey: parts[2], Review: rev,
+		reviewsByStudent[parts[0]] = append(reviewsByStudent[parts[0]], BundleFlagReview{
+			StudentID: parts[0], FlagKey: parts[1], Review: rev,
 		})
 	}
-	for _, list := range reviewsByGroup {
-		sort.Slice(list, func(i, j int) bool {
-			if list[i].StudentID != list[j].StudentID {
-				return list[i].StudentID < list[j].StudentID
-			}
-			return list[i].FlagKey < list[j].FlagKey
-		})
+	for _, list := range reviewsByStudent {
+		sort.Slice(list, func(i, j int) bool { return list[i].FlagKey < list[j].FlagKey })
 	}
 
 	for _, slug := range order {
@@ -272,7 +268,9 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 			if g := loadManualGradesQuiet(filepath.Join(groupsDir, slug, "grades_manual.json")); len(g) > 0 {
 				bg.ManualGrades = g
 			}
-			bg.FlagReviews = reviewsByGroup[slug]
+			for _, sid := range gf.StudentIDs {
+				bg.FlagReviews = append(bg.FlagReviews, reviewsByStudent[strings.TrimSpace(sid)]...)
+			}
 		}
 
 		bundle.Groups = append(bundle.Groups, bg)
@@ -632,7 +630,7 @@ func importFlagReviews(dataDir string, b *Bundle, sel Selection, bundleStudents 
 			if flagKey == "" {
 				continue
 			}
-			key := domain.FlagReviewKey(finalID, slug, flagKey)
+			key := domain.FlagReviewKey(finalID, flagKey)
 			if _, exists := current[key]; exists {
 				continue // не перезаписываем существующие отметки
 			}

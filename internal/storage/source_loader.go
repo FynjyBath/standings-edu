@@ -57,9 +57,11 @@ func (l *SourceLoader) loadFlagReviews() map[string]domain.FlagReview {
 
 // LoadFlagReviews — единый ридер data/flag_reviews.json (генерация и отдача
 // страниц пользуются им же). Отсутствующий файл — пустая карта без ошибки.
-// Заодно мигрирует ключи старого формата (время|задача) на стабильный отпечаток
-// состава эпизода — по снапшоту флага в отметке; на диске миграция закрепится
-// при следующей записи файла.
+// Заодно мигрирует ключи старых форматов на актуальный «ученик|отпечаток
+// состава эпизода»: из трёхчастных «ученик|группа|ключ» группа переезжает в
+// поле Group, ключ эпизода пересчитывается по снапшоту. На диске миграция
+// закрепится при следующей записи файла. Коллизии (одна отметка из двух групп)
+// схлопываются в новейшую по времени.
 func LoadFlagReviews(dataDir string) (map[string]domain.FlagReview, error) {
 	out := map[string]domain.FlagReview{}
 	if strings.TrimSpace(dataDir) == "" {
@@ -74,14 +76,37 @@ func LoadFlagReviews(dataDir string) (map[string]domain.FlagReview, error) {
 	}
 	migrated := make(map[string]domain.FlagReview, len(out))
 	for key, rev := range out {
-		if rev.Flag != nil && len(rev.Flag.TaskURLs) > 0 {
-			if parts := strings.SplitN(key, "|", 3); len(parts) == 3 {
-				flagKey := domain.CourseFlagKey(rev.Flag.TaskURLs)
-				rev.Flag.Key = flagKey
-				key = domain.FlagReviewKey(parts[0], parts[1], flagKey)
-			}
+		sid := key
+		flagKey := ""
+		if i := strings.IndexByte(key, '|'); i >= 0 {
+			sid, flagKey = key[:i], key[i+1:]
 		}
-		migrated[key] = rev
+		// Старый трёхчастный ключ: средняя часть — группа. Отличаем по
+		// снапшоту (его ключ/состав — истина) либо по наличию второго «|»
+		// у записей без снапшота.
+		if rev.Flag != nil && len(rev.Flag.TaskURLs) > 0 {
+			newFlagKey := domain.CourseFlagKey(rev.Flag.TaskURLs)
+			if flagKey != newFlagKey {
+				if i := strings.IndexByte(flagKey, '|'); i >= 0 && rev.Group == "" {
+					rev.Group = flagKey[:i]
+				}
+				flagKey = newFlagKey
+			}
+			rev.Flag.Key = newFlagKey
+		} else if i := strings.IndexByte(flagKey, '|'); i >= 0 {
+			if rev.Group == "" {
+				rev.Group = flagKey[:i]
+			}
+			flagKey = flagKey[i+1:]
+		}
+		if sid == "" || flagKey == "" {
+			continue
+		}
+		newKey := domain.FlagReviewKey(sid, flagKey)
+		if prev, ok := migrated[newKey]; ok && prev.At.After(rev.At) {
+			continue // коллизия групповых записей одного эпизода — новейшая побеждает
+		}
+		migrated[newKey] = rev
 	}
 	return migrated, nil
 }

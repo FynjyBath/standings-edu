@@ -41,22 +41,20 @@ func (h *Handlers) loadFlagReviewIndex() domain.StudentFlagReviews {
 }
 
 // applyFlagReviews накладывает отметки проверки на флаги курс-статов (по
-// точному ключу, иначе по составу задач снапшота) и добавляет из снапшотов
-// флаги «перенос»/«нарушение», которых в generated уже нет (их посылки
-// исключены из темпа, и флаг перестаёт детектироваться). Legit-снапшоты не
+// точному ключу, иначе по составу задач снапшота). Отметки глобальны по
+// ученику: эпизод общего контеста, размеченный в одной группе, сереет и в
+// разрезах остальных. Снапшоты «перенос»/«нарушение», которых в generated уже
+// нет (их посылки исключены из темпа, и флаг не детектируется), воскрешаются
+// один раз — в группе, где размечали (иначе в первой). Legit-снапшоты не
 // воскрешаются: если детектор больше не видит эпизод, показывать нечего.
 // Флаги не забываются: показываются все, любого возраста.
 func applyFlagReviews(reviews domain.StudentFlagReviews, studentID string, stats []domain.StudentCourseStats) {
-	byGroup := reviews[studentID]
-	if len(byGroup) == 0 {
+	byKey := reviews[studentID]
+	if len(byKey) == 0 || len(stats) == 0 {
 		return
 	}
+	matched := make(map[string]struct{}, len(byKey))
 	for i := range stats {
-		byKey := byGroup[stats[i].GroupSlug]
-		if len(byKey) == 0 {
-			continue
-		}
-		matched := make(map[string]struct{}, len(byKey))
 		for j := range stats[i].Flags {
 			f := &stats[i].Flags[j]
 			if f.Key == "" {
@@ -70,46 +68,53 @@ func applyFlagReviews(reviews domain.StudentFlagReviews, studentID string, stats
 				f.Resolution = rev.NormalizedResolution()
 			}
 		}
-		for key, rev := range byKey {
-			if rev.Flag == nil || rev.NormalizedResolution() == domain.FlagResolutionLegit {
-				continue
-			}
-			if _, ok := matched[key]; ok {
-				continue
-			}
-			f := *rev.Flag
-			at := rev.At
-			f.ReviewedAt = &at
-			f.ReviewComment = rev.Comment
-			f.Resolution = rev.NormalizedResolution()
-			stats[i].Flags = append(stats[i].Flags, f)
+	}
+	for key, rev := range byKey {
+		if rev.Flag == nil || rev.NormalizedResolution() == domain.FlagResolutionLegit {
+			continue
 		}
+		if _, ok := matched[key]; ok {
+			continue
+		}
+		target := 0
+		for i := range stats {
+			if stats[i].GroupSlug == rev.Group {
+				target = i
+				break
+			}
+		}
+		f := *rev.Flag
+		at := rev.At
+		f.ReviewedAt = &at
+		f.ReviewComment = rev.Comment
+		f.Resolution = rev.NormalizedResolution()
+		stats[target].Flags = append(stats[target].Flags, f)
 	}
 }
 
 // setFlagReview ставит отметку с исходом resolution (пустой — снять) и
-// сохраняет файл (вызывается под SerializeDataWrite). Снапшот флага берётся из
-// сгенерированного профиля — по нему потом работает исключение из темпа и показ
-// после исчезновения флага. Ключ в файле нормализуется к отпечатку состава
-// эпизода (клиент мог прислать ключ со старой страницы). Отметки не протухают:
-// флаги не забываются, запись живёт, пока преподаватель не снимет её сам.
+// сохраняет файл (вызывается под SerializeDataWrite). Отметка глобальна по
+// ученику (ключ без группы): разметка действует во всех его группах; groupSlug
+// запоминается информационно (Group). Снапшот флага берётся из сгенерированного
+// профиля — по нему потом работает исключение из темпа и показ после
+// исчезновения флага. Ключ нормализуется к отпечатку состава эпизода (клиент
+// мог прислать ключ со старой страницы), совпавшая по составу старая запись
+// обновляется, а не дублируется. Отметки не протухают: запись живёт, пока
+// преподаватель не снимет её сам.
 func (h *Handlers) setFlagReview(studentID, groupSlug, flagKey, resolution, comment string) error {
 	reviews := h.loadFlagReviews()
-	key := domain.FlagReviewKey(studentID, groupSlug, flagKey)
-	if resolution == "" {
-		if _, ok := reviews[key]; !ok {
-			// Ключ со страницы не совпал (эпизод сменил ключ) — ищем отметку
-			// по составу задач флага из generated.
-			if snap := h.findFlagSnapshot(studentID, groupSlug, flagKey); snap != nil {
-				byKey := domain.IndexFlagReviews(reviews)[studentID][groupSlug]
-				if matchedKey, _, ok := domain.MatchFlagReview(byKey, *snap); ok {
-					key = domain.FlagReviewKey(studentID, groupSlug, matchedKey)
-				}
-			}
+	key := domain.FlagReviewKey(studentID, flagKey)
+	snapshot := h.findFlagSnapshot(studentID, groupSlug, flagKey)
+	// Ключ со страницы мог устареть (эпизод сменил состав/ключ) — находим
+	// существующую запись по составу задач снапшота.
+	if _, ok := reviews[key]; !ok && snapshot != nil {
+		if matchedKey, _, ok := domain.MatchFlagReview(domain.IndexFlagReviews(reviews)[studentID], *snapshot); ok {
+			key = domain.FlagReviewKey(studentID, matchedKey)
 		}
+	}
+	if resolution == "" {
 		delete(reviews, key)
 	} else {
-		snapshot := h.findFlagSnapshot(studentID, groupSlug, flagKey)
 		if snapshot == nil {
 			// Флага нет в текущем generated (страница устарела) — но отметка уже
 			// могла быть со снапшотом: тогда меняем только исход/комментарий.
@@ -119,17 +124,17 @@ func (h *Handlers) setFlagReview(studentID, groupSlug, flagKey, resolution, comm
 				return errFlagNotFound
 			}
 		}
-		// Нормализуем ключ по составу эпизода и убираем возможную запись под
-		// старым ключом, чтобы не плодить дубли.
+		// Нормализуем ключ по составу эпизода, старую запись не дублируем.
 		if len(snapshot.TaskURLs) > 0 {
 			snapshot.Key = domain.CourseFlagKey(snapshot.TaskURLs)
 			delete(reviews, key)
-			key = domain.FlagReviewKey(studentID, groupSlug, snapshot.Key)
+			key = domain.FlagReviewKey(studentID, snapshot.Key)
 		}
 		reviews[key] = domain.FlagReview{
 			At:         time.Now(),
 			Comment:    strings.TrimSpace(comment),
 			Resolution: resolution,
+			Group:      groupSlug,
 			Flag:       snapshot,
 		}
 	}

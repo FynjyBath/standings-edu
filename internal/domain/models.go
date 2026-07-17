@@ -1007,12 +1007,17 @@ func FlagResolutionExcludesTempo(resolution string) bool {
 }
 
 // FlagReview — отметка преподавателя о проверке флага; хранится в
-// data/flag_reviews.json по ключу FlagReviewKey.
+// data/flag_reviews.json по ключу FlagReviewKey. Отметка глобальна по ученику:
+// эпизод, задетектированный в нескольких группах (общий контест), размечается
+// один раз и действует во всех.
 type FlagReview struct {
 	At      time.Time `json:"at"`
 	Comment string    `json:"comment,omitempty"`
 	// Resolution — один из FlagResolution*; пусто в старых записях — считается legit.
 	Resolution string `json:"resolution,omitempty"`
+	// Group — группа, в которой размечали (информационно: показ воскрешённого
+	// снапшота идёт в её разрез профиля).
+	Group string `json:"group,omitempty"`
 	// Flag — снапшот флага на момент проверки: по нему эпизод исключается из
 	// темпа при генерации и показывается в профиле, когда сам флаг уже не
 	// детектируется (посылки исключены после «переноса»/«нарушения»).
@@ -1027,9 +1032,10 @@ func (r FlagReview) NormalizedResolution() string {
 	return r.Resolution
 }
 
-// FlagReviewKey — ключ отметки в data/flag_reviews.json.
-func FlagReviewKey(studentID, groupSlug, flagKey string) string {
-	return studentID + "|" + groupSlug + "|" + flagKey
+// FlagReviewKey — ключ отметки в data/flag_reviews.json: ученик + отпечаток
+// эпизода, без группы (одна разметка действует во всех группах ученика).
+func FlagReviewKey(studentID, flagKey string) string {
+	return studentID + "|" + flagKey
 }
 
 // CourseFlagKey — стабильный ключ эпизода: отпечаток СОСТАВА задач (а не
@@ -1060,31 +1066,26 @@ func FlagTasksMatch(a, b []string) bool {
 	return inter*2 >= len(a) && inter*2 >= len(b)
 }
 
-// StudentFlagReviews — отметки, проиндексированные ученик → группа → ключ
-// флага. Строится один раз на запрос/генерацию вместо префикс-сканов всего
-// файла на каждого ученика.
-type StudentFlagReviews map[string]map[string]map[string]FlagReview
+// StudentFlagReviews — отметки, проиндексированные ученик → ключ флага.
+// Строится один раз на запрос/генерацию вместо сканов всего файла на каждого
+// ученика.
+type StudentFlagReviews map[string]map[string]FlagReview
 
-// IndexFlagReviews раскладывает плоскую карту отметок по ученикам и группам.
-// Ключи неожиданного формата пропускаются.
+// IndexFlagReviews раскладывает плоскую карту отметок по ученикам. Ключи
+// неожиданного формата пропускаются.
 func IndexFlagReviews(reviews map[string]FlagReview) StudentFlagReviews {
 	out := make(StudentFlagReviews)
 	for key, rev := range reviews {
-		parts := strings.SplitN(key, "|", 3)
-		if len(parts) != 3 {
+		parts := strings.SplitN(key, "|", 2)
+		if len(parts) != 2 {
 			continue
 		}
-		byGroup := out[parts[0]]
-		if byGroup == nil {
-			byGroup = make(map[string]map[string]FlagReview)
-			out[parts[0]] = byGroup
-		}
-		byKey := byGroup[parts[1]]
+		byKey := out[parts[0]]
 		if byKey == nil {
 			byKey = make(map[string]FlagReview)
-			byGroup[parts[1]] = byKey
+			out[parts[0]] = byKey
 		}
-		byKey[parts[2]] = rev
+		byKey[parts[1]] = rev
 	}
 	return out
 }

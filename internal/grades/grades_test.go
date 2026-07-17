@@ -76,6 +76,54 @@ func TestBuildFinalRawUnrounded(t *testing.T) {
 	if got2 := Build(cfg, domain.GeneratedGroupStandings{}, roster, manual); got2.Decimals == nil || *got2.Decimals != 2 {
 		t.Fatalf("Decimals must follow cfg.Round=2: %v", got2.Decimals)
 	}
+	// round=0 округляет только итог: показ столбцов — 2 знака, не целые.
+	zero := 0
+	cfg.Round = &zero
+	got3 := Build(cfg, domain.GeneratedGroupStandings{}, roster, manual)
+	if got3.Decimals == nil || *got3.Decimals != 2 {
+		t.Fatalf("при round=0 показ столбцов должен быть с 2 знаками: %v", got3.Decimals)
+	}
+	if f := got3.Rows[0].Final; f == nil || *f != 3 {
+		t.Fatalf("итог при round=0 должен быть целым: %v", f)
+	}
+}
+
+// Значения столбцов не огрубляются round-ом итога: реальное 10/3 остаётся
+// ~3.3333 в столбце при любом round.
+func TestBuildColumnValuesStayReal(t *testing.T) {
+	zero := 0
+	cfg := &domain.GradesConfig{
+		Round:   &zero,
+		Columns: []domain.GradeColumn{{ID: "x", Title: "X", Weight: 1, Type: domain.GradeColumnManual}},
+	}
+	roster := []RosterStudent{{ID: "a", PublicName: "Аня"}}
+	manual := map[string]map[string]float64{"x": {"a": 10.0 / 3.0}}
+
+	got := Build(cfg, domain.GeneratedGroupStandings{}, roster, manual)
+	v := got.Rows[0].Values[0]
+	if v == nil || *v < 3.3332 || *v > 3.3334 {
+		t.Fatalf("значение столбца должно остаться реальным (~3.3333), а не огрубиться round-ом: %v", v)
+	}
+}
+
+// Ранжирование — по точному итогу: при round=0 округлённые «4» и «4»
+// упорядочиваются по FinalRaw, а не по имени.
+func TestBuildSortsByFinalRaw(t *testing.T) {
+	zero := 0
+	cfg := &domain.GradesConfig{
+		Round:   &zero,
+		Columns: []domain.GradeColumn{{ID: "x", Title: "X", Weight: 1, Type: domain.GradeColumnManual}},
+	}
+	roster := []RosterStudent{{ID: "a", PublicName: "Аня"}, {ID: "b", PublicName: "Боря"}}
+	manual := map[string]map[string]float64{"x": {"a": 3.6, "b": 4.4}}
+
+	got := Build(cfg, domain.GeneratedGroupStandings{}, roster, manual)
+	if got.Rows[0].StudentID != "b" || got.Rows[1].StudentID != "a" {
+		t.Fatalf("сортировка должна идти по точному итогу (4.4 выше 3.6): %+v", got.Rows)
+	}
+	if *got.Rows[0].Final != 4 && *got.Rows[1].Final != 4 {
+		t.Fatalf("оба итога округлены до 4: %+v", got.Rows)
+	}
 }
 
 // Коэффициент дорешки: вклад задачи = max(основной, дорешка×k); штраф за нули

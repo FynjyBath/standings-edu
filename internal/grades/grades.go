@@ -78,7 +78,10 @@ func Build(cfg *domain.GradesConfig, standings domain.GeneratedGroupStandings, r
 			if !ok {
 				continue
 			}
-			rounded := roundTo(value, decimals)
+			// Значения столбцов храним реальными (round применяется только к
+			// итогу): 4 знаков достаточно для любого показа, JSON не пухнет от
+			// хвостов вида 3.966666666667.
+			rounded := roundTo(value, 4)
 			values[i] = &rounded
 			weightedSum += value * weights[i]
 			weightTotal += weights[i]
@@ -99,9 +102,11 @@ func Build(cfg *domain.GradesConfig, standings domain.GeneratedGroupStandings, r
 		})
 	}
 
-	// Сортировка по убыванию итога; без итога — вниз; при равенстве — по имени.
+	// Сортировка по убыванию ТОЧНОГО итога (при round=0 округлённые итоги
+	// слипаются в группы, а ранжировать всё равно надо честно); без итога —
+	// вниз; при равенстве — по имени.
 	sort.SliceStable(rows, func(i, j int) bool {
-		fi, fj := rows[i].Final, rows[j].Final
+		fi, fj := rows[i].FinalRaw, rows[j].FinalRaw
 		switch {
 		case fi != nil && fj == nil:
 			return true
@@ -113,11 +118,18 @@ func Build(cfg *domain.GradesConfig, standings domain.GeneratedGroupStandings, r
 		return strings.ToLower(rows[i].PublicName) < strings.ToLower(rows[j].PublicName)
 	})
 
+	// Показ: столбцы и «точно» — с одинаковым числом знаков. round управляет
+	// округлением итога; при round=0 (целый итог) реальные значения столбцов
+	// показываем с двумя знаками, а не целыми.
+	display := decimals
+	if display < 1 {
+		display = 2
+	}
 	return &domain.GeneratedGrades{
 		Title:    strings.TrimSpace(cfg.Title),
 		Columns:  columns,
 		Rows:     rows,
-		Decimals: &decimals,
+		Decimals: &display,
 	}
 }
 

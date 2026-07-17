@@ -97,50 +97,24 @@ func TestIsCodeforcesTerminalVerdict(t *testing.T) {
 	}
 }
 
-func TestFoldNewInformaticsRunsPending(t *testing.T) {
+// v6: незавершённые посылки хранятся, но в агрегаты не попадают; их вердикт
+// перезапишется свежими данными при следующем заборе (см. TestInformaticsVerdictOverwrite).
+func TestFoldStoredInformaticsRunsPending(t *testing.T) {
 	client := &InformaticsAPIClient{baseURL: "https://informatics.msk.ru"}
 	build := client.buildTaskURL
 
-	t.Run("newest is compiling -> watermark stays below it", func(t *testing.T) {
-		agg := make(map[string]informaticsTaskAggregate)
-		runs := []informaticsRun{
-			{ID: 502, EjudgeStatus: 98, Problem: informaticsProblem{ID: 20}}, // компилируется
-			{ID: 501, EjudgeStatus: 0, Problem: informaticsProblem{ID: 10}},  // OK
-		}
-		max := foldNewInformaticsRuns(runs, 500, agg, build)
-		if max != 501 {
-			t.Fatalf("watermark must not pass compiling run 502: got %d", max)
-		}
-		if !agg[build(10)].solved {
-			t.Fatal("problem 10 must be solved")
-		}
-		if _, ok := agg[build(20)]; ok {
-			t.Fatal("compiling run must not be recorded")
-		}
-	})
-
-	t.Run("only run is in queue -> nothing remembered", func(t *testing.T) {
-		agg := make(map[string]informaticsTaskAggregate)
-		runs := []informaticsRun{{ID: 501, EjudgeStatus: 11, Problem: informaticsProblem{ID: 10}}} // pending
-		max := foldNewInformaticsRuns(runs, 500, agg, build)
-		if max != 500 {
-			t.Fatalf("pending run must not advance watermark: got %d", max)
-		}
-		if len(agg) != 0 {
-			t.Fatalf("nothing must be recorded: %+v", agg)
-		}
-	})
-
-	t.Run("accepted (status 8) is terminal and counted", func(t *testing.T) {
-		agg := make(map[string]informaticsTaskAggregate)
-		runs := []informaticsRun{{ID: 501, EjudgeStatus: 8, Problem: informaticsProblem{ID: 10}}}
-		max := foldNewInformaticsRuns(runs, 500, agg, build)
-		if max != 501 || !agg[build(10)].solved {
-			t.Fatalf("accepted must be counted: max=%d agg=%+v", max, agg)
-		}
-	})
+	agg := make(map[string]informaticsTaskAggregate)
+	foldStoredInformaticsRuns([]informaticsStoredRun{
+		{ID: 502, Status: 98, ProblemID: 20},            // компилируется
+		{ID: 501, Status: 0, ProblemID: 10, Score: 100}, // OK
+	}, agg, build)
+	if !agg[build(10)].solved {
+		t.Fatal("problem 10 must be solved")
+	}
+	if _, ok := agg[build(20)]; ok {
+		t.Fatal("compiling run must not be recorded in aggregates")
+	}
 }
-
 func TestIsInformaticsPendingStatus(t *testing.T) {
 	pending := []int{11, 96, 97, 98, 99}
 	for _, s := range pending {

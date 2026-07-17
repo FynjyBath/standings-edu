@@ -33,14 +33,11 @@ func loadInfAccounts(t *testing.T, path string) map[string]informaticsAccountSta
 }
 
 func infAcc(timedAt ...time.Time) informaticsAccountState {
-	timed := make([]TimedSubmission, 0, len(timedAt))
-	for _, at := range timedAt {
-		timed = append(timed, TimedSubmission{At: at})
+	runs := make([]informaticsStoredRun, 0, len(timedAt))
+	for k, at := range timedAt {
+		runs = append(runs, informaticsStoredRun{ID: k + 1, ProblemID: 7, Status: 0, Score: 100, At: at})
 	}
-	return informaticsAccountState{
-		MaxRunID: 100,
-		Results:  []TaskResult{{TaskURL: "u", Attempted: true, Solved: true, Timed: timed}},
-	}
+	return informaticsAccountState{MaxRunID: len(timedAt), Runs: runs}
 }
 
 func TestClearInformaticsAllTime(t *testing.T) {

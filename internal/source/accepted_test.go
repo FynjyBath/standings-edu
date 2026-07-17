@@ -23,8 +23,8 @@ func TestInformaticsAcceptedFold(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			agg := map[string]informaticsTaskAggregate{}
-			for _, st := range tc.statuses {
-				foldInformaticsRun(informaticsRun{EjudgeStatus: st, Problem: informaticsProblem{ID: 100}, CreateTime: "2026-07-01T05:00:00+00:00"}, agg, build)
+			for i, st := range tc.statuses {
+				foldStoredInformaticsRuns([]informaticsStoredRun{{ID: i + 1, ProblemID: 100, Status: st}}, agg, build)
 			}
 			res := aggregatesToTaskResults(agg)
 			if len(res) != 1 {
@@ -58,7 +58,7 @@ func TestInformaticsFoldStatuses(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			agg := map[string]informaticsTaskAggregate{}
-			foldInformaticsRun(informaticsRun{EjudgeStatus: tc.status, Problem: informaticsProblem{ID: 100}, CreateTime: "2026-07-01T05:00:00+00:00"}, agg, build)
+			foldStoredInformaticsRuns([]informaticsStoredRun{{ID: 1, ProblemID: 100, Status: tc.status}}, agg, build)
 			res := aggregatesToTaskResults(agg)
 			if len(res) == 0 {
 				if tc.wantSolved {

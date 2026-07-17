@@ -110,7 +110,7 @@ func ClearInformaticsCache(statePath string, accounts []string, activeSince time
 		if !matchesAccount(set, id) {
 			continue
 		}
-		if activeSince.IsZero() || resultsActiveSince(acc.Results, activeSince) {
+		if activeSince.IsZero() || storedRunsActiveSince(acc.Runs, activeSince) {
 			delete(file.Accounts, id)
 			removed++
 		}
@@ -122,6 +122,16 @@ func ClearInformaticsCache(statePath string, accounts []string, activeSince time
 		return 0, err
 	}
 	return removed, nil
+}
+
+// storedRunsActiveSince — есть ли у аккаунта сохранённые посылки не старше since.
+func storedRunsActiveSince(runs []informaticsStoredRun, since time.Time) bool {
+	for _, r := range runs {
+		if !r.At.IsZero() && !r.At.Before(since) {
+			return true
+		}
+	}
+	return false
 }
 
 // ClearCodeforcesCache — то же для codeforces (ключ — handle, регистронезависимо).

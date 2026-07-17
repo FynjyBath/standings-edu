@@ -176,23 +176,45 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 		return nil, err
 	}
 
-	aggByTask := make(map[string]informaticsTaskAggregate)
-	if hasState {
-		mergeStateIntoAggregates(aggByTask, state)
-	}
-
 	lastKnownRunID := 0
 	if hasState {
 		lastKnownRunID = state.MaxRunID
 	}
 
-	newRuns, lostRuns, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
+	// Забираем страницы до первой уже известной посылки. Страницы содержат и
+	// известные посылки — они ПЕРЕЗАПИСЫВАЮТ сохранённые записи: последняя
+	// информация с сайта — самая актуальная (вердикт мог измениться после
+	// перетестирования или дотестирования из очереди).
+	fetchedRuns, lostRuns, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
 	if err != nil {
 		return nil, err
 	}
 
-	maxRunID := foldNewInformaticsRuns(newRuns, lastKnownRunID, aggByTask, c.buildTaskURL)
+	runsByID := make(map[int]informaticsStoredRun, len(state.Runs)+len(fetchedRuns))
+	for _, run := range state.Runs {
+		if run.ID > 0 {
+			runsByID[run.ID] = run
+		}
+	}
+	maxRunID := lastKnownRunID
+	for _, run := range fetchedRuns {
+		if run.ID <= 0 {
+			continue
+		}
+		runsByID[run.ID] = storedRunFromInformaticsRun(run)
+		if run.ID > maxRunID {
+			maxRunID = run.ID
+		}
+	}
 
+	allRuns := make([]informaticsStoredRun, 0, len(runsByID))
+	for _, run := range runsByID {
+		allRuns = append(allRuns, run)
+	}
+	sort.Slice(allRuns, func(i, j int) bool { return allRuns[i].ID < allRuns[j].ID })
+
+	aggByTask := make(map[string]informaticsTaskAggregate)
+	foldStoredInformaticsRuns(allRuns, aggByTask, c.buildTaskURL)
 	results := aggregatesToTaskResults(aggByTask)
 
 	// Состояние сохраняем, если забор по сути полный: либо всё скачалось, либо
@@ -202,10 +224,10 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 	// подозрительно много — это, скорее, сбой/недоступность: состояние НЕ сохраняем
 	// и перечитаем аккаунт в следующий раз, чтобы не пропустить их навсегда.
 	tooMuchLost := lostRuns > informaticsMaxSalvageLostRuns
-	if !tooMuchLost && (maxRunID > lastKnownRunID || !hasState) {
+	if !tooMuchLost && (len(fetchedRuns) > 0 || !hasState) {
 		newState := informaticsAccountState{
 			MaxRunID:  maxRunID,
-			Results:   results,
+			Runs:      allRuns,
 			UpdatedAt: time.Now().UTC(),
 		}
 		if saveErr := c.saveAccountState(accountID, newState); saveErr != nil {
@@ -434,94 +456,20 @@ func (c *InformaticsAPIClient) salvageFailedRunsPage(ctx context.Context, accoun
 	return lost
 }
 
+// appendNewInformaticsRuns добавляет ВСЕ посылки страницы (включая уже
+// известные — их свежие данные перезапишут сохранённые записи) и сообщает,
+// достигнута ли уже известная посылка (дальше листать не нужно).
 func appendNewInformaticsRuns(out *[]informaticsRun, runs []informaticsRun, lastKnownRunID int, stopOnKnownRunID bool) (staleReached bool) {
 	for _, run := range runs {
 		if run.ID <= 0 {
 			continue
 		}
-		if lastKnownRunID > 0 && run.ID <= lastKnownRunID {
-			if stopOnKnownRunID {
-				return true
-			}
-			continue
-		}
 		*out = append(*out, run)
-	}
-	return false
-}
-
-// foldNewInformaticsRuns сворачивает завершённые новые посылки в агрегаты и
-// возвращает новый водяной знак (maxRunID). Незавершённые посылки (идёт проверка/
-// в очереди) и всё не старше самой ранней из них пропускаются и в состояние не
-// попадают — их повторно подхватят в следующий сбор, когда вердикт станет
-// финальным (иначе, став OK, они были бы пропущены как «уже известные»).
-func foldNewInformaticsRuns(newRuns []informaticsRun, lastKnownRunID int, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string) (maxRunID int) {
-	// Самая ранняя незавершённая посылка (в очереди/на компиляции): её вердикт
-	// ещё может стать финальным, поэтому водяной знак нельзя двигать за неё —
-	// иначе, финализировавшись, она была бы пропущена как «уже известная».
-	pendingFloor := 0
-	for _, run := range newRuns {
-		if run.ID > 0 && isInformaticsPendingStatus(run.EjudgeStatus) {
-			if pendingFloor == 0 || run.ID < pendingFloor {
-				pendingFloor = run.ID
-			}
+		if stopOnKnownRunID && lastKnownRunID > 0 && run.ID <= lastKnownRunID {
+			staleReached = true
 		}
 	}
-
-	maxRunID = lastKnownRunID
-	for _, run := range newRuns {
-		if run.ID <= 0 {
-			continue
-		}
-		if isInformaticsPendingStatus(run.EjudgeStatus) {
-			continue // ещё судится — результат не записываем (подхватим позже)
-		}
-		// Финальные посылки сворачиваем ВСЕГДА, даже если они новее какой-то
-		// «застрявшей» незавершённой. Иначе одна старая зависшая в очереди посылка
-		// (маленький run.ID) обнуляла бы все более новые результаты аккаунта.
-		// Свёртка идемпотентна, поэтому повторный забор ничего не портит.
-		foldInformaticsRun(run, aggByTask, buildTaskURL)
-		// Водяной знак двигаем только по посылкам старше самой ранней
-		// незавершённой — чтобы её финализацию точно перечитать в следующий раз.
-		if run.ID > maxRunID && (pendingFloor == 0 || run.ID < pendingFloor) {
-			maxRunID = run.ID
-		}
-	}
-	return maxRunID
-}
-
-func foldInformaticsRun(run informaticsRun, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string) {
-	taskURL := buildTaskURL(run.Problem.ID)
-	if taskURL == "" {
-		return
-	}
-
-	agg := aggByTask[taskURL]
-	agg.attempted = true
-	solved := isInformaticsSolvedStatus(run.EjudgeStatus)
-	border := isInformaticsBorderStatus(run.EjudgeStatus)
-	if solved {
-		agg.solved = true
-		if border {
-			agg.acceptedSolved = true
-		}
-		if isInformaticsSuppressStatus(run.EjudgeStatus) {
-			agg.okSolved = true
-		}
-	}
-
-	score := inferInformaticsScore(run)
-	if !agg.hasScore || score > agg.score {
-		agg.score = score
-		agg.hasScore = true
-	}
-
-	if at, ok := parseInformaticsTime(run.CreateTime); ok {
-		submissionScore := score
-		agg.timed = append(agg.timed, TimedSubmission{At: at, Solved: solved, Score: &submissionScore, Accepted: border})
-	}
-
-	aggByTask[taskURL] = agg
+	return staleReached
 }
 
 // isInformaticsPendingStatus сообщает, что посылка ещё судится и её вердикт
@@ -592,82 +540,6 @@ func isInformaticsSuppressStatus(ejudgeStatus int) bool {
 	return ejudgeStatus == informaticsStatusOK
 }
 
-func mergeStateIntoAggregates(aggByTask map[string]informaticsTaskAggregate, state informaticsAccountState) {
-	for _, task := range state.Solved {
-		url := strings.TrimSpace(task)
-		if url == "" {
-			continue
-		}
-		agg := aggByTask[url]
-		agg.attempted = true
-		agg.solved = true
-		if !agg.hasScore || 100 > agg.score {
-			agg.score = 100
-			agg.hasScore = true
-		}
-		aggByTask[url] = agg
-	}
-
-	for _, task := range state.Attempted {
-		url := strings.TrimSpace(task)
-		if url == "" {
-			continue
-		}
-		agg := aggByTask[url]
-		agg.attempted = true
-		if !agg.hasScore {
-			agg.score = 0
-			agg.hasScore = true
-		}
-		aggByTask[url] = agg
-	}
-
-	for _, result := range state.Results {
-		url := strings.TrimSpace(result.TaskURL)
-		if url == "" {
-			continue
-		}
-
-		agg := aggByTask[url]
-		attempted := result.Attempted || result.Solved || result.Score != nil
-		if attempted {
-			agg.attempted = true
-		}
-		if result.Solved {
-			agg.solved = true
-			if result.Accepted {
-				agg.acceptedSolved = true
-			} else {
-				agg.okSolved = true
-			}
-		}
-
-		if result.Score != nil {
-			score := domain.ClampScore(*result.Score)
-			if !agg.hasScore || score > agg.score {
-				agg.score = score
-				agg.hasScore = true
-			}
-		}
-		if len(result.Timed) > 0 {
-			agg.timed = append(agg.timed, cloneTimedSubmissions(result.Timed)...)
-		}
-		aggByTask[url] = agg
-	}
-
-	for taskURL, agg := range aggByTask {
-		if agg.attempted && !agg.hasScore {
-			if agg.solved {
-				agg.score = 100
-			} else {
-				agg.score = 0
-			}
-			agg.hasScore = true
-			aggByTask[taskURL] = agg
-		}
-	}
-}
-
 func aggregatesToTaskResults(aggByTask map[string]informaticsTaskAggregate) []TaskResult {
 	out := make([]TaskResult, 0, len(aggByTask))
 	for taskURL, agg := range aggByTask {
@@ -722,8 +594,6 @@ func (c *InformaticsAPIClient) saveAccountState(accountID string, state informat
 		return err
 	}
 
-	state.Solved = nil
-	state.Attempted = nil
 	c.accountState[accountID] = state
 	return c.persistStateLocked()
 }
@@ -1356,9 +1226,12 @@ type informaticsTaskAggregate struct {
 }
 
 // informaticsStateVersion — версия схемы/логики кэша. При изменении правил
-// трактовки вердиктов или формата (добавление статуса «Зачтено», времени посылок)
-// версию повышаем, чтобы старый кэш игнорировался и результаты пересчитались с нуля.
-const informaticsStateVersion = 5
+// трактовки вердиктов или формата версию повышаем, чтобы старый кэш
+// игнорировался и результаты пересчитались с нуля.
+// v6: храним сырые посылки по run_id; каждый забор перезаписывает их свежими
+// данными («последняя информация — самая актуальная»), агрегаты собираются из
+// сохранённых посылок заново.
+const informaticsStateVersion = 6
 
 type informaticsStateFile struct {
 	Version  int                                `json:"version"`
@@ -1366,9 +1239,69 @@ type informaticsStateFile struct {
 }
 
 type informaticsAccountState struct {
-	MaxRunID  int          `json:"max_run_id"`
-	Results   []TaskResult `json:"results,omitempty"`
-	Solved    []string     `json:"solved,omitempty"`
-	Attempted []string     `json:"attempted,omitempty"`
-	UpdatedAt time.Time    `json:"updated_at"`
+	MaxRunID  int                    `json:"max_run_id"`
+	Runs      []informaticsStoredRun `json:"runs,omitempty"`
+	UpdatedAt time.Time              `json:"updated_at"`
+}
+
+// informaticsStoredRun — сохранённая посылка. Ключ — ID: при повторном заборе
+// запись перезаписывается свежими данными (вердикт мог измениться:
+// перетестирование, дотестирование из очереди).
+type informaticsStoredRun struct {
+	ID        int       `json:"id"`
+	ProblemID int       `json:"problem_id"`
+	Status    int       `json:"status"`
+	Score     int       `json:"score"`
+	At        time.Time `json:"at,omitempty"` // нулевое — времени нет
+}
+
+// storedRunFromInformaticsRun переводит посылку API в сохранённую форму.
+func storedRunFromInformaticsRun(run informaticsRun) informaticsStoredRun {
+	out := informaticsStoredRun{
+		ID:        run.ID,
+		ProblemID: run.Problem.ID,
+		Status:    run.EjudgeStatus,
+		Score:     inferInformaticsScore(run),
+	}
+	if at, ok := parseInformaticsTime(run.CreateTime); ok {
+		out.At = at
+	}
+	return out
+}
+
+// foldStoredInformaticsRuns собирает агрегаты по задачам из сохранённых посылок.
+// Незавершённые (в очереди/тестируются) пропускаются: их финальный вердикт
+// перезапишет запись при одном из следующих заборов.
+func foldStoredInformaticsRuns(runs []informaticsStoredRun, aggByTask map[string]informaticsTaskAggregate, buildTaskURL func(problemID int) string) {
+	for _, run := range runs {
+		if run.ID <= 0 || isInformaticsPendingStatus(run.Status) {
+			continue
+		}
+		taskURL := buildTaskURL(run.ProblemID)
+		if taskURL == "" {
+			continue
+		}
+		agg := aggByTask[taskURL]
+		agg.attempted = true
+		solved := isInformaticsSolvedStatus(run.Status)
+		border := isInformaticsBorderStatus(run.Status)
+		if solved {
+			agg.solved = true
+			if border {
+				agg.acceptedSolved = true
+			}
+			if isInformaticsSuppressStatus(run.Status) {
+				agg.okSolved = true
+			}
+		}
+		if !agg.hasScore || run.Score > agg.score {
+			agg.score = run.Score
+			agg.hasScore = true
+		}
+		if !run.At.IsZero() {
+			score := run.Score
+			agg.timed = append(agg.timed, TimedSubmission{At: run.At, Solved: solved, Score: &score, Accepted: border})
+		}
+		aggByTask[taskURL] = agg
+	}
 }

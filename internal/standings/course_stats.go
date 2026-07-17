@@ -182,19 +182,26 @@ func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusB
 	return out
 }
 
-// computeCourseStats считает темп курса для всех учеников группы. reviews —
-// отметки проверки флагов (FlagReviewKey → отметка): у эпизодов с исходом
-// «перенос»/«нарушение» посылки задач эпизода исключаются из всей математики
-// темпа (времена, скорости, веса когорты, first-try доли, детекторы) — решённые
-// задачи при этом остаются решёнными (прогресс не страдает), просто без времени,
-// как задачи ACMP.
+// computeCourseStats считает темп курса для всех учеников группы. Эпизодам с
+// флагами нечестности по умолчанию НЕ доверяем: их посылки исключаются из всей
+// математики темпа (времена, скорости, веса когорты), пока преподаватель не
+// разметит флаг. «Сам решил» возвращает эпизод в подсчёт; «перенос»/«нарушение»
+// оставляют исключённым навсегда (по снапшоту в отметке — reviews, ключ
+// FlagReviewKey). Решённые задачи при этом остаются решёнными (прогресс не
+// страдает), просто без времени, как задачи ACMP.
+//
+// Двухфазная схема: фаза 1 — данные без «перенос»/«нарушение»-эпизодов, на них
+// детектируются флаги (они и показываются: неразмеченные и «сам решил»
+// детектируются заново с теми же ключами); фаза 2 — из данных дополнительно
+// убираются эпизоды флагов без отметки «сам решил», и темп считается по ним.
 func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time, reviews map[string]domain.FlagReview) map[string]*domain.StudentCourseStats {
 	tasks := courseTasksFromStandings(std)
 	if len(tasks) == 0 {
 		return nil
 	}
 
-	statusByStudent = excludeReviewedEpisodes(std.GroupSlug, students, statusByStudent, reviews)
+	// Фаза 1: без эпизодов, размеченных как «перенос»/«нарушение».
+	statusByStudent = applyEpisodeExclusions(students, statusByStudent, reviewedExclusions(std.GroupSlug, students, reviews))
 
 	times := make(map[string]studentTaskTime, len(students))
 	for _, s := range students {
@@ -205,13 +212,34 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		times[s.ID] = buildStudentTaskTimes(st)
 	}
 	weights := courseWeights(tasks, times, statusByStudent)
+	ftRate, ftN := cohortFirstTryRates(tasks, times, statusByStudent)
+
+	flagsByStudent := make(map[string][]domain.CourseFlag, len(students))
+	for _, s := range students {
+		st := statusByStudent[s.ID]
+		if st == nil {
+			st = newAccountStatuses()
+		}
+		flagsByStudent[s.ID] = detectCourseFlags(tasks, weights, times[s.ID], st, ftRate, ftN)
+	}
+
+	// Фаза 2: дополнительно без эпизодов флагов, не размеченных «сам решил».
+	if extra := unreviewedFlagExclusions(std.GroupSlug, students, flagsByStudent, reviews); len(extra) > 0 {
+		statusByStudent = applyEpisodeExclusions(students, statusByStudent, extra)
+		for id := range extra {
+			st := statusByStudent[id]
+			if st == nil {
+				st = newAccountStatuses()
+			}
+			times[id] = buildStudentTaskTimes(st)
+		}
+		weights = courseWeights(tasks, times, statusByStudent)
+	}
 
 	totalWeight := 0.0
 	for _, t := range tasks {
 		totalWeight += weights[t.norm]
 	}
-
-	ftRate, ftN := cohortFirstTryRates(tasks, times, statusByStudent)
 
 	out := make(map[string]*domain.StudentCourseStats, len(students))
 	for _, s := range students {
@@ -220,30 +248,21 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 			st = newAccountStatuses()
 		}
 		cs := computeStudentCourseStats(std, tasks, weights, totalWeight, times[s.ID], st, now)
-		cs.Flags = detectCourseFlags(tasks, weights, times[s.ID], st, ftRate, ftN)
+		cs.Flags = flagsByStudent[s.ID]
 		out[s.ID] = cs
 	}
 	normalizeCourseSpeeds(out)
 	return out
 }
 
-// excludeReviewedEpisodes возвращает карту статусов, где у учеников с
-// отметками «перенос»/«нарушение» посылки задач эпизода (по снапшоту флага в
-// отметке) убраны из timed. Остальные множества (solved/attempted/оценки)
-// разделяются с оригиналом — они только читаются. Исходная карта не меняется:
-// ей пользуются и обычные таблицы.
-func excludeReviewedEpisodes(groupSlug string, students []domain.Student, statusByStudent map[string]*accountStatuses, reviews map[string]domain.FlagReview) map[string]*accountStatuses {
+// reviewedExclusions — задачи эпизодов, размеченных «перенос»/«нарушение»
+// (по снапшотам флагов в отметках), по ученикам.
+func reviewedExclusions(groupSlug string, students []domain.Student, reviews map[string]domain.FlagReview) map[string]map[string]struct{} {
 	if len(reviews) == 0 {
-		return statusByStudent
+		return nil
 	}
-	out := statusByStudent
-	copied := false
+	out := make(map[string]map[string]struct{})
 	for _, s := range students {
-		st := statusByStudent[s.ID]
-		if st == nil {
-			continue
-		}
-		excluded := make(map[string]struct{})
 		prefix := domain.FlagReviewKey(s.ID, groupSlug, "")
 		for key, rev := range reviews {
 			if !strings.HasPrefix(key, prefix) || rev.Flag == nil {
@@ -253,10 +272,54 @@ func excludeReviewedEpisodes(groupSlug string, students []domain.Student, status
 				continue
 			}
 			for _, norm := range rev.Flag.TaskURLs {
-				excluded[norm] = struct{}{}
+				if out[s.ID] == nil {
+					out[s.ID] = make(map[string]struct{})
+				}
+				out[s.ID][norm] = struct{}{}
 			}
 		}
-		if len(excluded) == 0 {
+	}
+	return out
+}
+
+// unreviewedFlagExclusions — задачи эпизодов задетектированных флагов БЕЗ
+// отметки «сам решил»: до разметки эпизоду не доверяем и в темпе не учитываем.
+func unreviewedFlagExclusions(groupSlug string, students []domain.Student, flagsByStudent map[string][]domain.CourseFlag, reviews map[string]domain.FlagReview) map[string]map[string]struct{} {
+	out := make(map[string]map[string]struct{})
+	for _, s := range students {
+		for _, f := range flagsByStudent[s.ID] {
+			if rev, ok := reviews[domain.FlagReviewKey(s.ID, groupSlug, f.Key)]; ok &&
+				rev.NormalizedResolution() == domain.FlagResolutionLegit {
+				continue // проверено: реально сам решил — время учитывается
+			}
+			for _, norm := range f.TaskURLs {
+				if out[s.ID] == nil {
+					out[s.ID] = make(map[string]struct{})
+				}
+				out[s.ID][norm] = struct{}{}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// applyEpisodeExclusions возвращает карту статусов, где у учеников из excluded
+// посылки перечисленных задач убраны из timed. Остальные множества
+// (solved/attempted/оценки) разделяются с оригиналом — они только читаются.
+// Исходная карта не меняется: ей пользуются и обычные таблицы.
+func applyEpisodeExclusions(students []domain.Student, statusByStudent map[string]*accountStatuses, excluded map[string]map[string]struct{}) map[string]*accountStatuses {
+	if len(excluded) == 0 {
+		return statusByStudent
+	}
+	out := statusByStudent
+	copied := false
+	for _, s := range students {
+		st := statusByStudent[s.ID]
+		skip := excluded[s.ID]
+		if st == nil || len(skip) == 0 {
 			continue
 		}
 		if !copied {
@@ -269,7 +332,7 @@ func excludeReviewedEpisodes(groupSlug string, students []domain.Student, status
 		clean := *st
 		clean.timed = make(map[string][]source.TimedSubmission, len(st.timed))
 		for norm, subs := range st.timed {
-			if _, skip := excluded[norm]; skip {
+			if _, drop := skip[norm]; drop {
 				continue
 			}
 			clean.timed[norm] = subs

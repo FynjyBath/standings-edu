@@ -323,76 +323,66 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 	students = append(students, domain.Student{ID: "cheat"})
 	statuses["cheat"] = cheat
 
-	before := computeCourseStats(std, students, statuses, now, nil)
-	if len(before["cheat"].Flags) == 0 {
+	// Базлайн — без отметок: флаг детектируется, но его эпизод по умолчанию
+	// УЖЕ исключён из темпа (неразмеченному не доверяем).
+	noRev := computeCourseStats(std, students, statuses, now, nil)
+	if len(noRev["cheat"].Flags) == 0 {
 		t.Fatal("прекондиция: без отметок у читера должны быть флаги")
 	}
-	flag := before["cheat"].Flags[0]
+	flag := noRev["cheat"].Flags[0]
 	if len(flag.TaskURLs) == 0 {
 		t.Fatalf("флаг должен нести TaskURLs для исключения: %+v", flag)
 	}
-
-	// Исключающие исходы: «перенос» и «нарушение» действуют одинаково.
-	for _, resolution := range []string{domain.FlagResolutionTransfer, domain.FlagResolutionViolation} {
-		t.Run(resolution, func(t *testing.T) {
-			snap := flag
-			reviews := map[string]domain.FlagReview{
-				domain.FlagReviewKey("cheat", "g", flag.Key): {
-					At: now, Resolution: resolution, Flag: &snap,
-				},
-			}
-			after := computeCourseStats(std, students, statuses, now, reviews)
-			cs := after["cheat"]
-			// Флаг эпизода больше не детектируется (посылок с временем у этих задач нет).
-			for _, f := range cs.Flags {
-				if f.Key == flag.Key {
-					t.Fatalf("исключённый эпизод не должен флаговаться снова: %+v", cs.Flags)
-				}
-			}
-			// Решённые задачи остаются решёнными, а активное время эпизода исчезает.
-			if cs.SolvedCount != before["cheat"].SolvedCount {
-				t.Fatalf("прогресс не должен страдать: %d != %d", cs.SolvedCount, before["cheat"].SolvedCount)
-			}
-			if cs.ActiveHours >= before["cheat"].ActiveHours {
-				t.Fatalf("активное время должно уменьшиться: %v >= %v", cs.ActiveHours, before["cheat"].ActiveHours)
-			}
-			// Честные ученики не затронуты.
-			if after["s0"].ActiveHours != before["s0"].ActiveHours || after["s0"].Speed != before["s0"].Speed {
-				t.Fatalf("честный ученик не должен меняться: %+v vs %+v", after["s0"], before["s0"])
-			}
-			// Исходная карта статусов не испорчена (ей пользуются обычные таблицы).
-			if len(statuses["cheat"].timed) != 6 {
-				t.Fatalf("исходные statuses не должны мутироваться: %d", len(statuses["cheat"].timed))
-			}
-		})
+	if len(statuses["cheat"].timed) != 6 {
+		t.Fatalf("исходные statuses не должны мутироваться: %d", len(statuses["cheat"].timed))
 	}
 
-	// Неисключающие исходы: «сам решил» и старая запись без исхода — темп
-	// считается по всем посылкам, флаг детектируется как раньше.
-	for _, tc := range []struct{ name, resolution string }{
-		{"legit", domain.FlagResolutionLegit},
-		{"old-record-empty", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			snap := flag
-			reviews := map[string]domain.FlagReview{
-				domain.FlagReviewKey("cheat", "g", flag.Key): {
-					At: now, Resolution: tc.resolution, Flag: &snap,
-				},
+	run := func(resolution string) map[string]*domain.StudentCourseStats {
+		snap := flag
+		return computeCourseStats(std, students, statuses, now, map[string]domain.FlagReview{
+			domain.FlagReviewKey("cheat", "g", flag.Key): {At: now, Resolution: resolution, Flag: &snap},
+		})
+	}
+	hasFlag := func(cs *domain.StudentCourseStats) bool {
+		for _, f := range cs.Flags {
+			if f.Key == flag.Key {
+				return true
 			}
-			after := computeCourseStats(std, students, statuses, now, reviews)
+		}
+		return false
+	}
+
+	// «Сам решил» (и старые записи без исхода) возвращает эпизод в подсчёт:
+	// времени становится БОЛЬШЕ, чем в базлайне, флаг детектируется по-прежнему.
+	legit := run(domain.FlagResolutionLegit)
+	if !hasFlag(legit["cheat"]) {
+		t.Fatalf("при «сам решил» флаг должен детектироваться: %+v", legit["cheat"].Flags)
+	}
+	if legit["cheat"].ActiveHours <= noRev["cheat"].ActiveHours {
+		t.Fatalf("«сам решил» должен вернуть время эпизода: %v <= %v", legit["cheat"].ActiveHours, noRev["cheat"].ActiveHours)
+	}
+	if old := run(""); old["cheat"].ActiveHours != legit["cheat"].ActiveHours {
+		t.Fatalf("старая запись без исхода = «сам решил»: %v != %v", old["cheat"].ActiveHours, legit["cheat"].ActiveHours)
+	}
+
+	// «Перенос» и «нарушение»: эпизод исключён (как и до разметки), а флаг
+	// больше не детектируется (посылки убраны до детекта — покажется из снапшота).
+	for _, resolution := range []string{domain.FlagResolutionTransfer, domain.FlagResolutionViolation} {
+		t.Run(resolution, func(t *testing.T) {
+			after := run(resolution)
 			cs := after["cheat"]
-			if cs.ActiveHours != before["cheat"].ActiveHours {
-				t.Fatalf("«%s» не должен исключать время: %v != %v", tc.name, cs.ActiveHours, before["cheat"].ActiveHours)
+			if hasFlag(cs) {
+				t.Fatalf("исключённый эпизод не должен флаговаться снова: %+v", cs.Flags)
 			}
-			found := false
-			for _, f := range cs.Flags {
-				if f.Key == flag.Key {
-					found = true
-				}
+			if cs.ActiveHours != noRev["cheat"].ActiveHours {
+				t.Fatalf("время как в базлайне (эпизод исключён): %v != %v", cs.ActiveHours, noRev["cheat"].ActiveHours)
 			}
-			if !found {
-				t.Fatalf("при «%s» флаг должен детектироваться как раньше: %+v", tc.name, cs.Flags)
+			if cs.SolvedCount != noRev["cheat"].SolvedCount || cs.SolvedCount != legit["cheat"].SolvedCount {
+				t.Fatalf("прогресс не должен зависеть от разметки: %d", cs.SolvedCount)
+			}
+			// Честные ученики не затронуты ни одним из режимов.
+			if after["s0"].ActiveHours != noRev["s0"].ActiveHours || after["s0"].ActiveHours != legit["s0"].ActiveHours {
+				t.Fatalf("честный ученик не должен меняться: %+v", after["s0"])
 			}
 		})
 	}

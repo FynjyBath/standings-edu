@@ -2219,7 +2219,8 @@ th.sortable::after {
   vertical-align: middle;
 }
 
-.flag-review-btn {
+.flag-review-btn,
+.flag-subs-btn {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
@@ -2231,6 +2232,46 @@ th.sortable::after {
   cursor: pointer;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* «⤵ посылки» вне блока действий (на проверенных чипах) — небольшой отступ. */
+span:not(.flag-review-actions) > .flag-subs-btn {
+  margin-left: 0.35rem;
+}
+
+.flag-subs-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* Чип активного фильтра «посылки эпизода» в панели фильтра ленты. */
+.episode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 28rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--attempt-bg) 80%, var(--line) 20%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--attempt-bg) 30%, var(--surface) 70%);
+  color: var(--attempt-text);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.episode-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.episode-chip button {
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  cursor: pointer;
 }
 
 .flag-review-btn--clear {

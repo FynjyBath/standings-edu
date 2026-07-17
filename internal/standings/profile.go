@@ -25,7 +25,10 @@ var moscowZone = func() *time.Location {
 }()
 
 const (
-	profileRecentLimit = 200
+	// profileRecentLimit — предохранитель от патологически огромных профилей;
+	// в норме в ленту попадают ВСЕ посылки ученика (по флагу 🚩 к ним можно
+	// перейти фильтром эпизода, лента свёрнута до 30 строк кнопкой).
+	profileRecentLimit = 5000
 	profileDailyDays   = 90
 )
 

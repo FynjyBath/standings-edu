@@ -30,9 +30,14 @@
   {{if .NotGenerated}}
   <p class="empty-hint">Пока пусто. Список появится после ближайшей генерации таблиц групп-участниц.</p>
   {{else}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по названию или id…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#combined-contests > li" data-filter-count="#combined-contests-count" data-filter-empty="#combined-contests-empty" />
+    <span class="filter-count" id="combined-contests-count"></span>
+  </div>
   <ul class="admin-groups-list" id="combined-contests">
     {{range .Contests}}
-    <li data-id="{{.ID}}">
+    <li data-id="{{.ID}}" data-filter-text="{{.Title}} {{.ID}}">
       <label style="flex-direction:row;align-items:center;gap:0.5rem;">
         <input type="checkbox" class="contest-show" {{if not .Hidden}}checked{{end}} style="width:auto;" />
         <span>{{.Title}} <span class="grade-weight">{{.ID}}</span></span>
@@ -41,6 +46,7 @@
     </li>
     {{end}}
   </ul>
+  <p class="empty-hint" id="combined-contests-empty" hidden>Ничего не найдено.</p>
   {{end}}
 </section>
 

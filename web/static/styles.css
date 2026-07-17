@@ -1912,6 +1912,12 @@ table.rows-collapsed tbody tr:nth-child(n + 31) {
   display: none;
 }
 
+/* На время поиска свёртка раскрывается (несовпавшие строки всё равно прячет
+   .filtered-out с !important); очистка запроса возвращает свёртку. */
+table.rows-collapsed.filter-active tbody tr:nth-child(n + 31) {
+  display: table-row;
+}
+
 .rows-expand-btn {
   display: block;
   width: 100%;

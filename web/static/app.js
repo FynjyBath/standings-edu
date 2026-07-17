@@ -34,6 +34,13 @@
           r.classList.toggle("filtered-out", !match);
           if (match) shown++;
         });
+        // Свёрнутая таблица (data-collapse-rows) на время поиска раскрывается,
+        // иначе совпадения ниже порога остались бы скрыты; очистка запроса
+        // возвращает свёртку.
+        if (rows.length) {
+          var table = rows[0].closest ? rows[0].closest("table") : null;
+          if (table) table.classList.toggle("filter-active", !!q);
+        }
         if (countNode) countNode.textContent = q ? (shown + " из " + total) : String(total);
         if (emptyNode) emptyNode.hidden = shown !== 0 || total === 0;
       }

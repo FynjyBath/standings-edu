@@ -49,18 +49,26 @@
   {{if .Members}}
   <div class="filter-bar">
     <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
-           data-filter-rows="#group-members-list > li" data-filter-count="#group-members-count" data-filter-empty="#group-members-empty" />
+           data-filter-rows="#group-members-tbody > tr" data-filter-count="#group-members-count" data-filter-empty="#group-members-empty" />
     <span class="filter-count" id="group-members-count"></span>
   </div>
-  <ul class="admin-groups-list" id="group-members-list">
-    {{range .Members}}
-    <li data-filter-text="{{.PublicName}} {{.StudentID}}">
-      <span>{{.PublicName}}</span> <code>{{.StudentID}}</code>
-      <a class="admin-btn admin-btn--secondary" href="/standings/admin/student?id={{.StudentID}}">Профиль</a>
-      <button type="button" class="admin-btn admin-btn--secondary member-remove" data-id="{{.StudentID}}" data-name="{{.PublicName}}">Убрать</button>
-    </li>
-    {{end}}
-  </ul>
+  <div class="table-wrap">
+    <table class="standings-table data-table" data-collapse-rows="30">
+      <thead><tr><th class="student-col">Ученик</th><th>id</th><th></th></tr></thead>
+      <tbody id="group-members-tbody">
+        {{range .Members}}
+        <tr data-filter-text="{{.PublicName}} {{.StudentID}}">
+          <td class="student-name">{{.PublicName}}</td>
+          <td><code>{{.StudentID}}</code></td>
+          <td style="white-space:nowrap;">
+            <a class="admin-btn admin-btn--secondary" href="/standings/admin/student?id={{.StudentID}}">Профиль</a>
+            <button type="button" class="admin-btn admin-btn--secondary member-remove" data-id="{{.StudentID}}" data-name="{{.PublicName}}">Убрать</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
   <p class="empty-hint" id="group-members-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">В группе нет участников.</p>

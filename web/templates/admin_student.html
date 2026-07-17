@@ -114,31 +114,6 @@
   {{end}}
 </section>
 
-<!-- Группы и успеваемость -->
-<section class="contest-block">
-  <h2>Группы и успеваемость</h2>
-  {{if $p.Groups}}
-  <div class="table-wrap">
-    <table class="standings-table data-table">
-      <thead><tr><th>Группа</th><th class="count-col">Решено (доска почёта)</th><th class="count-col">Место</th><th class="count-col">Оценка</th><th class="count-col">Место по оценке</th></tr></thead>
-      <tbody>
-        {{range $p.Groups}}
-        <tr>
-          <td>{{if $.TokenView}}{{.Title}}{{else}}<a href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>{{end}}</td>
-          <td class="solved-count">{{.SolvedCount}}</td>
-          <td class="solved-count">{{if .HonorTotal}}{{.HonorPlace}} из {{.HonorTotal}}{{else}}—{{end}}</td>
-          <td class="solved-count">{{if .Grade}}{{gradeText .Grade}}{{else}}—{{end}}</td>
-          <td class="solved-count">{{if .GradeTotal}}{{.GradePlace}} из {{.GradeTotal}}{{else}}—{{end}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </div>
-  {{else}}
-  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">👥</span><p>Ученик не состоит в сгенерированных группах.</p></div>
-  {{end}}
-</section>
-
 <!-- Аккаунты и статистика по сайтам -->
 <section class="contest-block">
   <h2>Аккаунты и сайты</h2>

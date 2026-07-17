@@ -59,7 +59,6 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"taskCells":               taskCells,
 			"upsolvingView":           upsolvingView,
 			"contestGeneratedAt":      contestGeneratedAt,
-			"contestNotStarted":       contestNotStarted,
 			"contestGeneratedAtISO":   contestGeneratedAtISO,
 			"timeISO":                 timeISO,
 			"gradeText":               gradeText,
@@ -453,12 +452,6 @@ func grade2Text(v *float64) string {
 		return ""
 	}
 	return strconv.FormatFloat(*v, 'f', 2, 64)
-}
-
-// contestNotStarted — контест ещё не начался (StartTime в будущем): сервер уже
-// спрятал ссылки на задачи, а шаблон показывает подсказку с временем старта.
-func contestNotStarted(startTime *time.Time) bool {
-	return startTime != nil && time.Now().Before(*startTime)
 }
 
 // submissionTime форматирует время посылки в MSK для ленты профиля.

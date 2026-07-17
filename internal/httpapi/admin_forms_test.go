@@ -965,10 +965,10 @@ func TestGroupParticipantsByToken(t *testing.T) {
 		StudentID: "ivan", PublicName: "Иван И.",
 		Stats:  domain.StudentActivityStats{TotalSolved: 42, TotalSubmissions: 100},
 		Groups: []domain.StudentGroupStanding{{Slug: "g1", Title: "Группа 1", SolvedCount: 42}, {Slug: "g2", Title: "Другая", SolvedCount: 5}},
-		CourseStats: []domain.StudentCourseStats{{
-			GroupSlug: "g1", GroupTitle: "Группа 1",
-			Progress: 0.5, SolvedCount: 6, TotalCount: 12, Speed: 1.3, ActiveHours: 4,
-		}},
+		CourseStats: []domain.StudentCourseStats{
+			{GroupSlug: "g1", GroupTitle: "Группа 1", Progress: 0.5, SolvedCount: 6, TotalCount: 12, Speed: 1.3, ActiveHours: 4},
+			{GroupSlug: "g2", GroupTitle: "Чужой курс", Progress: 0.2, SolvedCount: 2, TotalCount: 10, ActiveHours: 1},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1007,6 +1007,9 @@ func TestGroupParticipantsByToken(t *testing.T) {
 	}
 	if !strings.Contains(body, "Иван И.") || strings.Contains(body, "Другая") {
 		t.Fatalf("token profile must show only current group: %v", strings.Contains(body, "Другая"))
+	}
+	if !strings.Contains(body, "Темп курса: Группа 1") || strings.Contains(body, "Чужой курс") {
+		t.Fatal("токенный профиль должен показывать темп только своего курса")
 	}
 	// Не член группы — 404.
 	if code, _ = get("/standings/g1/student?id=nobody&token=secret123"); code != http.StatusNotFound {

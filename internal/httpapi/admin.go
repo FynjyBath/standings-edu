@@ -167,6 +167,14 @@ func (h *Handlers) fillStudentProfilePage(page *AdminStudentProfilePageData, id 
 			}
 		}
 		profile.Groups = filtered
+		// Темп курса — тоже только по этой группе (жюри не видит чужие курсы).
+		courses := profile.CourseStats[:0:0]
+		for _, cs := range profile.CourseStats {
+			if cs.GroupSlug == *onlyGroup {
+				courses = append(courses, cs)
+			}
+		}
+		profile.CourseStats = courses
 	}
 	page.Profile = profile
 	if profile.PublicName != "" {

@@ -34,9 +34,6 @@
     {{if .ZeroPenalty}}
     <p class="empty-hint">Штраф за задачу без баллов: −{{.ZeroPenalty}}.</p>
     {{end}}
-    {{if contestNotStarted .StartTime}}
-    <p class="empty-hint">Контест ещё не начался — ссылки на задачи появятся {{contestGeneratedAt .StartTime}}.</p>
-    {{end}}
     {{if .Materials}}
     <div class="contest-materials-block">
       <p class="contest-materials-title">Полезные ссылки:</p>

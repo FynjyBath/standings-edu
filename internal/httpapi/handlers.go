@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,8 @@ type Handlers struct {
 	dataMu sync.Mutex
 	// pageCache — готовый HTML публичных страниц групп (см. page_cache.go).
 	pageCache groupPageCache
+	// summaryCache — готовые байты /summary-data (JSON + gzip, см. page_cache.go).
+	summaryCache summaryDataCache
 }
 
 // SerializeDataWrite оборачивает мутирующий data-файлы админ-хендлер общим
@@ -777,6 +780,22 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 // раньше встраивались в HTML сводной (с теми же правилами видимости по токену).
 func (h *Handlers) GroupSummaryData(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
+
+	// Ответ большой (мегабайты у больших групп) и меняется только с генерацией:
+	// кэшируем готовые байты (компактный JSON + gzip) по отпечатку файлов —
+	// как HTML-кэш страницы группы. Вид зависит от токена (разморозка/скрытое),
+	// поэтому ключей два на группу.
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	unfrozen := token != "" && h.groupTokenValid(slug, token)
+	version, cacheable := h.groupPageVersion(slug)
+	cacheKey := slug + "|" + strconv.FormatBool(unfrozen)
+	if cacheable {
+		if e, ok := h.cachedSummaryData(cacheKey, version); ok {
+			writeSummaryData(w, r, e)
+			return
+		}
+	}
+
 	standings, err := h.loadGroupStandings(slug)
 	if err != nil {
 		if errors.Is(err, storage.ErrInvalidGroupSlug) || errors.Is(err, os.ErrNotExist) {
@@ -788,7 +807,22 @@ func (h *Handlers) GroupSummaryData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.applyFreezeView(&standings, slug, r)
-	writeJSON(w, http.StatusOK, standings)
+
+	plain, err := json.Marshal(standings)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	gzipped, err := gzipBytes(plain)
+	if err != nil {
+		h.logger.Printf("ERROR gzip summary data slug=%s err=%v", slug, err)
+		gzipped = nil
+	}
+	e := summaryDataEntry{plain: plain, gzipped: gzipped}
+	if cacheable {
+		h.storeSummaryData(cacheKey, version, plain, gzipped)
+	}
+	writeSummaryData(w, r, e)
 }
 
 func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {

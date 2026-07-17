@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -203,5 +204,58 @@ func TestSummaryDataEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(page, "/summary-data") {
 		t.Fatal("страница сводной должна грузить данные с /summary-data")
+	}
+}
+
+// summary-data: компактный JSON (без отступов), gzip по Accept-Encoding и кэш
+// готовых байтов с инвалидацией по отпечатку файлов.
+func TestSummaryDataGzipAndCache(t *testing.T) {
+	h, dataDir, outDir := newPerfTestHandlers(t)
+	writePerfGroup(t, dataDir, outDir, "g", 2)
+
+	get := func(gzipHdr bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/standings/g/summary-data", nil)
+		req.SetPathValue("group_name", "g")
+		if gzipHdr {
+			req.Header.Set("Accept-Encoding", "gzip")
+		}
+		rec := httptest.NewRecorder()
+		h.GroupSummaryData(rec, req)
+		return rec
+	}
+
+	plain := get(false)
+	if plain.Code != 200 || plain.Header().Get("Content-Encoding") != "" {
+		t.Fatalf("plain: code=%d enc=%q", plain.Code, plain.Header().Get("Content-Encoding"))
+	}
+	if strings.Contains(plain.Body.String(), "\n  ") {
+		t.Fatal("JSON должен быть компактным, без отступов")
+	}
+
+	zipped := get(true)
+	if zipped.Header().Get("Content-Encoding") != "gzip" || zipped.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("gzip-ответ: enc=%q vary=%q", zipped.Header().Get("Content-Encoding"), zipped.Header().Get("Vary"))
+	}
+	zr, err := gzip.NewReader(zipped.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unzipped, err := io.ReadAll(zr)
+	if err != nil || string(unzipped) != plain.Body.String() {
+		t.Fatalf("gzip должен разворачиваться в тот же JSON: err=%v", err)
+	}
+	if zipped.Body.Len() >= plain.Body.Len() {
+		t.Fatalf("gzip должен быть меньше: %d >= %d", zipped.Body.Len(), plain.Body.Len())
+	}
+
+	// Кэш: повторный запрос отдаёт байты из кэша (запись появилась).
+	if _, ok := h.cachedSummaryData("g|false", func() string { v, _ := h.groupPageVersion("g"); return v }()); !ok {
+		t.Fatal("после первого запроса ответ должен закэшироваться")
+	}
+	// Изменение standings-файла инвалидирует кэш: новые данные видны.
+	writePerfGroup(t, dataDir, outDir, "g", 3)
+	var std domain.GeneratedGroupStandings
+	if err := json.Unmarshal([]byte(get(false).Body.String()), &std); err != nil || len(std.Contests) != 3 {
+		t.Fatalf("после изменения файла кэш должен обновиться: err=%v contests=%d", err, len(std.Contests))
 	}
 }

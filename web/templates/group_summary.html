@@ -505,6 +505,10 @@
         tr.classList.toggle("filtered-out", !m);
         if (m) shown++;
       });
+      // На время поиска свёртка (первые 30 строк) раскрывается, иначе
+      // совпадения ниже порога остались бы скрыты; очистка возвращает свёртку.
+      var table = root.querySelector("table");
+      if (table) table.classList.toggle("filter-active", !!q);
       if (filterBar) filterBar.hidden = total === 0;
       if (countNode) countNode.textContent = q ? (shown + " из " + total) : String(total);
       if (noMatch) noMatch.hidden = !(q && shown === 0 && total > 0);
@@ -513,6 +517,9 @@
 
     function render(tab) {
       root.textContent = "";
+      // Кнопка «Показать всех» от прошлой вкладки живёт вне root — убираем.
+      var stale = root.nextElementSibling;
+      if (stale && stale.classList && stale.classList.contains("rows-expand-btn")) stale.remove();
       var table = buildTable(contestsForTab(tab));
       if (!table) {
         empty.textContent = "Нет задач в выбранной таблице.";
@@ -522,7 +529,11 @@
         return;
       }
       empty.style.display = "none";
+      // Длинная сводная сворачивается до 30 строк с кнопкой «Показать всех»,
+      // как таблицы контестов (общий инструмент из app.js).
+      table.setAttribute("data-collapse-rows", "30");
       root.appendChild(table);
+      if (window.standingsInitScope) window.standingsInitScope(root);
       applyFilter();
     }
 

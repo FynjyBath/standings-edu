@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -108,4 +110,65 @@ func writeCachedHTML(w http.ResponseWriter, html []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(patched)
+}
+
+// Кэш готовых байтов /summary-data: сериализация ~МБ JSON на каждый запрос
+// заметна, а данные меняются только с генерацией. Храним компактный JSON и его
+// gzip; ключ — slug+вид (обычный/размороженный), версия — тот же отпечаток
+// файлов, что у HTML-кэша страницы группы.
+type summaryDataCache struct {
+	mu      sync.Mutex
+	entries map[string]summaryDataEntry
+}
+
+type summaryDataEntry struct {
+	version string
+	plain   []byte
+	gzipped []byte
+}
+
+func (h *Handlers) cachedSummaryData(key, version string) (summaryDataEntry, bool) {
+	h.summaryCache.mu.Lock()
+	defer h.summaryCache.mu.Unlock()
+	e, ok := h.summaryCache.entries[key]
+	if !ok || e.version != version {
+		return summaryDataEntry{}, false
+	}
+	return e, true
+}
+
+func (h *Handlers) storeSummaryData(key, version string, plain, gzipped []byte) {
+	h.summaryCache.mu.Lock()
+	defer h.summaryCache.mu.Unlock()
+	if h.summaryCache.entries == nil {
+		h.summaryCache.entries = make(map[string]summaryDataEntry)
+	}
+	h.summaryCache.entries[key] = summaryDataEntry{version: version, plain: plain, gzipped: gzipped}
+}
+
+// gzipBytes сжимает данные для отдачи клиентам с Accept-Encoding: gzip.
+func gzipBytes(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// writeSummaryData отдаёт JSON сводной, gzip-версией при поддержке клиента.
+func writeSummaryData(w http.ResponseWriter, r *http.Request, e summaryDataEntry) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Vary", "Accept-Encoding")
+	if len(e.gzipped) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(e.gzipped)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(e.plain)
 }

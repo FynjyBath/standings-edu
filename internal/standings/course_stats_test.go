@@ -279,6 +279,68 @@ func TestDetectCourseFlags(t *testing.T) {
 	}
 }
 
+// Решённое БЕЗ зафиксированного времени (ACMP, исключённый эпизод флага) не
+// участвует в скорости: вес без минут в знаменателе раздувал бы её. У ученика с
+// теми же временами, что у когорты, плюс пачкой «безвременных» решений скорость
+// должна остаться ×1, как у всех.
+func TestSpeedIgnoresSolvedWithoutTime(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(14 * 24 * time.Hour)
+
+	tasks := make([]domain.GeneratedTask, 12)
+	norms := make([]string, 12)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	// Когорта: первые 8 задач решаются по 30 минут (две сессии), с временем.
+	solveTimed := func(st *accountStatuses) {
+		for j := 0; j < 8; j++ {
+			day := j / 4
+			min := float64(30 * (j%4 + 1))
+			at := base.Add(time.Duration(day) * 72 * time.Hour).Add(time.Duration(min) * time.Minute)
+			st.timed[norms[j]] = []source.TimedSubmission{{At: at, Solved: true}}
+			st.solved[norms[j]] = struct{}{}
+			st.attempted[norms[j]] = struct{}{}
+		}
+	}
+	for i := 0; i < 9; i++ {
+		id := fmt.Sprintf("s%d", i)
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		solveTimed(st)
+		statuses[id] = st
+	}
+	// Испытуемый: те же 8 с временем + 4 решённые БЕЗ посылок с временем.
+	mixed := newAccountStatuses()
+	solveTimed(mixed)
+	for j := 8; j < 12; j++ {
+		mixed.solved[norms[j]] = struct{}{}
+		mixed.attempted[norms[j]] = struct{}{}
+	}
+	students = append(students, domain.Student{ID: "mixed"})
+	statuses["mixed"] = mixed
+
+	stats := computeCourseStats(std, students, statuses, now, nil)
+	cs := stats["mixed"]
+	if cs.LowData {
+		t.Fatalf("данных достаточно: %+v", cs)
+	}
+	// Времена как у когорты → скорость ровно ×1; «безвременные» решения дают
+	// прогресс, но не скорость.
+	if cs.Speed != 1 {
+		t.Fatalf("безвременные решения не должны раздувать скорость: ×%v, want ×1", cs.Speed)
+	}
+	if cs.SolvedCount != 12 || cs.Progress <= stats["s0"].Progress {
+		t.Fatalf("прогресс должен учитывать все решённые: %+v", cs)
+	}
+}
+
 // Исходы проверки и подсчёт темпа: «перенос» и «нарушение» исключают посылки
 // эпизода (активное время падает, флаг не детектируется заново, прогресс цел),
 // «сам решил» и старые записи без исхода не исключают ничего.

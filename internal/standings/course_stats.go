@@ -385,6 +385,7 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 	}
 
 	solvedWeight := 0.0
+	speedWeight := 0.0 // вес решённых С зафиксированным временем — числитель скорости
 	activeMin := 0.0
 	lastSolvedIdx := -1
 	solvedIdxs := make([]int, 0)
@@ -396,6 +397,12 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 			solvedIdxs = append(solvedIdxs, i)
 			if i > lastSolvedIdx {
 				lastSolvedIdx = i
+			}
+			// В скорость идут только решения с временем: задача без посылок с
+			// временем (ACMP, исключённый эпизод флага) даёт вес в числитель,
+			// не дав ни минуты в знаменатель, — и раздувала бы скорость.
+			if tt.taskMin[t.norm] > 0 {
+				speedWeight += weights[t.norm]
 			}
 		}
 	}
@@ -410,7 +417,7 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 	// Скорости.
 	cs.LowData = activeMin < courseMinActiveMin || cs.SolvedCount < courseMinSolved
 	if !cs.LowData && activeMin > 0 {
-		cs.Speed = round2(solvedWeight / activeMin)
+		cs.Speed = round2(speedWeight / activeMin)
 
 		// Текущая форма: EWMA по сессиям (вклад сессии — время на задачах курса
 		// и вес задач курса, решённых в этой сессии).

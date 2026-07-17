@@ -398,9 +398,9 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 	}
 }
 
-// Эпизоды старше 60 дней не показываются: тот же «читер», но генерация через
-// 61 день после эпизода — флагов нет.
-func TestDetectCourseFlagsOldEpisodesHidden(t *testing.T) {
+// Флаги не забываются: старый эпизод («читер», генерация спустя год) всё равно
+// детектируется — преподаватель разбирает его сам.
+func TestDetectCourseFlagsOldEpisodesKept(t *testing.T) {
 	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
 
 	tasks := make([]domain.GeneratedTask, 10)
@@ -440,12 +440,18 @@ func TestDetectCourseFlagsOldEpisodesHidden(t *testing.T) {
 	students = append(students, domain.Student{ID: "cheat"})
 	statuses["cheat"] = cheat
 
-	// Через неделю флаги есть, через 61 день — уже нет.
-	if stats := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour), nil); len(stats["cheat"].Flags) == 0 {
+	// И через неделю, и спустя год флаги на месте (и с тем же стабильным ключом).
+	fresh := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour), nil)
+	if len(fresh["cheat"].Flags) == 0 {
 		t.Fatalf("свежий эпизод должен давать флаги")
 	}
-	if stats := computeCourseStats(std, students, statuses, base.Add(61*24*time.Hour), nil); len(stats["cheat"].Flags) != 0 {
-		t.Fatalf("эпизод старше 60 дней не должен давать флагов: %+v", stats["cheat"].Flags)
+	old := computeCourseStats(std, students, statuses, base.Add(365*24*time.Hour), nil)
+	if len(old["cheat"].Flags) == 0 {
+		t.Fatalf("старый эпизод тоже должен давать флаги (не забываем): %+v", old["cheat"])
+	}
+	if fresh["cheat"].Flags[0].Key != old["cheat"].Flags[0].Key {
+		t.Fatalf("ключ флага должен быть стабилен во времени: %q != %q",
+			fresh["cheat"].Flags[0].Key, old["cheat"].Flags[0].Key)
 	}
 }
 

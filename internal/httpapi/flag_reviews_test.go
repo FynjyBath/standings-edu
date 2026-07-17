@@ -97,9 +97,9 @@ func TestJuryFlagReviewSetAndClear(t *testing.T) {
 	}
 }
 
-// «Нарушение» и «перенос» показываются из снапшота, даже когда флага в
-// generated уже нет (посылки исключены из темпа → флаг не детектируется);
-// «нарушение» — подсвеченным, старый «перенос» — не показывается.
+// Проверенные флаги показываются из снапшота, даже когда флага в generated уже
+// нет (посылки исключены из темпа → флаг не детектируется), — бессрочно: флаги
+// не забываются никогда, любого возраста.
 func TestFlagReviewResurrectsFromSnapshot(t *testing.T) {
 	h, _ := juryFlagSetup(t)
 
@@ -128,16 +128,16 @@ func TestFlagReviewResurrectsFromSnapshot(t *testing.T) {
 		}
 	}
 
-	// Состарим эпизоды: перенос старше 60 дней пропадает, нарушение остаётся.
+	// Состарим эпизоды на годы — оба всё равно показываются: не забываем ничего.
 	reviews := h.loadFlagReviews()
 	for k, rev := range reviews {
-		rev.Flag.At = time.Now().Add(-90 * 24 * time.Hour)
+		rev.Flag.At = time.Now().Add(-3 * 365 * 24 * time.Hour)
 		reviews[k] = rev
 	}
 	stats = []domain.StudentCourseStats{{GroupSlug: "g1"}}
 	applyFlagReviews(reviews, "s1", stats)
-	if len(stats[0].Flags) != 1 || stats[0].Flags[0].Resolution != domain.FlagResolutionViolation {
-		t.Fatalf("only violation must survive past 60 days: %+v", stats[0].Flags)
+	if len(stats[0].Flags) != 2 {
+		t.Fatalf("reviewed flags must survive any age: %+v", stats[0].Flags)
 	}
 }
 
@@ -166,14 +166,15 @@ func TestJuryFlagReviewForbidden(t *testing.T) {
 	}
 }
 
-// Админский эндпоинт пишет ту же запись; при записи вычищаются протухшие
-// отметки — но «нарушение» живёт вечно.
-func TestAdminFlagReviewAndPrune(t *testing.T) {
+// Админский эндпоинт пишет ту же запись; старые отметки не вычищаются никогда
+// (флаги не забываются) — запись живёт, пока её не снимут вручную.
+func TestAdminFlagReviewKeepsOldRecords(t *testing.T) {
 	h, dataDir := juryFlagSetup(t)
 
+	ancient := time.Now().Add(-3 * 365 * 24 * time.Hour)
 	old := map[string]domain.FlagReview{
-		"s1|g1|ancient-legit":     {At: time.Now().Add(-flagReviewMaxAge - time.Hour), Resolution: domain.FlagResolutionLegit},
-		"s1|g1|ancient-violation": {At: time.Now().Add(-flagReviewMaxAge - time.Hour), Resolution: domain.FlagResolutionViolation},
+		"s1|g1|ancient-legit":     {At: ancient, Resolution: domain.FlagResolutionLegit},
+		"s1|g1|ancient-violation": {At: ancient, Resolution: domain.FlagResolutionViolation},
 	}
 	if err := fileutil.WriteJSON(filepath.Join(dataDir, "flag_reviews.json"), old, 0o644); err != nil {
 		t.Fatal(err)
@@ -186,13 +187,9 @@ func TestAdminFlagReviewAndPrune(t *testing.T) {
 		t.Fatalf("admin set review: %d %v", code, resp)
 	}
 	got := h.loadFlagReviews()
-	if _, ok := got["s1|g1|1700000000|t1"]; !ok {
-		t.Fatalf("fresh review missing: %v", got)
-	}
-	if _, ok := got["s1|g1|ancient-legit"]; ok {
-		t.Fatalf("ancient legit review must be pruned: %v", got)
-	}
-	if _, ok := got["s1|g1|ancient-violation"]; !ok {
-		t.Fatalf("violation review must never be pruned: %v", got)
+	for _, key := range []string{"s1|g1|1700000000|t1", "s1|g1|ancient-legit", "s1|g1|ancient-violation"} {
+		if _, ok := got[key]; !ok {
+			t.Fatalf("record %q must be kept: %v", key, got)
+		}
 	}
 }

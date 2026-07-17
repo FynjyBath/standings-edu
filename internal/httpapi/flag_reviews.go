@@ -20,11 +20,6 @@ import (
 // следующей генерации (по снапшоту флага в отметке), а «нарушение» вдобавок
 // остаётся подсвеченным в профиле навсегда.
 
-// flagReviewMaxAge — отметки «сам решил»/«перенос» старше этого срока
-// вычищаются при каждой записи (сами флаги живут 60 дней). «Нарушение» не
-// вычищается никогда: это память «один раз был пойман».
-const flagReviewMaxAge = 180 * 24 * time.Hour
-
 const flagReviewCommentMaxLen = 500
 
 func (h *Handlers) flagReviewsPath() string {
@@ -43,15 +38,13 @@ func (h *Handlers) loadFlagReviews() map[string]domain.FlagReview {
 }
 
 // applyFlagReviews накладывает отметки проверки на флаги курс-статов и
-// добавляет из снапшотов флаги, которых в generated уже нет: «нарушение» —
-// всегда (память навсегда), «перенос» — пока эпизод не старше окна показа
-// (после отметки посылки исключаются из темпа, и флаг перестаёт детектироваться).
+// добавляет из снапшотов флаги, которых в generated уже нет (после отметки
+// «перенос»/«нарушение» посылки исключаются из темпа, и флаг перестаёт
+// детектироваться). Флаги не забываются: показываются все, любого возраста.
 func applyFlagReviews(reviews map[string]domain.FlagReview, studentID string, stats []domain.StudentCourseStats) {
 	if len(reviews) == 0 {
 		return
 	}
-	const maxAge = 60 * 24 * time.Hour // окно показа флагов, как в детекторе
-	now := time.Now()
 	for i := range stats {
 		present := make(map[string]struct{}, len(stats[i].Flags))
 		for j := range stats[i].Flags {
@@ -75,16 +68,11 @@ func applyFlagReviews(reviews map[string]domain.FlagReview, studentID string, st
 			if _, ok := present[rev.Flag.Key]; ok {
 				continue
 			}
-			res := rev.NormalizedResolution()
-			if res != domain.FlagResolutionViolation &&
-				!(res == domain.FlagResolutionTransfer && now.Sub(rev.Flag.At) <= maxAge) {
-				continue
-			}
 			f := *rev.Flag
 			at := rev.At
 			f.ReviewedAt = &at
 			f.ReviewComment = rev.Comment
-			f.Resolution = res
+			f.Resolution = rev.NormalizedResolution()
 			stats[i].Flags = append(stats[i].Flags, f)
 		}
 	}
@@ -93,7 +81,8 @@ func applyFlagReviews(reviews map[string]domain.FlagReview, studentID string, st
 // setFlagReview ставит отметку с исходом resolution (пустой — снять) и
 // сохраняет файл (вызывается под SerializeDataWrite). Снапшот флага берётся из
 // сгенерированного профиля — по нему потом работает исключение из темпа и показ
-// после исчезновения флага. Заодно вычищаются протухшие отметки (кроме «нарушений»).
+// после исчезновения флага. Отметки не протухают: флаги не забываются, запись
+// живёт, пока преподаватель не снимет её сам.
 func (h *Handlers) setFlagReview(studentID, groupSlug, flagKey, resolution, comment string) error {
 	reviews := h.loadFlagReviews()
 	key := domain.FlagReviewKey(studentID, groupSlug, flagKey)
@@ -115,12 +104,6 @@ func (h *Handlers) setFlagReview(studentID, groupSlug, flagKey, resolution, comm
 			Comment:    strings.TrimSpace(comment),
 			Resolution: resolution,
 			Flag:       snapshot,
-		}
-	}
-	cutoff := time.Now().Add(-flagReviewMaxAge)
-	for k, rev := range reviews {
-		if rev.NormalizedResolution() != domain.FlagResolutionViolation && rev.At.Before(cutoff) {
-			delete(reviews, k)
 		}
 	}
 	return fileutil.WriteJSON(h.flagReviewsPath(), reviews, 0o644)

@@ -220,7 +220,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 			st = newAccountStatuses()
 		}
 		cs := computeStudentCourseStats(std, tasks, weights, totalWeight, times[s.ID], st, now)
-		cs.Flags = detectCourseFlags(tasks, weights, times[s.ID], st, ftRate, ftN, now)
+		cs.Flags = detectCourseFlags(tasks, weights, times[s.ID], st, ftRate, ftN)
 		out[s.ID] = cs
 	}
 	normalizeCourseSpeeds(out)
@@ -499,10 +499,6 @@ const (
 	courseFastWindow    = 5
 	courseFastShare     = 0.1
 	courseFastMinWeight = 30.0
-	courseMaxFlags      = 4
-	// Эпизоды старше courseFlagMaxAgeDays не показываются: смысл флага —
-	// «посмотри сейчас», а не архив.
-	courseFlagMaxAgeDays = 60.0
 )
 
 // cohortFirstTryRates считает по когорте долю решивших задачу с первой посылки.
@@ -559,17 +555,16 @@ type solvedCourseEvent struct {
 	firstTry bool
 }
 
-// detectCourseFlags ищет подозрительные эпизоды в решениях задач курса.
-func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studentTaskTime, st *accountStatuses, ftRate map[string]float64, ftN map[string]int, now time.Time) []domain.CourseFlag {
+// detectCourseFlags ищет подозрительные эпизоды в решениях задач курса — за всю
+// историю, без окна давности: флаги не забываются, преподаватель разбирает их
+// сам (проверенные сереют/подсвечиваются, но остаются).
+func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studentTaskTime, st *accountStatuses, ftRate map[string]float64, ftN map[string]int) []domain.CourseFlag {
 	// Хронология решений задач курса.
 	events := make([]solvedCourseEvent, 0)
 	for _, task := range tasks {
 		at, solved := tt.solvedAt[task.norm]
 		if !solved {
 			continue
-		}
-		if now.Sub(at).Hours() > 24*courseFlagMaxAgeDays {
-			continue // старый эпизод: не показываем
 		}
 		first, ok := firstSubmission(st, task.norm)
 		events = append(events, solvedCourseEvent{task: task, at: at, firstTry: ok && first.Solved})
@@ -583,9 +578,6 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 	used := make(map[string]struct{}) // задачи, уже вошедшие в какой-то флаг
 
 	appendFlag := func(text string, evs []solvedCourseEvent) {
-		if len(flags) >= courseMaxFlags {
-			return
-		}
 		f := domain.CourseFlag{
 			Key:  fmt.Sprintf("%d|%s", evs[0].at.Unix(), evs[0].task.norm),
 			Text: text,

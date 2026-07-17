@@ -1008,7 +1008,7 @@ func TestGroupParticipantsByToken(t *testing.T) {
 	if !strings.Contains(body, "Иван И.") || strings.Contains(body, "Другая") {
 		t.Fatalf("token profile must show only current group: %v", strings.Contains(body, "Другая"))
 	}
-	if !strings.Contains(body, "Темп курса: Группа 1") || strings.Contains(body, "Чужой курс") {
+	if !strings.Contains(body, "Темп группы: Группа 1") || strings.Contains(body, "Чужой курс") {
 		t.Fatal("токенный профиль должен показывать темп только своего курса")
 	}
 	// Не член группы — 404.

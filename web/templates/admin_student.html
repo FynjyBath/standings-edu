@@ -48,16 +48,16 @@
   {{end}}
 </section>
 
-<!-- Темп курса: сессии, эмпирические веса, взвешенная скорость (docs/course_speed.pdf) -->
+<!-- Темп группы: сессии, эмпирические веса, взвешенная скорость (docs/course_speed.pdf) -->
 {{range $p.CourseStats}}
 <section class="contest-block">
-  <h2>Темп курса: {{.GroupTitle}}</h2>
+  <h2>Темп группы: {{.GroupTitle}}</h2>
   <div class="course-progress-row">
     <div class="course-progress" title="Прогресс по весу задач: решено {{.SolvedCount}} из {{.TotalCount}}">
       <div class="course-progress-fill" style="width:{{pct .Progress}}%;"></div>
       <span class="course-progress-label">{{pct .Progress}}% · {{.SolvedCount}}/{{.TotalCount}}</span>
     </div>
-    {{if .Front}}<span class="course-front" title="Самая дальняя решённая задача курса">сейчас: {{.Front}}</span>{{end}}
+    {{if .Front}}<span class="course-front" title="Самая дальняя решённая задача группы">сейчас: {{.Front}}</span>{{end}}
   </div>
   <div class="stat-grid" style="margin-top:0.7rem;">
     {{if .LowData}}
@@ -66,9 +66,9 @@
     <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Speed}}</span><span class="stat-label">скорость: &lt;1 — ниже среднего, &gt;1 — выше</span></div>
     {{if .SpeedRecent}}<div class="stat-card"><span class="stat-value">×{{numText .SpeedRecent}}</span><span class="stat-label">скорость, взвешенная по времени (свежее — важнее)</span></div>{{end}}
     {{end}}
-    <div class="stat-card"><span class="stat-value">{{numText .ActiveHours}}</span><span class="stat-label">активных часов на курсе</span></div>
+    <div class="stat-card"><span class="stat-value">{{numText .ActiveHours}}</span><span class="stat-label">активных часов в группе</span></div>
     {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">≈{{numText .WeeklyHours}}</span><span class="stat-label">часов в неделю (среднее по активным неделям за 8 недель)</span></div>{{end}}
-    {{if .ForecastWeeks}}<div class="stat-card"><span class="stat-value">≈{{numText .ForecastWeeks}}</span><span class="stat-label">недель до конца курса</span></div>{{end}}
+    {{if .ForecastWeeks}}<div class="stat-card"><span class="stat-value">≈{{numText .ForecastWeeks}}</span><span class="stat-label">недель до конца материала группы</span></div>{{end}}
   </div>
   {{if .Stuck}}
   <p class="course-signal course-signal--stuck">⚠ Застрял:

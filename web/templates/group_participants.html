@@ -4,7 +4,7 @@
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/{{.GroupSlug}}?token={{.Token}}">← К таблицам</a>
   </p>
-  <p class="empty-hint">Темп курса по участникам (просмотр по токену). Скорость взвешена сложностью задач; ×1 — средний темп по курсу. Клик по заголовку — сортировка; по умолчанию — по скорости.</p>
+  <p class="empty-hint">Темп группы по участникам (просмотр по токену). Скорость взвешена сложностью задач; ×1 — средний темп по группе. Клик по заголовку — сортировка; по умолчанию — по скорости.</p>
 </section>
 
 <section class="contest-block">
@@ -21,11 +21,11 @@
         <tr>
           <th class="student-col">Ученик</th>
           <th class="sortable" data-sort="progress" title="Доля пройденного (по сложности задач)">Прогресс</th>
-          <th class="sortable count-col" data-sort="speed" title="×1 — средний темп по курсу; меньше — медленнее, больше — быстрее">Скорость</th>
+          <th class="sortable count-col" data-sort="speed" title="×1 — средний темп по группе; меньше — медленнее, больше — быстрее">Скорость</th>
           <th class="sortable count-col" data-sort="recent" title="Скорость, взвешенная по времени: свежие занятия важнее">По времени</th>
-          <th class="sortable count-col" data-sort="hours" title="Активные часы на задачах курса (без перерывов между занятиями)">Часов</th>
+          <th class="sortable count-col" data-sort="hours" title="Активные часы на задачах группы (без перерывов между занятиями)">Часов</th>
           <th class="sortable count-col" data-sort="weekly" title="Среднее по активным неделям за 8 недель">≈ч/нед</th>
-          <th title="Самая дальняя решённая задача курса">Сейчас на</th>
+          <th title="Самая дальняя решённая задача группы">Сейчас на</th>
           <th title="Застрял: активного времени уже в несколько раз больше типичного. Пропустил: были попытки, ушёл дальше.">Сигналы</th>
         </tr>
       </thead>
@@ -54,7 +54,7 @@
             {{range .Course.Abandoned}}<span class="course-chip" title="Пропустил ({{numText .Minutes}} мин попыток){{if .Name}} · {{.Name}}{{end}}">↩ {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
           </td>
           {{else}}
-          <td colspan="7"><span class="grade-weight">{{if .HasProfile}}нет посылок по курсу{{else}}профиль появится после генерации{{end}}</span></td>
+          <td colspan="7"><span class="grade-weight">{{if .HasProfile}}нет посылок по группе{{else}}профиль появится после генерации{{end}}</span></td>
           {{end}}
         </tr>
         {{end}}

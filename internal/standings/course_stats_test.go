@@ -2,6 +2,7 @@ package standings
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -204,5 +205,184 @@ func TestComputeCourseStatsSpeedCalibration(t *testing.T) {
 	}
 	if cs.Progress != 1 || cs.ForecastWeeks != 0 {
 		t.Fatalf("курс пройден: progress=%v forecast=%v", cs.Progress, cs.ForecastWeeks)
+	}
+}
+
+// Детекторы нечестности: серия first-try на нелёгких, «пулемёт», «резко
+// быстрее»; честный ученик — без флагов.
+func TestDetectCourseFlags(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(7 * 24 * time.Hour)
+
+	// Курс из 10 задач, один контест.
+	tasks := make([]domain.GeneratedTask, 10)
+	norms := make([]string, 10)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	// Когорта из 8 «нормальных»: решают каждую задачу за ~20 минут СО ВТОРОЙ
+	// попытки (first-try rate = 0 → все задачи «нелёгкие»).
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("s%d", i)
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		cur := base
+		for _, norm := range norms {
+			st.timed[norm] = []source.TimedSubmission{
+				{At: cur.Add(10 * time.Minute)},               // попытка
+				{At: cur.Add(20 * time.Minute), Solved: true}, // решение
+			}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+			cur = cur.Add(20 * time.Minute)
+		}
+		statuses[id] = st
+	}
+
+	// «Читер»: первые 6 задач — first-try пачкой с паузами по 2 минуты.
+	cheat := newAccountStatuses()
+	for i := 0; i < 6; i++ {
+		at := base.Add(time.Duration(2*i) * time.Minute)
+		cheat.timed[norms[i]] = []source.TimedSubmission{{At: at, Solved: true}}
+		cheat.solved[norms[i]] = struct{}{}
+		cheat.attempted[norms[i]] = struct{}{}
+	}
+	students = append(students, domain.Student{ID: "cheat"})
+	statuses["cheat"] = cheat
+
+	stats := computeCourseStats(std, students, statuses, now)
+	if n := len(stats["cheat"].Flags); n == 0 {
+		t.Fatalf("у читера должны быть флаги: %+v", stats["cheat"])
+	}
+	// Первый флаг — серия first-try (6 подряд, все нелёгкие).
+	f := stats["cheat"].Flags[0]
+	if !strings.Contains(f.Text, "с первой попытки") {
+		t.Fatalf("ожидали флаг серии first-try: %+v", f)
+	}
+	if len(f.Tasks) == 0 || f.At.IsZero() {
+		t.Fatalf("флаг должен нести задачи и время: %+v", f)
+	}
+	if f.Key == "" {
+		t.Fatalf("флаг должен нести стабильный ключ для отметки «проверено»: %+v", f)
+	}
+	// Честные ученики — без флагов.
+	for i := 0; i < 8; i++ {
+		if n := len(stats[fmt.Sprintf("s%d", i)].Flags); n != 0 {
+			t.Fatalf("у честного s%d не должно быть флагов: %+v", i, stats[fmt.Sprintf("s%d", i)].Flags)
+		}
+	}
+}
+
+// Эпизоды старше 60 дней не показываются: тот же «читер», но генерация через
+// 61 день после эпизода — флагов нет.
+func TestDetectCourseFlagsOldEpisodesHidden(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+
+	tasks := make([]domain.GeneratedTask, 10)
+	norms := make([]string, 10)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("s%d", i)
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		cur := base
+		for _, norm := range norms {
+			st.timed[norm] = []source.TimedSubmission{
+				{At: cur.Add(10 * time.Minute)},
+				{At: cur.Add(20 * time.Minute), Solved: true},
+			}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+			cur = cur.Add(20 * time.Minute)
+		}
+		statuses[id] = st
+	}
+	cheat := newAccountStatuses()
+	for i := 0; i < 6; i++ {
+		at := base.Add(time.Duration(2*i) * time.Minute)
+		cheat.timed[norms[i]] = []source.TimedSubmission{{At: at, Solved: true}}
+		cheat.solved[norms[i]] = struct{}{}
+		cheat.attempted[norms[i]] = struct{}{}
+	}
+	students = append(students, domain.Student{ID: "cheat"})
+	statuses["cheat"] = cheat
+
+	// Через неделю флаги есть, через 61 день — уже нет.
+	if stats := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour)); len(stats["cheat"].Flags) == 0 {
+		t.Fatalf("свежий эпизод должен давать флаги")
+	}
+	if stats := computeCourseStats(std, students, statuses, base.Add(61*24*time.Hour)); len(stats["cheat"].Flags) != 0 {
+		t.Fatalf("эпизод старше 60 дней не должен давать флагов: %+v", stats["cheat"].Flags)
+	}
+}
+
+// Пачка мгновенных решений ловится и без first-try (решения со второй посылки,
+// но интервалы крошечные).
+func TestDetectCourseFlagsBurst(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(24 * time.Hour)
+	tasks := make([]domain.GeneratedTask, 6)
+	norms := make([]string, 6)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("b%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	students := []domain.Student{}
+	statuses := map[string]*accountStatuses{}
+	// Когорта: ~20 минут на задачу, у половины first-try (rate 1.0 — лёгкие по
+	// first-try, чтобы серию не ловить, а поймать именно пулемёт).
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("s%d", i)
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		cur := base
+		for _, norm := range norms {
+			st.timed[norm] = []source.TimedSubmission{{At: cur.Add(20 * time.Minute), Solved: true}}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+			cur = cur.Add(20 * time.Minute)
+		}
+		statuses[id] = st
+	}
+	// Пулемётчик: НЕ first-try (по 2 посылки), но 5 решений с паузами 2 мин.
+	mg := newAccountStatuses()
+	for i := 0; i < 5; i++ {
+		at := base.Add(time.Duration(2*i) * time.Minute)
+		mg.timed[norms[i]] = []source.TimedSubmission{
+			{At: at.Add(-30 * time.Second)}, // быстрая неудачная
+			{At: at, Solved: true},
+		}
+		mg.solved[norms[i]] = struct{}{}
+		mg.attempted[norms[i]] = struct{}{}
+	}
+	students = append(students, domain.Student{ID: "mg"})
+	statuses["mg"] = mg
+
+	stats := computeCourseStats(std, students, statuses, now)
+	found := false
+	for _, f := range stats["mg"].Flags {
+		if strings.Contains(f.Text, "задач за") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("пулемёт должен быть пойман: %+v", stats["mg"].Flags)
 	}
 }

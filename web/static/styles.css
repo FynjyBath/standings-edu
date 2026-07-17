@@ -2151,3 +2151,54 @@ th.sortable::after {
   font-size: 0.7rem;
   margin-left: 0.2rem;
 }
+
+/* ── Флаги «признаки нечестности» ────────────────────────────────────────── */
+.course-signal--flag {
+  color: var(--attempt-text);
+}
+
+.course-chip--flag {
+  border-color: color-mix(in srgb, var(--attempt-bg) 80%, var(--line) 20%);
+  background: color-mix(in srgb, var(--attempt-bg) 30%, var(--surface) 70%);
+  color: var(--attempt-text);
+  font-weight: 700;
+  cursor: help;
+}
+
+/* Проверенный флаг: серый, с датой проверки и комментарием. */
+.course-chip--flag-done {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--muted) 8%, var(--surface) 92%);
+  color: var(--muted);
+  font-weight: 400;
+  cursor: help;
+}
+
+.flag-review-note {
+  color: var(--muted);
+  font-style: italic;
+  margin-left: 0.35rem;
+}
+
+.flag-review-btn {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  margin-left: 0.35rem;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.flag-review-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.flag-review-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -57,6 +57,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/file/validate", handlers.AdminAuth(handlers.AdminFileValidate))
 	mux.HandleFunc("POST /api/admin/file/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminFileSave)))
 	// Жюри-панель: операции по group_secret_token (авторизация внутри хендлеров).
+	mux.HandleFunc("POST /api/admin/flags/review", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminFlagReviewSet)))
+	mux.HandleFunc("POST /api/jury/flags/review", handlers.SerializeDataWrite(handlers.JuryFlagReviewSet))
 	mux.HandleFunc("POST /api/jury/group/contests/add-ref", handlers.SerializeDataWrite(handlers.JuryContestAddRef))
 	mux.HandleFunc("POST /api/jury/group/contests/move", handlers.SerializeDataWrite(handlers.JuryContestMove))
 	mux.HandleFunc("POST /api/jury/group/grades/save", handlers.SerializeDataWrite(handlers.JuryGradesSave))

@@ -518,6 +518,7 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 	}
 
 	studentIDs := h.resolveGroupStudentIDs(slug)
+	reviews := h.loadFlagReviews()
 	rows := make([]ParticipantRow, 0, len(studentIDs))
 	for _, id := range studentIDs {
 		row := ParticipantRow{StudentID: id, PublicName: id}
@@ -528,6 +529,7 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 			}
 			row.Stats = profile.Stats
 			// Темп именно этого курса (группы) — основной контент страницы.
+			applyFlagReviews(reviews, id, profile.CourseStats)
 			for i := range profile.CourseStats {
 				if profile.CourseStats[i].GroupSlug == slug {
 					cs := profile.CourseStats[i]
@@ -607,6 +609,7 @@ func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Reques
 		BackURL:   "/standings/" + slug + "/participants?token=" + url.QueryEscape(token),
 		BackLabel: "← Участники",
 		TokenView: true,
+		Token:     token,
 	}
 	h.fillStudentProfilePage(&page, id, &slug)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {

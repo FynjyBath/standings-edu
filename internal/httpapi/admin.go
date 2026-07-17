@@ -118,6 +118,8 @@ type AdminStudentProfilePageData struct {
 	BackLabel string
 	// TokenView — просмотр по токену группы (не админ): без админ-ссылок на группы.
 	TokenView bool
+	// Token — токен группы для жюри-запросов со страницы (пуст в админ-режиме).
+	Token string
 }
 
 // AdminStudentProfilePage — админский профиль участника: активность, аналитика
@@ -176,6 +178,7 @@ func (h *Handlers) fillStudentProfilePage(page *AdminStudentProfilePageData, id 
 		}
 		profile.CourseStats = courses
 	}
+	applyFlagReviews(h.loadFlagReviews(), id, profile.CourseStats)
 	page.Profile = profile
 	if profile.PublicName != "" {
 		page.PageTitle = "Профиль — " + profile.PublicName

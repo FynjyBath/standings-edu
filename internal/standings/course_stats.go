@@ -1,12 +1,14 @@
 package standings
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"time"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/source"
 )
 
 // Темп прохождения курса: сессии по посылкам, эмпирические веса задач,
@@ -202,13 +204,17 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		totalWeight += weights[t.norm]
 	}
 
+	ftRate, ftN := cohortFirstTryRates(tasks, times, statusByStudent)
+
 	out := make(map[string]*domain.StudentCourseStats, len(students))
 	for _, s := range students {
 		st := statusByStudent[s.ID]
 		if st == nil {
 			st = newAccountStatuses()
 		}
-		out[s.ID] = computeStudentCourseStats(std, tasks, weights, totalWeight, times[s.ID], st, now)
+		cs := computeStudentCourseStats(std, tasks, weights, totalWeight, times[s.ID], st, now)
+		cs.Flags = detectCourseFlags(tasks, weights, times[s.ID], st, ftRate, ftN, now)
+		out[s.ID] = cs
 	}
 	normalizeCourseSpeeds(out)
 	return out
@@ -414,3 +420,193 @@ func sessionContains(sessions []courseSession, si int, t time.Time) bool {
 
 func round1(x float64) float64 { return math.Round(x*10) / 10 }
 func round2(x float64) float64 { return math.Round(x*100) / 100 }
+
+// ── Признаки нечестности ─────────────────────────────────────────────────────
+// Детекторы подозрительных паттернов в посылках. Это сигналы для ЛИЧНОЙ
+// проверки преподавателем, не вердикт: формулировки нейтральные, с числами.
+const (
+	// Серия «с первой попытки»: столько подряд решённых first-try НЕЛЁГКИХ
+	// задач (когортный first-try ниже courseEasyFirstTryRate) даёт флаг.
+	courseFlagStreakLen     = 5
+	courseEasyFirstTryRate  = 0.6
+	courseFirstTryMinCohort = 5 // меньше решивших — сложность задачи неизвестна
+	// «Пулемёт»: столько решений подряд с паузами не больше courseBurstGapMin
+	// минут, при суммарном типичном времени от courseBurstMinWeight минут.
+	courseBurstLen       = 4
+	courseBurstGapMin    = 3.0
+	courseBurstMinWeight = 40.0
+	// «Резко быстрее типичного»: окно из courseFastWindow подряд решённых, где
+	// личное время меньше courseFastShare от типичного (вес окна значим).
+	courseFastWindow    = 5
+	courseFastShare     = 0.1
+	courseFastMinWeight = 30.0
+	courseMaxFlags      = 4
+	// Эпизоды старше courseFlagMaxAgeDays не показываются: смысл флага —
+	// «посмотри сейчас», а не архив.
+	courseFlagMaxAgeDays = 60.0
+)
+
+// cohortFirstTryRates считает по когорте долю решивших задачу с первой посылки.
+// Возвращает map[norm]p и map[norm]n (число решивших с известными посылками).
+func cohortFirstTryRates(tasks []courseTask, times map[string]studentTaskTime, statusByStudent map[string]*accountStatuses) (map[string]float64, map[string]int) {
+	p := make(map[string]float64, len(tasks))
+	n := make(map[string]int, len(tasks))
+	for _, task := range tasks {
+		ft, total := 0, 0
+		for sid, st := range statusByStudent {
+			if st == nil {
+				continue
+			}
+			if _, solved := st.solved[task.norm]; !solved {
+				continue
+			}
+			first, ok := firstSubmission(st, task.norm)
+			if !ok {
+				continue
+			}
+			_ = sid
+			total++
+			if first.Solved {
+				ft++
+			}
+		}
+		n[task.norm] = total
+		if total > 0 {
+			p[task.norm] = float64(ft) / float64(total)
+		}
+	}
+	return p, n
+}
+
+// firstSubmission — самая ранняя посылка ученика по задаче.
+func firstSubmission(st *accountStatuses, norm string) (source.TimedSubmission, bool) {
+	subs := st.timed[norm]
+	if len(subs) == 0 {
+		return source.TimedSubmission{}, false
+	}
+	first := subs[0]
+	for _, s := range subs[1:] {
+		if s.At.Before(first.At) {
+			first = s
+		}
+	}
+	return first, true
+}
+
+// solvedCourseEvent — решённая задача курса в хронологии ученика.
+type solvedCourseEvent struct {
+	task     courseTask
+	at       time.Time
+	firstTry bool
+}
+
+// detectCourseFlags ищет подозрительные эпизоды в решениях задач курса.
+func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studentTaskTime, st *accountStatuses, ftRate map[string]float64, ftN map[string]int, now time.Time) []domain.CourseFlag {
+	// Хронология решений задач курса.
+	events := make([]solvedCourseEvent, 0)
+	for _, task := range tasks {
+		at, solved := tt.solvedAt[task.norm]
+		if !solved {
+			continue
+		}
+		if now.Sub(at).Hours() > 24*courseFlagMaxAgeDays {
+			continue // старый эпизод: не показываем
+		}
+		first, ok := firstSubmission(st, task.norm)
+		events = append(events, solvedCourseEvent{task: task, at: at, firstTry: ok && first.Solved})
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].at.Before(events[j].at) })
+	if len(events) == 0 {
+		return nil
+	}
+
+	flags := make([]domain.CourseFlag, 0)
+	used := make(map[string]struct{}) // задачи, уже вошедшие в какой-то флаг
+
+	appendFlag := func(text string, evs []solvedCourseEvent) {
+		if len(flags) >= courseMaxFlags {
+			return
+		}
+		f := domain.CourseFlag{
+			Key:  fmt.Sprintf("%d|%s", evs[0].at.Unix(), evs[0].task.norm),
+			Text: text,
+			At:   evs[0].at,
+		}
+		for _, e := range evs {
+			used[e.task.norm] = struct{}{}
+			if len(f.Tasks) < 6 {
+				f.Tasks = append(f.Tasks, e.task.label)
+			}
+		}
+		flags = append(flags, f)
+	}
+	overlaps := func(evs []solvedCourseEvent) bool {
+		hit := 0
+		for _, e := range evs {
+			if _, ok := used[e.task.norm]; ok {
+				hit++
+			}
+		}
+		return hit*2 >= len(evs) // больше половины уже покрыто другим флагом
+	}
+
+	// 1. Серия «с первой попытки» на нелёгких задачах: непрерывная по хронологии
+	// цепочка first-try решений, среди которых достаточно нелёгких.
+	streak := make([]solvedCourseEvent, 0)
+	hard := 0
+	flushStreak := func() {
+		if hard >= courseFlagStreakLen && !overlaps(streak) {
+			appendFlag(fmt.Sprintf("%d задач подряд с первой попытки (из них %d — где это редкость)", len(streak), hard), streak)
+		}
+		streak = streak[:0]
+		hard = 0
+	}
+	for _, e := range events {
+		if !e.firstTry {
+			flushStreak()
+			continue
+		}
+		streak = append(streak, e)
+		if n := ftN[e.task.norm]; n >= courseFirstTryMinCohort && ftRate[e.task.norm] < courseEasyFirstTryRate {
+			hard++
+		}
+	}
+	flushStreak()
+
+	// 2. «Пулемёт»: подряд решённые с крошечными паузами при значимом типичном
+	// времени — похоже на вставку готовых решений.
+	i := 0
+	for i < len(events) {
+		j := i
+		for j+1 < len(events) && events[j+1].at.Sub(events[j].at).Minutes() <= courseBurstGapMin {
+			j++
+		}
+		if run := events[i : j+1]; len(run) >= courseBurstLen {
+			wsum := 0.0
+			for _, e := range run {
+				wsum += weights[e.task.norm]
+			}
+			if wsum >= courseBurstMinWeight && !overlaps(run) {
+				span := run[len(run)-1].at.Sub(run[0].at).Minutes()
+				appendFlag(fmt.Sprintf("%d задач за %.0f мин (обычно на них уходит ~%.0f мин)", len(run), span, wsum), run)
+			}
+		}
+		i = j + 1
+	}
+
+	// 3. Резко быстрее типичного: окно подряд решённых, где личного активного
+	// времени меньше десятой доли типичного.
+	for i := 0; i+courseFastWindow <= len(events); i++ {
+		win := events[i : i+courseFastWindow]
+		tsum, wsum := 0.0, 0.0
+		for _, e := range win {
+			tsum += tt.taskMin[e.task.norm]
+			wsum += weights[e.task.norm]
+		}
+		if wsum >= courseFastMinWeight && tsum < courseFastShare*wsum && !overlaps(win) {
+			appendFlag(fmt.Sprintf("%d задач при ~%.0f мин работы (обычно ~%.0f мин)", len(win), tsum, wsum), win)
+		}
+	}
+
+	return flags
+}

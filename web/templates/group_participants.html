@@ -50,6 +50,7 @@
           <td class="solved-count">{{if .Course.WeeklyHours}}≈{{numText .Course.WeeklyHours}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
           <td class="course-front-cell" title="{{.Course.Front}}">{{.Course.Front}}</td>
           <td class="signals-cell">
+            {{with .Course.OpenFlags}}<span class="course-chip course-chip--flag" title="Подозрительные паттерны посылок — откройте профиль: {{range $i, $f := .}}{{if $i}}; {{end}}{{$f.Text}}{{end}}">🚩 {{len .}}</span> {{end}}
             {{range .Course.Stuck}}<span class="course-chip course-chip--stuck" title="Застрял: {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}}">⚠ {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
             {{range .Course.Abandoned}}<span class="course-chip" title="Пропустил ({{numText .Minutes}} мин попыток){{if .Name}} · {{.Name}}{{end}}">↩ {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
           </td>

@@ -951,6 +951,35 @@ type StudentCourseStats struct {
 	// LowData — данных мало (активного времени/решённых меньше порога): скорость
 	// не показываем, только прогресс.
 	LowData bool `json:"low_data,omitempty"`
+	// Flags — эпизоды с признаками нечестности (серия «с первой попытки»,
+	// пачка мгновенных решений и т.п.). Сигнал для личной проверки
+	// преподавателем, не вердикт.
+	Flags []CourseFlag `json:"flags,omitempty"`
+}
+
+// CourseFlag — один подозрительный эпизод в посылках ученика.
+type CourseFlag struct {
+	// Key — стабильный отпечаток эпизода (время начала + первая задача);
+	// по нему хранится отметка «проверено» преподавателем.
+	Key   string    `json:"key,omitempty"`
+	Text  string    `json:"text"`            // краткое описание с числами
+	Tasks []string  `json:"tasks,omitempty"` // метки задач эпизода («Контест · A»)
+	At    time.Time `json:"at,omitempty"`    // начало эпизода
+	// ReviewedAt/ReviewComment — отметка «проверено» (заполняется сервером из
+	// data/flag_reviews.json при отдаче страницы, в generated не хранится).
+	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
+	ReviewComment string     `json:"review_comment,omitempty"`
+}
+
+// OpenFlags — непроверенные флаги (для счётчика 🚩 в списке участников).
+func (s StudentCourseStats) OpenFlags() []CourseFlag {
+	out := make([]CourseFlag, 0, len(s.Flags))
+	for _, f := range s.Flags {
+		if f.ReviewedAt == nil {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // CourseTaskSignal — сигнальная задача курса для преподавателя.

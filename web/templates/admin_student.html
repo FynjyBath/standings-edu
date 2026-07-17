@@ -80,6 +80,17 @@
     {{range .Abandoned}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена">{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
   </p>
   {{end}}
+  {{if .Flags}}
+  <div class="course-signal course-signal--flag" data-flag-group="{{.GroupSlug}}">🚩 Стоит проверить лично (подозрительные паттерны посылок):
+    {{range .Flags}}
+    {{if .ReviewedAt}}
+    <span class="course-chip course-chip--flag-done" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">✓ проверено {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{if .Key}}<button type="button" class="flag-review-btn" data-flag-key="{{.Key}}" data-reviewed="1" title="Снять отметку «проверено»">×</button>{{end}}</span>
+    {{else}}
+    <span class="course-chip course-chip--flag" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}{{if .Key}}<button type="button" class="flag-review-btn" data-flag-key="{{.Key}}" data-reviewed="0" title="Отметить проверенным (комментарий — по желанию)">✓</button>{{end}}</span>
+    {{end}}
+    {{end}}
+  </div>
+  {{end}}
 </section>
 {{end}}
 
@@ -165,6 +176,41 @@
     search.addEventListener("input", apply);
     solvedOnly.addEventListener("change", apply);
     apply();
+  })();
+
+  // Отметка «проверено» на флагах 🚩: админ — /api/admin, просмотр по токену — /api/jury.
+  (function () {
+    var buttons = [].slice.call(document.querySelectorAll(".flag-review-btn"));
+    if (!buttons.length) return;
+    var student = "{{.StudentID}}";
+    var token = "{{.Token}}";
+    var juryView = {{if .TokenView}}true{{else}}false{{end}};
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var holder = btn.closest("[data-flag-group]");
+        var group = holder ? holder.getAttribute("data-flag-group") : "";
+        var wasReviewed = btn.getAttribute("data-reviewed") === "1";
+        var comment = "";
+        if (wasReviewed) {
+          if (!window.confirm("Снять отметку «проверено»?")) return;
+        } else {
+          comment = window.prompt("Комментарий к проверке (необязательно):", "");
+          if (comment === null) return;
+        }
+        var body = { student_id: student, group_slug: group, flag_key: btn.getAttribute("data-flag-key"), reviewed: !wasReviewed, comment: comment || "" };
+        var url = "/api/admin/flags/review";
+        if (juryView) { url = "/api/jury/flags/review"; body.slug = group; body.token = token; }
+        btn.disabled = true;
+        fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d && d.ok) { location.reload(); return; }
+            btn.disabled = false;
+            alert((d && d.error) || "Не удалось сохранить");
+          })
+          .catch(function () { btn.disabled = false; alert("Не удалось сохранить"); });
+      });
+    });
   })();
 </script>
 {{end}}

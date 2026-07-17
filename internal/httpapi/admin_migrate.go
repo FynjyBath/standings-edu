@@ -173,6 +173,9 @@ func (h *Handlers) executeImportAction(r *http.Request) AdminActionResult {
 		if g.GradesAdded > 0 {
 			fmt.Fprintf(&out, ", +%d ручных оценок", g.GradesAdded)
 		}
+		if g.FlagReviewsAdded > 0 {
+			fmt.Fprintf(&out, ", +%d проверок флагов", g.FlagReviewsAdded)
+		}
 		out.WriteString("\n")
 	}
 	for _, wn := range rep.Warnings {

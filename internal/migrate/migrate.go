@@ -23,14 +23,16 @@ import (
 	"standings-edu/internal/domain"
 	"standings-edu/internal/fileutil"
 	"standings-edu/internal/source"
+	"standings-edu/internal/storage"
 	"standings-edu/internal/studentintake"
 )
 
 // BundleVersion — версия формата бандла. v2 добавил явные поля manual_tables
 // (оценки кондуитов) и manual_grades (ручные оценки столбцов); v1-бандлы
 // (таблицы кондуитов были внутри provider_config) читаются как раньше через
-// извлечение таблицы из конфига при импорте.
-const BundleVersion = 2
+// извлечение таблицы из конфига при импорте. v3 добавил flag_reviews (проверки
+// флагов нечестности); v2-бандлы просто без них.
+const BundleVersion = 3
 
 // Selection задаёт, для каких групп брать участников и/или контесты. Нулевое
 // значение (обе карты nil) означает «всё»: все группы, и участники, и контесты.
@@ -86,6 +88,17 @@ type BundleGroup struct {
 	// ManualGrades — ручные оценки столбцов группы (grades_manual.json):
 	// column_id -> student_id -> оценка.
 	ManualGrades map[string]map[string]float64 `json:"manual_grades,omitempty"`
+	// FlagReviews — проверки флагов нечестности участников группы (из
+	// data/flag_reviews.json). student_id — id на стороне экспорта: при импорте
+	// он ремапится через ФИО на финальный id, как и состав группы.
+	FlagReviews []BundleFlagReview `json:"flag_reviews,omitempty"`
+}
+
+// BundleFlagReview — одна отметка проверки флага в бандле.
+type BundleFlagReview struct {
+	StudentID string            `json:"student_id"`
+	FlagKey   string            `json:"flag_key"`
+	Review    domain.FlagReview `json:"review"`
 }
 
 // Report — итог импорта для показа пользователю.
@@ -106,6 +119,8 @@ type GroupReport struct {
 	MembersAdded  int
 	// GradesAdded — сколько новых ячеек ручных оценок (столбец,ученик) добавлено.
 	GradesAdded int
+	// FlagReviewsAdded — сколько новых проверок флагов нечестности добавлено.
+	FlagReviewsAdded int
 }
 
 // BuildBundle собирает бандл из data-директории по выбору sel. Группы-участницы
@@ -188,6 +203,30 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 	groupsByStudent := make(map[string][]string)
 	contestIDs := make(map[string]struct{})
 
+	// Проверки флагов нечестности — по группам (ключ: ученик|группа|ключ флага).
+	flagReviews, err := storage.LoadFlagReviews(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("load flag reviews: %w", err)
+	}
+	reviewsByGroup := make(map[string][]BundleFlagReview)
+	for key, rev := range flagReviews {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		reviewsByGroup[parts[1]] = append(reviewsByGroup[parts[1]], BundleFlagReview{
+			StudentID: parts[0], FlagKey: parts[2], Review: rev,
+		})
+	}
+	for _, list := range reviewsByGroup {
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].StudentID != list[j].StudentID {
+				return list[i].StudentID < list[j].StudentID
+			}
+			return list[i].FlagKey < list[j].FlagKey
+		})
+	}
+
 	for _, slug := range order {
 		origRaw, err := os.ReadFile(filepath.Join(groupsDir, slug, "group.json"))
 		if err != nil {
@@ -228,11 +267,12 @@ func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, er
 				bg.ManualTables = t
 			}
 		}
-		// Ручные оценки столбцов — при экспорте участников группы.
+		// Ручные оценки столбцов и проверки флагов — при экспорте участников группы.
 		if effP[slug] {
 			if g := loadManualGradesQuiet(filepath.Join(groupsDir, slug, "grades_manual.json")); len(g) > 0 {
 				bg.ManualGrades = g
 			}
+			bg.FlagReviews = reviewsByGroup[slug]
 		}
 
 		bundle.Groups = append(bundle.Groups, bg)
@@ -526,7 +566,98 @@ func ImportBundle(dataDir string, b *Bundle, sel Selection) (*Report, error) {
 		rep.Groups[i].StudentsAdded = groupStudentCount(dataDir, slug) - preCount[slug]
 	}
 
+	// 6) Проверки флагов нечестности: id ремапится через ФИО (как состав групп),
+	// существующие отметки не перезаписываются.
+	if err := importFlagReviews(dataDir, b, sel, students, rep); err != nil {
+		return nil, err
+	}
+
 	return rep, nil
+}
+
+// importFlagReviews сливает проверки флагов из бандла в data/flag_reviews.json.
+// student_id бандла переводится в финальный id через ФИО (та же логика, что у
+// состава групп); отметки под уже занятыми ключами не трогаются.
+func importFlagReviews(dataDir string, b *Bundle, sel Selection, bundleStudents []domain.Student, rep *Report) error {
+	nameByBundleID := make(map[string]string, len(bundleStudents))
+	for _, s := range bundleStudents {
+		n := domain.NormalizeStudent(s)
+		if strings.TrimSpace(n.ID) != "" && n.FullName != "" {
+			nameByBundleID[strings.TrimSpace(n.ID)] = n.FullName
+		}
+	}
+
+	var finalStudents []domain.Student
+	if err := fileutil.ReadJSON(filepath.Join(dataDir, "students.json"), &finalStudents); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	finalIDByName := make(map[string]string, len(finalStudents))
+	for _, s := range domain.NormalizeStudents(finalStudents) {
+		if s.FullName != "" && strings.TrimSpace(s.ID) != "" {
+			finalIDByName[s.FullName] = s.ID
+		}
+	}
+
+	current, err := storage.LoadFlagReviews(dataDir)
+	if err != nil {
+		return fmt.Errorf("load flag reviews: %w", err)
+	}
+	changed := false
+	for _, bg := range b.Groups {
+		slug := strings.TrimSpace(bg.Slug)
+		if len(bg.FlagReviews) == 0 || !sel.wantParticipants(slug) || !domain.IsValidSlug(slug) {
+			continue
+		}
+		added := 0
+		for _, br := range bg.FlagReviews {
+			name := nameByBundleID[strings.TrimSpace(br.StudentID)]
+			if name == "" {
+				rep.Warnings = append(rep.Warnings, fmt.Sprintf("группа %s: проверка флага для неизвестного ученика id=%s пропущена", slug, br.StudentID))
+				continue
+			}
+			finalID, ok := finalIDByName[name]
+			if !ok {
+				rep.Warnings = append(rep.Warnings, fmt.Sprintf("группа %s: проверка флага — ученик %q не найден после merge", slug, name))
+				continue
+			}
+			flagKey := strings.TrimSpace(br.FlagKey)
+			rev := br.Review
+			// Нормализация ключа по составу эпизода — как в LoadFlagReviews.
+			if rev.Flag != nil && len(rev.Flag.TaskURLs) > 0 {
+				flagKey = domain.CourseFlagKey(rev.Flag.TaskURLs)
+				snap := *rev.Flag
+				snap.Key = flagKey
+				rev.Flag = &snap
+			}
+			if flagKey == "" {
+				continue
+			}
+			key := domain.FlagReviewKey(finalID, slug, flagKey)
+			if _, exists := current[key]; exists {
+				continue // не перезаписываем существующие отметки
+			}
+			current[key] = rev
+			added++
+		}
+		if added > 0 {
+			changed = true
+			found := false
+			for i := range rep.Groups {
+				if rep.Groups[i].Slug == slug {
+					rep.Groups[i].FlagReviewsAdded = added
+					found = true
+					break
+				}
+			}
+			if !found {
+				rep.Groups = append(rep.Groups, GroupReport{Slug: slug, FlagReviewsAdded: added})
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return fileutil.WriteJSON(filepath.Join(dataDir, "flag_reviews.json"), current, 0o644)
 }
 
 func importGlobalContests(dataDir string, contests []json.RawMessage, rep *Report) error {

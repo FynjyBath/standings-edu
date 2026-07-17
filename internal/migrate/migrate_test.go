@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/fileutil"
+	"standings-edu/internal/storage"
 )
 
 func write(t *testing.T, path, content string) {
@@ -596,5 +598,92 @@ func TestImportLegacyV1Bundle(t *testing.T) {
 		if _, table, ok := legacyTableFromContest(c); ok {
 			t.Fatalf("group def not cleaned: %q", table)
 		}
+	}
+}
+
+// Раундтрип проверок флагов нечестности: экспорт с участниками группы, ремап
+// id по ФИО при импорте, отсутствие перезаписи и чужих групп.
+func TestRoundTripFlagReviews(t *testing.T) {
+	src := makeSource(t)
+	flagKey := domain.CourseFlagKey([]string{"t1", "t2"})
+	write(t, filepath.Join(src, "flag_reviews.json"), `{
+	 "ivanov|grp|`+flagKey+`":{"at":"2026-07-01T10:00:00Z","comment":"перенос с ejudge","resolution":"transfer",
+	   "flag":{"key":"`+flagKey+`","text":"серия","task_urls":["t1","t2"],"at":"2026-06-01T10:00:00Z"}},
+	 "ivanov|other|zzz":{"at":"2026-07-01T10:00:00Z","resolution":"violation"}
+	}`)
+
+	bundle, err := BuildBundle(src, selBoth("grp"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var grp *BundleGroup
+	for i := range bundle.Groups {
+		if bundle.Groups[i].Slug == "grp" {
+			grp = &bundle.Groups[i]
+		}
+	}
+	if grp == nil || len(grp.FlagReviews) != 1 {
+		t.Fatalf("в бандле должна быть ровно одна отметка группы grp: %+v", grp)
+	}
+	br := grp.FlagReviews[0]
+	if br.StudentID != "ivanov" || br.FlagKey != flagKey || br.Review.Resolution != "transfer" || br.Review.Flag == nil {
+		t.Fatalf("отметка бандла неверна: %+v", br)
+	}
+
+	// Экспорт только контестов — отметки не едут (это данные участников).
+	contestsOnly, err := BuildBundle(src, sel(nil, []string{"grp"}), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range contestsOnly.Groups {
+		if len(g.FlagReviews) != 0 {
+			t.Fatalf("contests-only экспорт не должен нести отметки: %+v", g)
+		}
+	}
+
+	// Целевая директория: тот же ученик (по ФИО) уже существует под ДРУГИМ id.
+	dst := t.TempDir()
+	write(t, filepath.Join(dst, "students.json"),
+		`[{"id":"ivanov-old","full_name":"Иванов","public_name":"Иванов","accounts":[]}]`)
+	rep, err := ImportBundle(dst, bundle, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := storage.LoadFlagReviews(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKey := "ivanov-old|grp|" + flagKey
+	rev, ok := got[wantKey]
+	if !ok || rev.Resolution != "transfer" || rev.Comment != "перенос с ejudge" || rev.Flag == nil {
+		t.Fatalf("отметка должна импортироваться под финальным id: %v", got)
+	}
+	for k := range got {
+		if strings.HasPrefix(k, "ivanov|") || strings.Contains(k, "|other|") {
+			t.Fatalf("чужие/неремапленные ключи не должны попадать: %v", got)
+		}
+	}
+	found := false
+	for _, g := range rep.Groups {
+		if g.Slug == "grp" && g.FlagReviewsAdded == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("отчёт должен показать +1 проверку флагов: %+v", rep.Groups)
+	}
+
+	// Существующая отметка не перезаписывается повторным импортом.
+	rev.Comment = "локальная правка"
+	got[wantKey] = rev
+	if err := fileutil.WriteJSON(filepath.Join(dst, "flag_reviews.json"), got, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ImportBundle(dst, bundle, Selection{}); err != nil {
+		t.Fatal(err)
+	}
+	got2, _ := storage.LoadFlagReviews(dst)
+	if got2[wantKey].Comment != "локальная правка" {
+		t.Fatalf("импорт не должен перезаписывать существующие отметки: %+v", got2[wantKey])
 	}
 }

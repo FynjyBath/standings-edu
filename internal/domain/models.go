@@ -467,6 +467,9 @@ type SourceData struct {
 	Students map[string]Student
 	Contests map[string]Contest
 	Groups   []GroupDefinition
+	// FlagReviews — отметки проверки флагов нечестности (ключ — FlagReviewKey):
+	// «перенос»/«нарушение» исключают посылки эпизода из подсчёта темпа.
+	FlagReviews map[string]FlagReview
 }
 
 const (
@@ -965,10 +968,59 @@ type CourseFlag struct {
 	Text  string    `json:"text"`            // краткое описание с числами
 	Tasks []string  `json:"tasks,omitempty"` // метки задач эпизода («Контест · A»)
 	At    time.Time `json:"at,omitempty"`    // начало эпизода
-	// ReviewedAt/ReviewComment — отметка «проверено» (заполняется сервером из
-	// data/flag_reviews.json при отдаче страницы, в generated не хранится).
+	// TaskURLs — нормализованные URL всех задач эпизода: по ним посылки эпизода
+	// исключаются из подсчёта темпа, если преподаватель отметил «перенос» или
+	// «нарушение».
+	TaskURLs []string `json:"task_urls,omitempty"`
+	// ReviewedAt/ReviewComment/Resolution — отметка проверки (заполняется
+	// сервером из data/flag_reviews.json при отдаче страницы, в generated не
+	// хранится). Resolution — один из FlagResolution*.
 	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
 	ReviewComment string     `json:"review_comment,omitempty"`
+	Resolution    string     `json:"resolution,omitempty"`
+}
+
+// Исход проверки флага преподавателем.
+const (
+	// FlagResolutionLegit — реально сам решил: посылки корректны, всё учитывается.
+	FlagResolutionLegit = "legit"
+	// FlagResolutionTransfer — перенос посылок (например, с другого сайта):
+	// посылки корректны, но эпизод исключается из подсчёта темпа.
+	FlagResolutionTransfer = "transfer"
+	// FlagResolutionViolation — нарушение: эпизод исключается из темпа, а отметка
+	// остаётся подсвеченной в профиле навсегда.
+	FlagResolutionViolation = "violation"
+)
+
+// FlagResolutionExcludesTempo — исключать ли посылки эпизода из подсчёта темпа.
+func FlagResolutionExcludesTempo(resolution string) bool {
+	return resolution == FlagResolutionTransfer || resolution == FlagResolutionViolation
+}
+
+// FlagReview — отметка преподавателя о проверке флага; хранится в
+// data/flag_reviews.json по ключу FlagReviewKey.
+type FlagReview struct {
+	At      time.Time `json:"at"`
+	Comment string    `json:"comment,omitempty"`
+	// Resolution — один из FlagResolution*; пусто в старых записях — считается legit.
+	Resolution string `json:"resolution,omitempty"`
+	// Flag — снапшот флага на момент проверки: по нему эпизод исключается из
+	// темпа при генерации и показывается в профиле, когда сам флаг уже не
+	// детектируется (посылки исключены или эпизод старше окна показа).
+	Flag *CourseFlag `json:"flag,omitempty"`
+}
+
+// NormalizedResolution — исход с учётом старых записей без поля (legit).
+func (r FlagReview) NormalizedResolution() string {
+	if r.Resolution == "" {
+		return FlagResolutionLegit
+	}
+	return r.Resolution
+}
+
+// FlagReviewKey — ключ отметки в data/flag_reviews.json.
+func FlagReviewKey(studentID, groupSlug, flagKey string) string {
+	return studentID + "|" + groupSlug + "|" + flagKey
 }
 
 // OpenFlags — непроверенные флаги (для счётчика 🚩 в списке участников).

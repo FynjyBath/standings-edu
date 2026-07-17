@@ -38,10 +38,22 @@ func (l *SourceLoader) Load() (*domain.SourceData, error) {
 	}
 
 	return &domain.SourceData{
-		Students: students,
-		Contests: contests,
-		Groups:   groups,
+		Students:    students,
+		Contests:    contests,
+		Groups:      groups,
+		FlagReviews: l.loadFlagReviews(),
 	}, nil
+}
+
+// loadFlagReviews читает отметки проверки флагов нечестности. Файл опционален;
+// ошибка чтения не валит генерацию (отметки просто не применятся).
+func (l *SourceLoader) loadFlagReviews() map[string]domain.FlagReview {
+	out := map[string]domain.FlagReview{}
+	path := filepath.Join(l.DataDir, "flag_reviews.json")
+	if err := fileutil.ReadJSON(path, &out); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(os.Stderr, "WARN load flag reviews: %v\n", err)
+	}
+	return out
 }
 
 func (l *SourceLoader) loadStudents() (map[string]domain.Student, error) {

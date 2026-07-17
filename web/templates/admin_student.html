@@ -82,13 +82,26 @@
   {{end}}
   {{if .Flags}}
   <div class="course-signal course-signal--flag" data-flag-group="{{.GroupSlug}}">🚩 Стоит проверить лично (подозрительные паттерны посылок):
+    <div class="flag-list">
     {{range .Flags}}
-    {{if .ReviewedAt}}
-    <span class="course-chip course-chip--flag-done" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">✓ проверено {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{if .Key}}<button type="button" class="flag-review-btn" data-flag-key="{{.Key}}" data-reviewed="1" title="Снять отметку «проверено»">×</button>{{end}}</span>
+    {{if not .ReviewedAt}}
+    <span class="course-chip course-chip--flag" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}
+      {{- if .Key}}<span class="flag-review-actions">
+        <button type="button" class="flag-review-btn flag-review-btn--legit" data-flag-key="{{.Key}}" data-resolution="legit" title="Реально решил сам: посылки корректные, всё остаётся как есть">✓ сам решил</button>
+        <button type="button" class="flag-review-btn flag-review-btn--transfer" data-flag-key="{{.Key}}" data-resolution="transfer" title="Перенос посылок (например, с другого сайта): посылки корректные, но эпизод исключается из темпа и скорости">⇄ перенос</button>
+        <button type="button" class="flag-review-btn flag-review-btn--violation" data-flag-key="{{.Key}}" data-resolution="violation" title="Нарушение (списывание и т.п.): эпизод исключается из темпа, отметка остаётся в профиле на будущее">⛔ нарушение</button>
+      </span>{{end}}
+    </span>
+    {{else if eq .Resolution "violation"}}
+    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">⛔ {{.Text}} · {{submissionTime .At}}<span class="flag-review-note flag-review-note--violation">нарушение · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}</span>
+    {{else if eq .Resolution "transfer"}}
+    <span class="course-chip course-chip--flag-done" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">⇄ перенос · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}</span>
     {{else}}
-    <span class="course-chip course-chip--flag" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}{{if .Key}}<button type="button" class="flag-review-btn" data-flag-key="{{.Key}}" data-reviewed="0" title="Отметить проверенным (комментарий — по желанию)">✓</button>{{end}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{range $i, $t := .Tasks}}{{if $i}}, {{end}}{{$t}}{{end}}">{{.Text}} · {{submissionTime .At}}<span class="flag-review-note">✓ сам решил · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}</span>
     {{end}}
     {{end}}
+    </div>
+    <span class="flag-review-hint">«Перенос» и «нарушение» исключают посылки эпизода из подсчёта темпа при следующей генерации; «нарушение» остаётся в профиле и после этого.</span>
   </div>
   {{end}}
 </section>
@@ -178,26 +191,32 @@
     apply();
   })();
 
-  // Отметка «проверено» на флагах 🚩: админ — /api/admin, просмотр по токену — /api/jury.
+  // Проверка флагов 🚩: три исхода («сам решил» / «перенос» / «нарушение») или
+  // снятие отметки («×»). Админ — /api/admin, просмотр по токену — /api/jury.
   (function () {
     var buttons = [].slice.call(document.querySelectorAll(".flag-review-btn"));
     if (!buttons.length) return;
     var student = "{{.StudentID}}";
     var token = "{{.Token}}";
     var juryView = {{if .TokenView}}true{{else}}false{{end}};
+    var PROMPTS = {
+      legit: "«Сам решил» — посылки корректные, всё остаётся как есть.\nКомментарий (необязательно):",
+      transfer: "«Перенос» — посылки корректные, но эпизод не будет учитываться в темпе.\nКомментарий (необязательно):",
+      violation: "«Нарушение» — эпизод не учитывается в темпе, отметка остаётся в профиле.\nКомментарий (необязательно):"
+    };
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
         var holder = btn.closest("[data-flag-group]");
         var group = holder ? holder.getAttribute("data-flag-group") : "";
-        var wasReviewed = btn.getAttribute("data-reviewed") === "1";
+        var resolution = btn.getAttribute("data-resolution") || "";
         var comment = "";
-        if (wasReviewed) {
-          if (!window.confirm("Снять отметку «проверено»?")) return;
+        if (!resolution) {
+          if (!window.confirm("Снять отметку с флага?")) return;
         } else {
-          comment = window.prompt("Комментарий к проверке (необязательно):", "");
+          comment = window.prompt(PROMPTS[resolution] || "Комментарий (необязательно):", "");
           if (comment === null) return;
         }
-        var body = { student_id: student, group_slug: group, flag_key: btn.getAttribute("data-flag-key"), reviewed: !wasReviewed, comment: comment || "" };
+        var body = { student_id: student, group_slug: group, flag_key: btn.getAttribute("data-flag-key"), resolution: resolution, comment: comment || "" };
         var url = "/api/admin/flags/review";
         if (juryView) { url = "/api/jury/flags/review"; body.slug = group; body.token = token; }
         btn.disabled = true;

@@ -103,7 +103,7 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 		if !ok {
 			continue
 		}
-		stats := computeCourseStats(std, pg.students, statusByStudent, now)
+		stats := computeCourseStats(std, pg.students, statusByStudent, now, data.FlagReviews)
 		for sid, cs := range stats {
 			if p := profiles[sid]; p != nil && cs != nil {
 				p.CourseStats = append(p.CourseStats, *cs)

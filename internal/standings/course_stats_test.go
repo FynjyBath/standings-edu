@@ -124,7 +124,7 @@ func TestComputeCourseStats(t *testing.T) {
 	students = append(students, domain.Student{ID: "hero"})
 	statuses["hero"] = st
 
-	stats := computeCourseStats(std, students, statuses, now)
+	stats := computeCourseStats(std, students, statuses, now, nil)
 	cs := stats["hero"]
 	if cs == nil {
 		t.Fatal("nil stats")
@@ -190,7 +190,7 @@ func TestComputeCourseStatsSpeedCalibration(t *testing.T) {
 		}
 		statuses[id] = st
 	}
-	stats := computeCourseStats(std, students, statuses, now)
+	stats := computeCourseStats(std, students, statuses, now, nil)
 	cs := stats["s0"]
 	if cs.LowData {
 		t.Fatalf("данных достаточно: %+v", cs)
@@ -256,7 +256,7 @@ func TestDetectCourseFlags(t *testing.T) {
 	students = append(students, domain.Student{ID: "cheat"})
 	statuses["cheat"] = cheat
 
-	stats := computeCourseStats(std, students, statuses, now)
+	stats := computeCourseStats(std, students, statuses, now, nil)
 	if n := len(stats["cheat"].Flags); n == 0 {
 		t.Fatalf("у читера должны быть флаги: %+v", stats["cheat"])
 	}
@@ -276,6 +276,90 @@ func TestDetectCourseFlags(t *testing.T) {
 		if n := len(stats[fmt.Sprintf("s%d", i)].Flags); n != 0 {
 			t.Fatalf("у честного s%d не должно быть флагов: %+v", i, stats[fmt.Sprintf("s%d", i)].Flags)
 		}
+	}
+}
+
+// Отметка «перенос»/«нарушение»: посылки эпизода (по снапшоту флага в отметке)
+// исключаются из подсчёта темпа — активное время падает, флаг больше не
+// детектируется, а решённые задачи остаются решёнными (прогресс не страдает).
+func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(7 * 24 * time.Hour)
+
+	tasks := make([]domain.GeneratedTask, 10)
+	norms := make([]string, 10)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("s%d", i)
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		cur := base
+		for _, norm := range norms {
+			st.timed[norm] = []source.TimedSubmission{
+				{At: cur.Add(10 * time.Minute)},
+				{At: cur.Add(20 * time.Minute), Solved: true},
+			}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+			cur = cur.Add(20 * time.Minute)
+		}
+		statuses[id] = st
+	}
+	cheat := newAccountStatuses()
+	for i := 0; i < 6; i++ {
+		at := base.Add(time.Duration(2*i) * time.Minute)
+		cheat.timed[norms[i]] = []source.TimedSubmission{{At: at, Solved: true}}
+		cheat.solved[norms[i]] = struct{}{}
+		cheat.attempted[norms[i]] = struct{}{}
+	}
+	students = append(students, domain.Student{ID: "cheat"})
+	statuses["cheat"] = cheat
+
+	before := computeCourseStats(std, students, statuses, now, nil)
+	if len(before["cheat"].Flags) == 0 {
+		t.Fatal("прекондиция: без отметок у читера должны быть флаги")
+	}
+	flag := before["cheat"].Flags[0]
+	if len(flag.TaskURLs) == 0 {
+		t.Fatalf("флаг должен нести TaskURLs для исключения: %+v", flag)
+	}
+
+	snap := flag
+	reviews := map[string]domain.FlagReview{
+		domain.FlagReviewKey("cheat", "g", flag.Key): {
+			At: now, Resolution: domain.FlagResolutionTransfer, Flag: &snap,
+		},
+	}
+	after := computeCourseStats(std, students, statuses, now, reviews)
+	cs := after["cheat"]
+	// Флаг эпизода больше не детектируется (посылок с временем у этих задач нет).
+	for _, f := range cs.Flags {
+		if f.Key == flag.Key {
+			t.Fatalf("исключённый эпизод не должен флаговаться снова: %+v", cs.Flags)
+		}
+	}
+	// Решённые задачи остаются решёнными, а активное время эпизода исчезает.
+	if cs.SolvedCount != before["cheat"].SolvedCount {
+		t.Fatalf("прогресс не должен страдать: %d != %d", cs.SolvedCount, before["cheat"].SolvedCount)
+	}
+	if cs.ActiveHours >= before["cheat"].ActiveHours {
+		t.Fatalf("активное время должно уменьшиться: %v >= %v", cs.ActiveHours, before["cheat"].ActiveHours)
+	}
+	// Честные ученики не затронуты.
+	if after["s0"].ActiveHours != before["s0"].ActiveHours || after["s0"].Speed != before["s0"].Speed {
+		t.Fatalf("честный ученик не должен меняться: %+v vs %+v", after["s0"], before["s0"])
+	}
+	// Исходная карта статусов не испорчена (ей пользуются обычные таблицы).
+	if len(statuses["cheat"].timed) != 6 {
+		t.Fatalf("исходные statuses не должны мутироваться: %d", len(statuses["cheat"].timed))
 	}
 }
 
@@ -322,10 +406,10 @@ func TestDetectCourseFlagsOldEpisodesHidden(t *testing.T) {
 	statuses["cheat"] = cheat
 
 	// Через неделю флаги есть, через 61 день — уже нет.
-	if stats := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour)); len(stats["cheat"].Flags) == 0 {
+	if stats := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour), nil); len(stats["cheat"].Flags) == 0 {
 		t.Fatalf("свежий эпизод должен давать флаги")
 	}
-	if stats := computeCourseStats(std, students, statuses, base.Add(61*24*time.Hour)); len(stats["cheat"].Flags) != 0 {
+	if stats := computeCourseStats(std, students, statuses, base.Add(61*24*time.Hour), nil); len(stats["cheat"].Flags) != 0 {
 		t.Fatalf("эпизод старше 60 дней не должен давать флагов: %+v", stats["cheat"].Flags)
 	}
 }
@@ -375,7 +459,7 @@ func TestDetectCourseFlagsBurst(t *testing.T) {
 	students = append(students, domain.Student{ID: "mg"})
 	statuses["mg"] = mg
 
-	stats := computeCourseStats(std, students, statuses, now)
+	stats := computeCourseStats(std, students, statuses, now, nil)
 	found := false
 	for _, f := range stats["mg"].Flags {
 		if strings.Contains(f.Text, "задач за") {

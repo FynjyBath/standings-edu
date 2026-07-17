@@ -182,12 +182,19 @@ func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusB
 	return out
 }
 
-// computeCourseStats считает темп курса для всех учеников группы.
-func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time) map[string]*domain.StudentCourseStats {
+// computeCourseStats считает темп курса для всех учеников группы. reviews —
+// отметки проверки флагов (FlagReviewKey → отметка): у эпизодов с исходом
+// «перенос»/«нарушение» посылки задач эпизода исключаются из всей математики
+// темпа (времена, скорости, веса когорты, first-try доли, детекторы) — решённые
+// задачи при этом остаются решёнными (прогресс не страдает), просто без времени,
+// как задачи ACMP.
+func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time, reviews map[string]domain.FlagReview) map[string]*domain.StudentCourseStats {
 	tasks := courseTasksFromStandings(std)
 	if len(tasks) == 0 {
 		return nil
 	}
+
+	statusByStudent = excludeReviewedEpisodes(std.GroupSlug, students, statusByStudent, reviews)
 
 	times := make(map[string]studentTaskTime, len(students))
 	for _, s := range students {
@@ -217,6 +224,58 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		out[s.ID] = cs
 	}
 	normalizeCourseSpeeds(out)
+	return out
+}
+
+// excludeReviewedEpisodes возвращает карту статусов, где у учеников с
+// отметками «перенос»/«нарушение» посылки задач эпизода (по снапшоту флага в
+// отметке) убраны из timed. Остальные множества (solved/attempted/оценки)
+// разделяются с оригиналом — они только читаются. Исходная карта не меняется:
+// ей пользуются и обычные таблицы.
+func excludeReviewedEpisodes(groupSlug string, students []domain.Student, statusByStudent map[string]*accountStatuses, reviews map[string]domain.FlagReview) map[string]*accountStatuses {
+	if len(reviews) == 0 {
+		return statusByStudent
+	}
+	out := statusByStudent
+	copied := false
+	for _, s := range students {
+		st := statusByStudent[s.ID]
+		if st == nil {
+			continue
+		}
+		excluded := make(map[string]struct{})
+		prefix := domain.FlagReviewKey(s.ID, groupSlug, "")
+		for key, rev := range reviews {
+			if !strings.HasPrefix(key, prefix) || rev.Flag == nil {
+				continue
+			}
+			if !domain.FlagResolutionExcludesTempo(rev.NormalizedResolution()) {
+				continue
+			}
+			for _, norm := range rev.Flag.TaskURLs {
+				excluded[norm] = struct{}{}
+			}
+		}
+		if len(excluded) == 0 {
+			continue
+		}
+		if !copied {
+			out = make(map[string]*accountStatuses, len(statusByStudent))
+			for id, v := range statusByStudent {
+				out[id] = v
+			}
+			copied = true
+		}
+		clean := *st
+		clean.timed = make(map[string][]source.TimedSubmission, len(st.timed))
+		for norm, subs := range st.timed {
+			if _, skip := excluded[norm]; skip {
+				continue
+			}
+			clean.timed[norm] = subs
+		}
+		out[s.ID] = &clean
+	}
 	return out
 }
 
@@ -537,6 +596,8 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 			if len(f.Tasks) < 6 {
 				f.Tasks = append(f.Tasks, e.task.label)
 			}
+			// TaskURLs — без ограничения: по ним эпизод исключается из темпа.
+			f.TaskURLs = append(f.TaskURLs, e.task.norm)
 		}
 		flags = append(flags, f)
 	}

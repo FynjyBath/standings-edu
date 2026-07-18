@@ -182,6 +182,72 @@ func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusB
 	return out
 }
 
+// courseWeightMinSolvers — минимум решивших с известным временем, чтобы вес
+// (типичное время) задачи считался определённым и показывался в таблице.
+const courseWeightMinSolvers = 3
+
+// courseDisplayWeights — типичное время решения каждой задачи курса в минутах
+// (медиана активного времени решивших) для показа в таблицах по токену. Без
+// сглаживания к «типичной задаче»: показываем честную медиану, и только для
+// задач, где решивших с известным временем не меньше courseWeightMinSolvers
+// (иначе — определить нельзя). cohort — глобальная когорта (union групп с этим
+// контестом), чтобы время было одинаковым во всех группах с задачей.
+func courseDisplayWeights(std domain.GeneratedGroupStandings, cohort []domain.Student, statusByStudent map[string]*accountStatuses) map[string]float64 {
+	tasks := courseTasksFromStandings(std)
+	if len(tasks) == 0 {
+		return nil
+	}
+	times := make(map[string]studentTaskTime, len(cohort))
+	for _, s := range cohort {
+		if st := statusByStudent[s.ID]; st != nil {
+			times[s.ID] = buildStudentTaskTimes(st)
+		}
+	}
+	out := make(map[string]float64)
+	for _, task := range tasks {
+		samples := make([]float64, 0)
+		for sid, tt := range times {
+			st := statusByStudent[sid]
+			if st == nil {
+				continue
+			}
+			if _, solved := st.solved[task.norm]; !solved {
+				continue
+			}
+			if t := tt.taskMin[task.norm]; t > 0 {
+				samples = append(samples, t)
+			}
+		}
+		if len(samples) >= courseWeightMinSolvers {
+			out[task.norm] = round1(median(samples))
+		}
+	}
+	return out
+}
+
+// stampTaskWeights проставляет типичное время (Weight) на задачи стендинга по
+// нормализованной ссылке — и в плоский список, и в подконтесты.
+func stampTaskWeights(std *domain.GeneratedGroupStandings, weights map[string]float64) {
+	if len(weights) == 0 {
+		return
+	}
+	set := func(t *domain.GeneratedTask) {
+		if w, ok := weights[t.NormalizedURL]; ok {
+			t.Weight = w
+		}
+	}
+	for i := range std.Contests {
+		for j := range std.Contests[i].Tasks {
+			set(&std.Contests[i].Tasks[j])
+		}
+		for j := range std.Contests[i].Subcontests {
+			for k := range std.Contests[i].Subcontests[j].Tasks {
+				set(&std.Contests[i].Subcontests[j].Tasks[k])
+			}
+		}
+	}
+}
+
 // computeCourseStats считает темп курса для всех учеников группы. Эпизодам с
 // флагами нечестности по умолчанию НЕ доверяем: их посылки исключаются из всей
 // математики темпа (времена, скорости, веса когорты), пока преподаватель не

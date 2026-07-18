@@ -321,6 +321,15 @@
               // Ссылки скрыты до начала контеста — показываем только метку.
               th.textContent = task.label || "?";
             }
+            // Типичное время решения задачи (вес) — по токену жюри, под меткой.
+            if (token && typeof task.weight === "number" && task.weight > 0) {
+              var wsp = document.createElement("span");
+              wsp.className = "task-weight";
+              var mins = Math.round(task.weight);
+              wsp.textContent = "≈" + mins + "′";
+              wsp.title = "Типичное время решения задачи ≈ " + mins + " мин (медиана по решившим во всех группах с этой задачей)";
+              th.appendChild(wsp);
+            }
             trBottom.appendChild(th);
           });
         });

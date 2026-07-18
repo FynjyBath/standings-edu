@@ -879,6 +879,18 @@ button.summary-link-btn {
   cursor: help;
 }
 
+/* Типичное время решения задачи (вес) — по токену жюри, под меткой задачи. */
+.task-weight {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.62rem;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--muted);
+  cursor: help;
+  white-space: nowrap;
+}
+
 .task-col a {
   display: inline-flex;
   align-items: center;

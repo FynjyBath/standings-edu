@@ -100,9 +100,10 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	// Темп курса по каждой группе — в профили учеников (для преподавателя).
 	// Отметки индексируются по ученикам один раз на всю генерацию.
 	reviewIdx := domain.IndexFlagReviews(data.FlagReviews)
-	// Кэш глобального варианта по сигнатуре курса (набор контестов): группы с
-	// одинаковым курсом и когортой считаются один раз.
+	// Кэши по сигнатуре курса (набор контестов): группы с одинаковым курсом и
+	// когортой считаются один раз — глобальный темп и типичное время задач.
 	globalCache := make(map[string]map[string]*domain.StudentCourseStats)
+	weightCache := make(map[string]map[string]float64)
 	for _, pg := range prepared {
 		std, ok := result[pg.group.Slug]
 		if !ok {
@@ -110,12 +111,27 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 		}
 		stats := computeCourseStats(std, pg.students, statusByStudent, now, reviewIdx)
 
-		// Глобальный вариант: когорта — union составов всех групп, где есть эти
-		// контесты. Считаем, только если она шире состава этой группы.
+		// Когорта курса — union составов всех групп, где есть эти контесты.
 		cohort := globalCourseCohort(data, pg.group, statusByStudent)
+		sig := courseSignature(pg.group)
+
+		// Типичное время задач (вес) — по глобальной когорте, одинаково во всех
+		// группах с этой задачей; проставляем в стендинг для показа по токену.
+		weights, ok := weightCache[sig]
+		if !ok {
+			wc := cohort
+			if len(wc) == 0 {
+				wc = pg.students
+			}
+			weights = courseDisplayWeights(std, wc, statusByStudent)
+			weightCache[sig] = weights
+		}
+		stampTaskWeights(&std, weights)
+		result[pg.group.Slug] = std
+
+		// Глобальный вариант темпа: считаем, только если когорта шире группы.
 		var gstats map[string]*domain.StudentCourseStats
 		if len(cohort) > len(pg.students) {
-			sig := courseSignature(pg.group)
 			if cached, ok := globalCache[sig]; ok {
 				gstats = cached
 			} else {

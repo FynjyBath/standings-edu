@@ -69,6 +69,7 @@
                 {{range .Tasks}}
                 <th class="task-col{{if .Hidden}} task-hidden{{end}}"{{if .Hidden}} title="Скрытая задача — видна только по токену{{if .Name}}: {{.Name}}{{end}}"{{else if .Name}} title="{{.Name}}"{{end}}>
                   {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}{{if .Hidden}} 🔒{{end}}
+                  {{if and $tokenValid .Weight}}<span class="task-weight" title="Типичное время решения задачи ≈ {{printf "%.0f" .Weight}} мин (медиана активного времени решивших во всех группах с этой задачей)">≈{{printf "%.0f" .Weight}}′</span>{{end}}
                 </th>
                 {{end}}
               {{end}}

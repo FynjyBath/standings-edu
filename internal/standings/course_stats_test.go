@@ -620,3 +620,58 @@ func TestDetectCourseFlagsBurst(t *testing.T) {
 		t.Fatalf("пулемёт должен быть пойман: %+v", stats["mg"].Flags)
 	}
 }
+
+// courseDisplayWeights: типичное время (медиана активного времени решивших) в
+// минутах, только для задач с ≥3 решившими с известным временем; stampTaskWeights
+// проставляет его и в плоский список, и в подконтесты.
+func TestCourseDisplayWeights(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	norms := []string{"t0", "t1", "t2"}
+	tasks := make([]domain.GeneratedTask, 3)
+	for i, n := range norms {
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: n}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{
+			Title: "K", Tasks: tasks,
+			Subcontests: []domain.GeneratedSubcontest{{Title: "S", TaskCount: 3, Tasks: tasks}},
+		}}}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	solve := func(id string, solved ...string) {
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		for _, n := range solved {
+			st.timed[n] = []source.TimedSubmission{{At: base, Solved: true}}
+			st.solved[n] = struct{}{}
+			st.attempted[n] = struct{}{}
+		}
+		statuses[id] = st
+	}
+	// t0 — 4 решивших (≥3, определён); t1 — 2 (мало); t2 — 0.
+	solve("a", "t0", "t1")
+	solve("b", "t0", "t1")
+	solve("c", "t0")
+	solve("d", "t0")
+
+	w := courseDisplayWeights(std, students, statuses)
+	// Одна посылка → активное время = δ0 = 10 мин, медиана 4 значений = 10.
+	if w["t0"] != 10 {
+		t.Fatalf("вес t0 должен быть 10 мин: %v", w["t0"])
+	}
+	if _, ok := w["t1"]; ok {
+		t.Fatalf("t1 (2 решивших) не должен иметь вес: %v", w)
+	}
+	if _, ok := w["t2"]; ok {
+		t.Fatalf("t2 (никто не решал) не должен иметь вес: %v", w)
+	}
+
+	stampTaskWeights(&std, w)
+	if std.Contests[0].Tasks[0].Weight != 10 || std.Contests[0].Subcontests[0].Tasks[0].Weight != 10 {
+		t.Fatalf("вес должен проставиться в плоский список и подконтест: %+v", std.Contests[0])
+	}
+	if std.Contests[0].Tasks[1].Weight != 0 {
+		t.Fatalf("t1 без веса должен остаться 0: %v", std.Contests[0].Tasks[1].Weight)
+	}
+}

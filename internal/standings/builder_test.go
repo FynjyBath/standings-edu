@@ -3,8 +3,10 @@ package standings
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -405,5 +407,99 @@ func TestBuildProviderContestCarriesDisplayFlags(t *testing.T) {
 	}
 	if !out.Hidden || !out.SummaryTotalOnly || out.ShortName != "Кнд" {
 		t.Fatalf("display flags lost: hidden=%v total=%v short=%q", out.Hidden, out.SummaryTotalOnly, out.ShortName)
+	}
+}
+
+// globalCourseCohort — union составов групп с общим контестом, только из
+// собранных статусов, дедуп, в порядке слагов групп.
+func TestGlobalCourseCohort(t *testing.T) {
+	data := &domain.SourceData{
+		Students: map[string]domain.Student{
+			"a1": {ID: "a1"}, "a2": {ID: "a2"},
+			"b1": {ID: "b1"}, "b2": {ID: "b2"},
+			"c1": {ID: "c1"},
+		},
+		Groups: []domain.GroupDefinition{
+			{Slug: "gA", Contests: []domain.GroupContestRef{{ID: "c1"}, {ID: "c2"}}, StudentIDs: []string{"a1", "a2"}},
+			{Slug: "gB", Contests: []domain.GroupContestRef{{ID: "c1"}}, StudentIDs: []string{"b1", "b2"}},
+			{Slug: "gC", Contests: []domain.GroupContestRef{{ID: "c3"}}, StudentIDs: []string{"c1"}},
+		},
+	}
+	// Собраны все, кроме b2 — он должен выпасть из когорты.
+	fetched := map[string]*accountStatuses{
+		"a1": newAccountStatuses(), "a2": newAccountStatuses(),
+		"b1": newAccountStatuses(), "c1": newAccountStatuses(),
+	}
+	got := globalCourseCohort(data, data.Groups[0], fetched)
+	ids := make([]string, 0, len(got))
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	// gA и gB делят c1; gC (c3) не входит; b2 не собран; порядок — gA, потом gB.
+	want := []string{"a1", "a2", "b1"}
+	if strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Fatalf("cohort = %v, want %v", ids, want)
+	}
+
+	// Группа без общих контестов ни с кем — когорта = её состав.
+	solo := globalCourseCohort(data, data.Groups[2], fetched)
+	if len(solo) != 1 || solo[0].ID != "c1" {
+		t.Fatalf("solo cohort = %v, want [c1]", solo)
+	}
+}
+
+// Глобальный вариант отличается от группового: та же скорость ученика,
+// пересчитанная по более широкой (и более медленной) когорте, центрируется
+// иначе — относительно медленной когорты ученик выглядит быстрее.
+func TestComputeCourseStatsGlobalCohortShiftsSpeed(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(14 * 24 * time.Hour)
+
+	tasks := make([]domain.GeneratedTask, 8)
+	norms := make([]string, 8)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	statuses := map[string]*accountStatuses{}
+	// solveEvery добавляет ученика, решающего все задачи по minPerTask минут.
+	solveEvery := func(id string, minPerTask float64) domain.Student {
+		st := newAccountStatuses()
+		for j, norm := range norms {
+			day := j / 4
+			at := base.Add(time.Duration(day) * 72 * time.Hour).Add(time.Duration(float64(j%4+1)*minPerTask) * time.Minute)
+			st.timed[norm] = []source.TimedSubmission{{At: at, Solved: true}}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+		}
+		statuses[id] = st
+		return domain.Student{ID: id}
+	}
+
+	// Группа: 5 «быстрых» учеников (по 20 мин/задача), наш герой среди них.
+	group := make([]domain.Student, 0)
+	for i := 0; i < 5; i++ {
+		group = append(group, solveEvery(fmt.Sprintf("fast%d", i), 20))
+	}
+	// Ещё 6 «медленных» из другой группы (по 60 мин/задача) — только в глобале.
+	global := append([]domain.Student(nil), group...)
+	for i := 0; i < 6; i++ {
+		global = append(global, solveEvery(fmt.Sprintf("slow%d", i), 40))
+	}
+
+	byGroup := computeCourseStats(std, group, statuses, now, nil)
+	byGlobal := computeCourseStats(std, global, statuses, now, nil)
+
+	g := byGroup["fast0"].Speed
+	gl := byGlobal["fast0"].Speed
+	if g <= 0 || gl <= 0 {
+		t.Fatalf("скорости должны считаться: group=%v global=%v", g, gl)
+	}
+	// В группе быстрых герой ≈ медиана (×1); в глобале с медленными он выше ×1.
+	if !(gl > g) {
+		t.Fatalf("в более широкой медленной когорте скорость должна вырасти: group=%v global=%v", g, gl)
 	}
 }

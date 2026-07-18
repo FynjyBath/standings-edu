@@ -120,6 +120,9 @@ type AdminStudentProfilePageData struct {
 	TokenView bool
 	// Token — токен группы для жюри-запросов со страницы (пуст в админ-режиме).
 	Token string
+	// HasGlobalCourse — хотя бы у одного курса есть глобальный вариант темпа
+	// (когорта шире группы): показываем тумблер «эта группа / все группы».
+	HasGlobalCourse bool
 }
 
 // AdminStudentProfilePage — админский профиль участника: активность, аналитика
@@ -179,6 +182,12 @@ func (h *Handlers) fillStudentProfilePage(page *AdminStudentProfilePageData, id 
 		profile.CourseStats = courses
 	}
 	applyFlagReviews(h.loadFlagReviewIndex(), id, profile.CourseStats)
+	for i := range profile.CourseStats {
+		if profile.CourseStats[i].Global != nil {
+			page.HasGlobalCourse = true
+			break
+		}
+	}
 	page.Profile = profile
 	if profile.PublicName != "" {
 		page.PageTitle = "Профиль — " + profile.PublicName

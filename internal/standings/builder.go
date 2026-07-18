@@ -100,14 +100,40 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	// Темп курса по каждой группе — в профили учеников (для преподавателя).
 	// Отметки индексируются по ученикам один раз на всю генерацию.
 	reviewIdx := domain.IndexFlagReviews(data.FlagReviews)
+	// Кэш глобального варианта по сигнатуре курса (набор контестов): группы с
+	// одинаковым курсом и когортой считаются один раз.
+	globalCache := make(map[string]map[string]*domain.StudentCourseStats)
 	for _, pg := range prepared {
 		std, ok := result[pg.group.Slug]
 		if !ok {
 			continue
 		}
 		stats := computeCourseStats(std, pg.students, statusByStudent, now, reviewIdx)
+
+		// Глобальный вариант: когорта — union составов всех групп, где есть эти
+		// контесты. Считаем, только если она шире состава этой группы.
+		cohort := globalCourseCohort(data, pg.group, statusByStudent)
+		var gstats map[string]*domain.StudentCourseStats
+		if len(cohort) > len(pg.students) {
+			sig := courseSignature(pg.group)
+			if cached, ok := globalCache[sig]; ok {
+				gstats = cached
+			} else {
+				gstats = computeCourseStats(std, cohort, statusByStudent, now, reviewIdx)
+				globalCache[sig] = gstats
+			}
+		}
+
 		for sid, cs := range stats {
 			if p := profiles[sid]; p != nil && cs != nil {
+				if gstats != nil {
+					if g := gstats[sid]; g != nil {
+						twin := *g
+						twin.Flags = nil // флаги показываем один раз, вне тумблера
+						twin.Global = nil
+						cs.Global = &twin
+					}
+				}
 				p.CourseStats = append(p.CourseStats, *cs)
 			}
 		}
@@ -117,6 +143,67 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	}
 
 	return result, profiles, nil
+}
+
+// globalCourseCohort — union составов всех групп, у которых есть хотя бы один
+// общий контест с group (включая её саму), в порядке слагов групп. Берутся
+// только ученики, для которых собраны статусы (fetched), чтобы когорта не
+// содержала «пустышек» из групп, не попавших в эту генерацию.
+func globalCourseCohort(data *domain.SourceData, group domain.GroupDefinition, fetched map[string]*accountStatuses) []domain.Student {
+	want := make(map[string]struct{}, len(group.Contests))
+	for _, ref := range group.Contests {
+		if id := strings.TrimSpace(ref.ID); id != "" {
+			want[id] = struct{}{}
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+
+	sharing := make([]domain.GroupDefinition, 0)
+	for _, g := range data.Groups {
+		for _, ref := range g.Contests {
+			if _, ok := want[strings.TrimSpace(ref.ID)]; ok {
+				sharing = append(sharing, g)
+				break
+			}
+		}
+	}
+	sort.Slice(sharing, func(i, j int) bool { return sharing[i].Slug < sharing[j].Slug })
+
+	seen := make(map[string]struct{})
+	out := make([]domain.Student, 0)
+	for _, g := range sharing {
+		for _, sid := range g.StudentIDs {
+			sid = strings.TrimSpace(sid)
+			if sid == "" {
+				continue
+			}
+			if _, dup := seen[sid]; dup {
+				continue
+			}
+			if _, ok := fetched[sid]; !ok {
+				continue
+			}
+			student, ok := data.Students[sid]
+			if !ok {
+				continue
+			}
+			seen[sid] = struct{}{}
+			out = append(out, student)
+		}
+	}
+	return out
+}
+
+// courseSignature — ключ кэша глобального варианта: упорядоченный набор
+// контестов группы (он задаёт и порядок задач курса, и когорту).
+func courseSignature(group domain.GroupDefinition) string {
+	ids := make([]string, 0, len(group.Contests))
+	for _, ref := range group.Contests {
+		ids = append(ids, strings.TrimSpace(ref.ID))
+	}
+	return strings.Join(ids, ",")
 }
 
 func (b *Builder) prepareGroups(data *domain.SourceData, groups []domain.GroupDefinition) []preparedGroup {

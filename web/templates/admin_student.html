@@ -2,6 +2,38 @@
 
 {{define "flagClearBtn"}}{{if .Key}}<button type="button" class="flag-review-btn flag-review-btn--clear" data-flag-key="{{.Key}}" data-resolution="" title="Снять отметку">×</button>{{end}}{{end}}
 
+{{/* Блок чисел темпа курса; аргумент — dict {S: StudentCourseStats, Accounts}. */}}
+{{define "courseTempoBody"}}{{$acc := .Accounts}}{{with .S}}
+  <div class="course-progress-row">
+    <div class="course-progress" title="Прогресс по весу задач: решено {{.SolvedCount}} из {{.TotalCount}}">
+      <div class="course-progress-fill" style="width:{{pct .Progress}}%;"></div>
+      <span class="course-progress-label">{{pct .Progress}}% · {{.SolvedCount}}/{{.TotalCount}}</span>
+    </div>
+    {{if .Front}}<span class="course-front" title="Самая дальняя решённая задача группы">сейчас: {{.Front}}</span>{{end}}
+  </div>
+  <div class="stat-grid" style="margin-top:0.7rem;">
+    {{if .LowData}}
+    <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">скорость (нужно ≥5 решённых и ≥2 ч)</span></div>
+    {{else}}
+    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Speed}}</span><span class="stat-label">скорость: &lt;1 — ниже среднего, &gt;1 — выше</span></div>
+    {{if .SpeedRecent}}<div class="stat-card"><span class="stat-value">×{{numText .SpeedRecent}}</span><span class="stat-label">скорость, взвешенная по времени (свежее — важнее)</span></div>{{end}}
+    {{end}}
+    <div class="stat-card"><span class="stat-value">{{numText .ActiveHours}}</span><span class="stat-label">активных часов в группе</span></div>
+    {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">≈{{numText .WeeklyHours}}</span><span class="stat-label">часов в неделю (среднее по активным неделям за 8 недель)</span></div>{{end}}
+    {{if .ForecastWeeks}}<div class="stat-card"><span class="stat-value">≈{{numText .ForecastWeeks}}</span><span class="stat-label">недель до конца материала группы</span></div>{{end}}
+  </div>
+  {{if .Stuck}}
+  <p class="course-signal course-signal--stuck">⚠ Застрял:
+    {{range .Stuck}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Активного времени {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}} <b>×{{numText .Ratio}}</b></span> {{end}}
+  </p>
+  {{end}}
+  {{if .Abandoned}}
+  <p class="course-signal">↩ Пропустил (стоит вернуться):
+    {{range .Abandoned}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+  </p>
+  {{end}}
+{{end}}{{end}}
+
 {{define "content"}}
 {{$p := .Profile}}
 <section class="page-head">
@@ -52,38 +84,21 @@
   {{end}}
 </section>
 
+{{if .HasGlobalCourse}}
+<div class="course-scope-toggle" role="group" aria-label="Область темпа">
+  <span class="course-scope-toggle-label">Темп считать:</span>
+  <button type="button" class="course-scope-btn" data-scope="group">по этой группе</button>
+  <button type="button" class="course-scope-btn" data-scope="global">по всем группам</button>
+  <span class="course-scope-hint">«Все группы» — как одна большая группа из всех, у кого есть эти контесты.</span>
+</div>
+{{end}}
+
 <!-- Темп группы: сессии, эмпирические веса, взвешенная скорость (docs/course_speed.pdf) -->
 {{range $p.CourseStats}}
-<section class="contest-block">
-  <h2>Темп группы: {{.GroupTitle}}</h2>
-  <div class="course-progress-row">
-    <div class="course-progress" title="Прогресс по весу задач: решено {{.SolvedCount}} из {{.TotalCount}}">
-      <div class="course-progress-fill" style="width:{{pct .Progress}}%;"></div>
-      <span class="course-progress-label">{{pct .Progress}}% · {{.SolvedCount}}/{{.TotalCount}}</span>
-    </div>
-    {{if .Front}}<span class="course-front" title="Самая дальняя решённая задача группы">сейчас: {{.Front}}</span>{{end}}
-  </div>
-  <div class="stat-grid" style="margin-top:0.7rem;">
-    {{if .LowData}}
-    <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">скорость (нужно ≥5 решённых и ≥2 ч)</span></div>
-    {{else}}
-    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Speed}}</span><span class="stat-label">скорость: &lt;1 — ниже среднего, &gt;1 — выше</span></div>
-    {{if .SpeedRecent}}<div class="stat-card"><span class="stat-value">×{{numText .SpeedRecent}}</span><span class="stat-label">скорость, взвешенная по времени (свежее — важнее)</span></div>{{end}}
-    {{end}}
-    <div class="stat-card"><span class="stat-value">{{numText .ActiveHours}}</span><span class="stat-label">активных часов в группе</span></div>
-    {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">≈{{numText .WeeklyHours}}</span><span class="stat-label">часов в неделю (среднее по активным неделям за 8 недель)</span></div>{{end}}
-    {{if .ForecastWeeks}}<div class="stat-card"><span class="stat-value">≈{{numText .ForecastWeeks}}</span><span class="stat-label">недель до конца материала группы</span></div>{{end}}
-  </div>
-  {{if .Stuck}}
-  <p class="course-signal course-signal--stuck">⚠ Застрял:
-    {{range .Stuck}}{{$u := submissionLink .URL $p.Accounts}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Активного времени {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}} <b>×{{numText .Ratio}}</b></span> {{end}}
-  </p>
-  {{end}}
-  {{if .Abandoned}}
-  <p class="course-signal">↩ Пропустил (стоит вернуться):
-    {{range .Abandoned}}{{$u := submissionLink .URL $p.Accounts}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
-  </p>
-  {{end}}
+<section class="contest-block course-tempo-section">
+  <h2><span class="course-scope-group">Темп группы: {{.GroupTitle}}</span><span class="course-scope-global">Темп по всем группам: {{.GroupTitle}}</span></h2>
+  <div class="course-scope-group">{{template "courseTempoBody" (dict "S" . "Accounts" $p.Accounts)}}</div>
+  <div class="course-scope-global">{{template "courseTempoBody" (dict "S" (or .Global .) "Accounts" $p.Accounts)}}</div>
   {{if .Flags}}
   <div class="course-signal course-signal--flag" data-flag-group="{{.GroupSlug}}">🚩 Стоит проверить лично (подозрительные паттерны посылок):
     <div class="flag-list">
@@ -283,6 +298,28 @@
           .catch(function () { btn.disabled = false; alert("Не удалось сохранить"); });
       });
     });
+  })();
+
+  // Тумблер области темпа «эта группа / все группы» (как тёмная тема): выбор в
+  // localStorage, переключение — атрибут на корне, CSS показывает нужный блок.
+  (function () {
+    var buttons = [].slice.call(document.querySelectorAll(".course-scope-toggle [data-scope]"));
+    if (!buttons.length) return;
+    var root = document.documentElement;
+    function apply(scope) {
+      root.setAttribute("data-course-scope", scope);
+      buttons.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-scope") === scope); });
+    }
+    var saved = "group";
+    try { saved = localStorage.getItem("courseScope") || "group"; } catch (e) {}
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var scope = b.getAttribute("data-scope");
+        try { localStorage.setItem("courseScope", scope); } catch (e) {}
+        apply(scope);
+      });
+    });
+    apply(saved === "global" ? "global" : "group");
   })();
 </script>
 {{end}}

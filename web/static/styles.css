@@ -2212,6 +2212,53 @@ th.sortable::after {
   font-weight: 400;
 }
 
+/* ── Тумблер области темпа «эта группа / все группы» ─────────────────────── */
+.course-scope-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.course-scope-toggle-label {
+  font-weight: 600;
+}
+
+.course-scope-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.course-scope-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line) 45%);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.course-scope-hint {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* Показываем блок активной области; по умолчанию (нет атрибута) — группа. */
+.course-scope-global {
+  display: none;
+}
+:root[data-course-scope="global"] .course-scope-global {
+  display: revert;
+}
+:root[data-course-scope="global"] .course-scope-group {
+  display: none;
+}
+
 .flag-review-actions {
   display: inline-flex;
   gap: 0.25rem;

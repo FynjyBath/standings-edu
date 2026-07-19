@@ -168,7 +168,7 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 	}
 
 	if err := c.ensureLoggedIn(ctx, false); err != nil {
-		return nil, err
+		return c.staleResultsOrError(accountID, err)
 	}
 
 	state, hasState, err := c.getAccountState(accountID)
@@ -187,7 +187,7 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 	// перетестирования или дотестирования из очереди).
 	fetchedRuns, lostRuns, err := c.collectNewInformaticsRuns(ctx, accountID, lastKnownRunID)
 	if err != nil {
-		return nil, err
+		return c.staleResultsOrError(accountID, err)
 	}
 
 	runsByID := make(map[int]informaticsStoredRun, len(state.Runs)+len(fetchedRuns))
@@ -243,6 +243,28 @@ func (c *InformaticsAPIClient) FetchUserResults(ctx context.Context, accountID s
 	}
 
 	return results, nil
+}
+
+// staleResultsOrError — informatics недоступен (не залогиниться / не забрать
+// посылки): если по аккаунту есть сохранённое состояние, отдаём результаты из
+// него — старые посылки лучше нулей, иначе перегенерация затёрла бы таблицы
+// пустыми результатами. Без состояния (новый аккаунт) — возвращаем ошибку:
+// builder пропустит аккаунт, не записав пустоту в кэш. Отмена генерации
+// (context) — не сбой сайта, пробрасывается как есть.
+func (c *InformaticsAPIClient) staleResultsOrError(accountID string, cause error) ([]TaskResult, error) {
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return nil, cause
+	}
+	state, hasState, err := c.getAccountState(accountID)
+	if err != nil || !hasState {
+		return nil, cause
+	}
+	runs := append([]informaticsStoredRun(nil), state.Runs...)
+	sort.Slice(runs, func(i, j int) bool { return runs[i].ID < runs[j].ID })
+	aggByTask := make(map[string]informaticsTaskAggregate)
+	foldStoredInformaticsRuns(runs, aggByTask, c.buildTaskURL)
+	log.Printf("WARN informatics account_id=%s недоступен (%v); отдаю кэш посылок от %s", accountID, cause, state.UpdatedAt.Format(time.RFC3339))
+	return aggregatesToTaskResults(aggByTask), nil
 }
 
 func (c *InformaticsAPIClient) SupportsTaskScores() bool {

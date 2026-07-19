@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -393,6 +394,13 @@ func (c *CodeforcesAPIClient) FetchUserResults(ctx context.Context, accountID st
 
 	newSubmissions, err := c.collectNewCodeforcesSubmissions(ctx, handle, lastKnownSubmissionID)
 	if err != nil {
+		// Codeforces недоступен: отдаём сохранённые результаты — старые посылки
+		// лучше нулей (иначе перегенерация затёрла бы таблицы пустотой). Отмена
+		// генерации (context) — не сбой сайта; без состояния — ошибка как раньше.
+		if hasState && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("WARN codeforces handle=%s недоступен (%v); отдаю кэш посылок от %s", handle, err, state.UpdatedAt.Format(time.RFC3339))
+			return cloneTaskResults(state.Results), nil
+		}
 		return nil, err
 	}
 

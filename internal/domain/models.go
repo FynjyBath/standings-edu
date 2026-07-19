@@ -599,6 +599,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		TableNames   TableNameList         `json:"table_name,omitempty"`
 		Materials    []ContestMaterial     `json:"materials,omitempty"`
 		GeneratedAt  *time.Time            `json:"generated_at,omitempty"`
+		NotUpdated   bool                  `json:"not_updated,omitempty"`
 		StartTime    *time.Time            `json:"start_time,omitempty"`
 		EndTime      *time.Time            `json:"end_time,omitempty"`
 		ZeroPenalty  int                   `json:"zero_penalty,omitempty"`
@@ -625,6 +626,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		TableNames:       raw.TableNames,
 		Materials:        raw.Materials,
 		GeneratedAt:      raw.GeneratedAt,
+		NotUpdated:       raw.NotUpdated,
 		StartTime:        raw.StartTime,
 		EndTime:          raw.EndTime,
 		ZeroPenalty:      raw.ZeroPenalty,

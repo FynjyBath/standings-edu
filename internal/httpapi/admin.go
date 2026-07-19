@@ -69,6 +69,9 @@ type AdminPageData struct {
 	// DirectoryToken — текущий токен каталога групп (/standings?token=…); пусто —
 	// каталог выключен.
 	DirectoryToken string
+	// HasArchivedGroups — есть ли хоть одна архивная (обычная) группа: секцию
+	// «Архивные группы» показываем только тогда.
+	HasArchivedGroups bool
 }
 
 type AdminGroupLink struct {
@@ -77,6 +80,9 @@ type AdminGroupLink struct {
 	URL        string
 	IsCombined bool
 	Members    []string
+	// Archived — группа в архиве (update=false): не пересобирается при генерации,
+	// но её страница остаётся доступной. В активных списках не показывается.
+	Archived bool
 }
 
 type AdminGroupAccountsPageData struct {
@@ -313,6 +319,12 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		LastResult:       h.lastAdminResult(),
 		DefaultPath:      defaultPath,
 		DirectoryToken:   h.readDirectoryToken(),
+	}
+	for _, g := range groupLinks {
+		if g.Archived && !g.IsCombined {
+			page.HasArchivedGroups = true
+			break
+		}
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin.html", page); err != nil {
 		h.logger.Printf("ERROR render admin page: %v", err)
@@ -927,6 +939,7 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 
 		title := slug
 		var members []string
+		archived := false
 		groupPath := filepath.Join(groupsDir, slug, "group.json")
 		body, readErr := os.ReadFile(groupPath)
 		if readErr == nil {
@@ -936,6 +949,7 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 					title = groupTitle
 				}
 				members = groupFile.MemberGroups
+				archived = groupFile.Update != nil && !*groupFile.Update
 			}
 		}
 
@@ -945,6 +959,7 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 			URL:        "/standings/" + slug,
 			IsCombined: len(members) > 0,
 			Members:    members,
+			Archived:   archived,
 		})
 	}
 

@@ -1064,6 +1064,23 @@ button.summary-link-btn {
   box-shadow: var(--shadow);
 }
 
+/* Приглушённый блок (архив): визуально отделён от активных настроек. */
+.admin-block--muted {
+  background: color-mix(in srgb, var(--muted) 6%, var(--surface) 94%);
+  box-shadow: none;
+}
+
+.archived-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  vertical-align: middle;
+}
+
 .admin-block h2 {
   margin: 0 0 0.8rem;
   color: var(--accent-strong);

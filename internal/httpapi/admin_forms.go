@@ -310,6 +310,8 @@ type AdminGroupManagePageData struct {
 	SecretToken string // group_secret_token — просмотр размороженных таблиц
 	// ShowTaskLinks — показывать ли ссылки на задачи ученикам (по умолчанию да).
 	ShowTaskLinks bool
+	// Archived — группа в архиве (update=false).
+	Archived bool
 }
 
 type AdminGroupMember struct {
@@ -621,6 +623,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
 		SecretToken:     strings.TrimSpace(groupFile.GroupSecretToken),
 		ShowTaskLinks:   groupFile.TaskLinksShown(),
+		Archived:        groupFile.Update != nil && !*groupFile.Update,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group.html", page); err != nil {
 		h.logger.Printf("ERROR render admin group manage slug=%s: %v", slug, err)
@@ -711,6 +714,45 @@ func (h *Handlers) AdminGroupTokenSet(w http.ResponseWriter, r *http.Request) {
 }
 
 // AdminGroupSetShortName сохраняет короткое название группы (пусто — убрать).
+// AdminGroupSetArchived архивирует/разархивирует группу: архив — это update=false
+// у группы. Архивная группа не пересобирается при генерации, её страница
+// остаётся из последней генерации, и в активных списках она не мелькает.
+func (h *Handlers) AdminGroupSetArchived(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug     string `json:"slug"`
+		Archived bool   `json:"archived"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+	if req.Archived {
+		v := false
+		groupFile.Update = &v // update=false — в архиве
+	} else {
+		groupFile.Update = nil // по умолчанию активна (update=true)
+	}
+	if err := h.writeGroupFile(slug, groupFile); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "archived": req.Archived})
+}
+
 func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request) {
 	if h.admin == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})

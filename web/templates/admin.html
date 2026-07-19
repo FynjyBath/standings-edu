@@ -98,7 +98,7 @@
   </div>
   <ul class="admin-groups-grid" id="groups-grid">
     {{range .Groups}}
-    {{if not .IsCombined}}
+    {{if and (not .IsCombined) (not .Archived)}}
     <li data-filter-text="{{.Title}} {{.Slug}}">
       <a class="admin-btn" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
       <span>({{.Slug}})</span>
@@ -113,6 +113,23 @@
   {{else}}
   <p class="empty-hint">Группы не найдены.</p>
   {{end}}
+</section>
+
+<section class="admin-block admin-block--muted" id="archived-groups-block"{{if not .HasArchivedGroups}} hidden{{end}}>
+  <h2>Архивные группы</h2>
+  <p class="empty-hint">Не пересобираются при генерации (update=false), но их страницы остаются доступными. Из активных списков убраны. Достать из архива — на странице группы.</p>
+  <ul class="admin-groups-grid">
+    {{range .Groups}}
+    {{if and (not .IsCombined) .Archived}}
+    <li>
+      <a class="admin-btn admin-btn--secondary" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
+      <span>({{.Slug}})</span>
+      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+      <span class="archived-badge">🗄 в архиве</span>
+    </li>
+    {{end}}
+    {{end}}
+  </ul>
 </section>
 
 <section class="admin-block">

@@ -275,7 +275,9 @@ func (h *Handlers) listCombinedGroups() (combined []AdminCombinedGroup, selectab
 
 	for _, link := range links {
 		if !link.IsCombined {
-			selectable = append(selectable, link)
+			if !link.Archived { // архивные не предлагаем для объединения
+				selectable = append(selectable, link)
+			}
 			continue
 		}
 		item := AdminCombinedGroup{Slug: link.Slug, Title: link.Title}

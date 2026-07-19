@@ -1064,3 +1064,52 @@ func TestAdminIntakeMergeDryRun(t *testing.T) {
 		t.Fatalf("dry-run must not write group: %s", gbody)
 	}
 }
+
+// Архивация группы: update=false в group.json и Archived в списке; разархив —
+// поле убирается (по умолчанию активна).
+func TestAdminGroupSetArchived(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	setupGroup(t, dataDir, "grp", "")
+
+	// В архив.
+	code, resp := postJSON(t, h.AdminGroupSetArchived, `{"slug":"grp","archived":true}`)
+	if code != 200 || resp["ok"] != true {
+		t.Fatalf("archive: %d %v", code, resp)
+	}
+	var gf domain.GroupFile
+	blob, _ := os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
+	_ = json.Unmarshal(blob, &gf)
+	if gf.Update == nil || *gf.Update != false {
+		t.Fatalf("после архивации update должен быть false: %+v", gf.Update)
+	}
+	// В списке групп — Archived, и исключена из selectable для объединения.
+	links, _ := h.listAdminGroupLinks()
+	found := false
+	for _, l := range links {
+		if l.Slug == "grp" {
+			found = true
+			if !l.Archived {
+				t.Fatalf("группа должна быть Archived: %+v", l)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("группа grp должна быть в списке")
+	}
+	_, selectable := h.listCombinedGroups()
+	for _, l := range selectable {
+		if l.Slug == "grp" {
+			t.Fatalf("архивная группа не должна быть в selectable для объединения")
+		}
+	}
+
+	// Из архива — update-поле убирается (nil = активна).
+	code, _ = postJSON(t, h.AdminGroupSetArchived, `{"slug":"grp","archived":false}`)
+	if code != 200 {
+		t.Fatalf("unarchive: %d", code)
+	}
+	blob, _ = os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
+	if strings.Contains(string(blob), `"update"`) {
+		t.Fatalf("после разархива поле update должно исчезнуть: %s", blob)
+	}
+}

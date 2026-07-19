@@ -9,6 +9,23 @@
   </p>
 </section>
 
+<section class="admin-block{{if .Archived}} admin-block--muted{{end}}">
+  <h2>Архив {{if .Archived}}<span class="archived-badge">🗄 в архиве</span>{{end}}</h2>
+  {{if .Archived}}
+  <p class="empty-hint">Группа в архиве: не пересобирается при генерации, но её страница остаётся доступной. Верните в активные, чтобы снова обновлять.</p>
+  <div class="admin-editor-tools">
+    <button type="button" id="archive-btn" class="admin-btn" data-archived="1">Достать из архива</button>
+    <span id="archive-status" class="admin-editor-status"></span>
+  </div>
+  {{else}}
+  <p class="empty-hint">В архиве группа перестаёт пересобираться при генерации (update=false) и убирается из активных списков. Страница группы при этом остаётся доступной по прежней ссылке.</p>
+  <div class="admin-editor-tools">
+    <button type="button" id="archive-btn" class="admin-btn admin-btn--secondary" data-archived="0">🗄 В архив</button>
+    <span id="archive-status" class="admin-editor-status"></span>
+  </div>
+  {{end}}
+</section>
+
 <section class="admin-block">
   <h2>Короткое название</h2>
   <p class="empty-hint">Короткая подпись группы для тесных мест. В объединённой группе им подписываются участники: «Имя ({{if .ShortName}}{{.ShortName}}{{else}}кратко{{end}})».</p>
@@ -234,6 +251,18 @@
     document.getElementById("token-generate").addEventListener("click", function () { tokenAction(false); });
     var tokenClear = document.getElementById("token-clear");
     if (tokenClear) tokenClear.addEventListener("click", function () { tokenAction(true); });
+
+    // Архивация группы (update=false) / возврат в активные.
+    var archiveBtn = document.getElementById("archive-btn");
+    if (archiveBtn) archiveBtn.addEventListener("click", function () {
+      var toArchive = archiveBtn.getAttribute("data-archived") === "0";
+      if (toArchive && !confirm("Отправить группу в архив? Она перестанет пересобираться при генерации (страница останется доступной).")) return;
+      var st = document.getElementById("archive-status");
+      st.textContent = "Сохранение…"; st.className = "admin-editor-status";
+      post("/api/admin/group/archive/set", { slug: slug, archived: toArchive })
+        .then(function () { location.reload(); })
+        .catch(function (err) { st.textContent = err.message; st.className = "admin-editor-status admin-editor-status--error"; });
+    });
 
     // Короткое название группы.
     var shortNameSave = document.getElementById("short-name-save");

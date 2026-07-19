@@ -78,6 +78,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /standings/{group_name}/contest-fragment", handlers.GroupContestFragment)
 	mux.HandleFunc("GET /standings/{group_name}/summary-edu", handlers.GroupSummaryEduPage)
 	mux.HandleFunc("GET /standings/{group_name}/summary-olymp", handlers.GroupSummaryOlympPage)
+	mux.HandleFunc("GET /standings/{group_name}/export.xlsx", handlers.GroupExportXLSX)
+	mux.HandleFunc("GET /api/admin/group/export.xlsx", handlers.AdminAuth(handlers.AdminGroupExportXLSX))
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(staticDir, "favicon.ico"))
 	})

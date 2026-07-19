@@ -140,6 +140,7 @@
     {{if .JuryHasGrades}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/jury-grades?token={{.Token}}">✏️ Выставить оценки</a>
     {{end}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/export.xlsx?token={{.Token}}" title="Книга Excel: листы — вкладки сводной, оценки с формулами. Импортируется в Google Таблицы (Файл → Импорт).">⬇ Excel</a>
     {{end}}
   </p>
   {{if .TokenValid}}

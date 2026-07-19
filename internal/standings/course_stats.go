@@ -593,10 +593,16 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 		cs.WeeklyHours = round1(median(positive) / 60)
 	}
 
-	// Прогноз до конца курса.
-	if cs.SpeedRecent > 0 && cs.WeeklyHours > 0 && totalWeight > solvedWeight {
-		remainMin := (totalWeight - solvedWeight) / cs.SpeedRecent
-		cs.ForecastWeeks = round1(remainMin / 60 / cs.WeeklyHours)
+	// Прогноз до конца курса. SpeedRecent — темп по продуктивному времени
+	// (решённые задачи), а будущие занятия содержат и время на нерешаемое,
+	// поэтому остаток масштабируем историческим КПД E — долей активного
+	// времени, ушедшей в решённые (клип на 1: floor может превысить
+	// наблюдаемое время). Без E прогноз был бы систематически оптимистичен.
+	if cs.SpeedRecent > 0 && cs.WeeklyHours > 0 && totalWeight > solvedWeight && activeMin > 0 {
+		if eff := math.Min(1, solvedFlooredMin/activeMin); eff > 0 {
+			remainMin := (totalWeight - solvedWeight) / cs.SpeedRecent / eff
+			cs.ForecastWeeks = round1(remainMin / 60 / cs.WeeklyHours)
+		}
 	}
 
 	// Сигналы: застревания и брошенные.

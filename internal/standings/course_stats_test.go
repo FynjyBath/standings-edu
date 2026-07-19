@@ -778,3 +778,79 @@ func TestSpeedSolvedOnlyWithFloor(t *testing.T) {
 		t.Fatalf("фантом должен быть ограничен ×%.1f: got %v", 1.0/courseSpeedFloorAlpha, ph.Speed)
 	}
 }
+
+// Прогноз масштабируется КПД: у ученика, топящего половину времени в
+// нерешённом, прогноз в ~2 раза длиннее, чем у ровного с тем же темпом решения.
+func TestForecastScaledByEfficiency(t *testing.T) {
+	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	const nTasks = 12
+
+	tasks := make([]domain.GeneratedTask, 0, nTasks)
+	norms := make([]string, 0, nTasks)
+	for i := 0; i < nTasks; i++ {
+		norm := fmt.Sprintf("t%02d", i)
+		norms = append(norms, norm)
+		tasks = append(tasks, domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norm})
+	}
+	std := domain.GeneratedGroupStandings{
+		GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}},
+	}
+
+	// Решает первые 6 задач (по 50 мин: 3 посылки 0/20/40), по одной в неделю —
+	// чтобы недельная активность посчиталась (нужно ≥2 положительных недель).
+	solveHalf := func() *accountStatuses {
+		st := newAccountStatuses()
+		for i := 0; i < 6; i++ {
+			s0 := base.Add(time.Duration(i) * 7 * 24 * time.Hour)
+			st.timed[norms[i]] = []source.TimedSubmission{
+				{At: s0}, {At: s0.Add(20 * time.Minute)}, {At: s0.Add(40 * time.Minute), Solved: true},
+			}
+			st.solved[norms[i]] = struct{}{}
+			st.attempted[norms[i]] = struct{}{}
+		}
+		return st
+	}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 6; i++ {
+		id := fmt.Sprintf("bg%d", i)
+		students = append(students, domain.Student{ID: id})
+		statuses[id] = solveHalf()
+	}
+
+	// «Утопающий»: то же самое + каждую неделю ещё ~50 мин бьётся над
+	// нерешаемой задачей x (той же сессией, посылки каждые 25 мин).
+	drown := solveHalf()
+	for i := 0; i < 6; i++ {
+		s0 := base.Add(time.Duration(i) * 7 * 24 * time.Hour).Add(40 * time.Minute)
+		drown.timed["x"] = append(drown.timed["x"],
+			source.TimedSubmission{At: s0.Add(25 * time.Minute)},
+			source.TimedSubmission{At: s0.Add(50 * time.Minute)})
+	}
+	drown.attempted["x"] = struct{}{}
+	students = append(students, domain.Student{ID: "drown"})
+	statuses["drown"] = drown
+	std.Contests[0].Tasks = append(std.Contests[0].Tasks, domain.GeneratedTask{Label: "X", NormalizedURL: "x"})
+
+	now := base.Add(6 * 7 * 24 * time.Hour)
+	stats := computeCourseStats(std, students, statuses, now, nil)
+	bg, dr := stats["bg0"], stats["drown"]
+	if bg == nil || dr == nil || bg.LowData || dr.LowData {
+		t.Fatalf("нет статов или low-data: %+v %+v", bg, dr)
+	}
+	if bg.ForecastWeeks <= 0 || dr.ForecastWeeks <= 0 {
+		t.Fatalf("прогнозы должны посчитаться: bg=%v dr=%v", bg.ForecastWeeks, dr.ForecastWeeks)
+	}
+	// Скорость решения у обоих одинаковая; у «утопающего» КПД ~1/2, но и часов
+	// в неделю вдвое больше — календарный прогноз должен быть ~равным (расхождение
+	// только от округления WeeklyHours до 0.1 ч). Без КПД-поправки его прогноз
+	// был бы вдвое короче (~3.5 против ~7 недель).
+	if dr.WeeklyHours <= bg.WeeklyHours {
+		t.Fatalf("у утопающего должно быть больше часов в неделю: dr=%v bg=%v", dr.WeeklyHours, bg.WeeklyHours)
+	}
+	if diff := dr.ForecastWeeks - bg.ForecastWeeks; diff < -0.5 || diff > 0.5 {
+		t.Fatalf("прогнозы должны быть ~равны (КПД компенсирует лишние часы): dr=%v bg=%v", dr.ForecastWeeks, bg.ForecastWeeks)
+	}
+}

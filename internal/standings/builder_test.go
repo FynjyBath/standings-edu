@@ -503,3 +503,24 @@ func TestComputeCourseStatsGlobalCohortShiftsSpeed(t *testing.T) {
 		t.Fatalf("в более широкой медленной когорте скорость должна вырасти: group=%v global=%v", g, gl)
 	}
 }
+
+// Один и тот же ученик в нескольких группах с общим контестом учитывается в
+// когорте ровно один раз.
+func TestGlobalCohortDedup(t *testing.T) {
+	data := &domain.SourceData{
+		Students: map[string]domain.Student{"x": {ID: "x"}, "y": {ID: "y"}},
+		Groups: []domain.GroupDefinition{
+			{Slug: "gA", Contests: []domain.GroupContestRef{{ID: "c1"}}, StudentIDs: []string{"x", "y"}},
+			{Slug: "gB", Contests: []domain.GroupContestRef{{ID: "c1"}}, StudentIDs: []string{"x"}},
+		},
+	}
+	fetched := map[string]*accountStatuses{"x": newAccountStatuses(), "y": newAccountStatuses()}
+	got := globalCourseCohort(data, data.Groups[0], fetched)
+	seen := map[string]int{}
+	for _, s := range got {
+		seen[s.ID]++
+	}
+	if seen["x"] != 1 || seen["y"] != 1 || len(got) != 2 {
+		t.Fatalf("ученик из двух групп должен быть один раз: %v", seen)
+	}
+}

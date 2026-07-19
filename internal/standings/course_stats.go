@@ -12,7 +12,9 @@ import (
 )
 
 // Темп прохождения курса: сессии по посылкам, эмпирические веса задач,
-// взвешенная скорость. Модель и параметры — docs/course_speed.pdf.
+// взвешенная скорость. Базовая модель и параметры — docs/course_speed.pdf;
+// поверх неё: знаменатель скорости — только время решённых задач, с floor
+// α·вес на задачу (см. courseSpeedFloorAlpha).
 const (
 	courseSessionGapMin = 45.0  // τ: разрыв сессии, минут
 	courseDelta0MaxMin  = 10.0  // δ0: максимум надбавки на «вход» в сессию, минут
@@ -22,6 +24,11 @@ const (
 	courseMinActiveMin  = 120.0 // минимум активного времени для показа скорости
 	courseMinSolved     = 5     // минимум решённых для показа скорости
 	courseMaxSignals    = 4     // сколько застреваний/брошенных показывать
+	// α: floor времени решённой задачи — засчитывается не меньше α·веса. Ограждает
+	// скорость от «фантомно быстрых» решений (обдумывание до первой посылки сессии
+	// модель не видит и кредитует только δ0): по одной задаче скорость не может
+	// выйти выше ×(1/α) от типичной.
+	courseSpeedFloorAlpha = 1.0 / 3.0
 )
 
 // courseTask — задача курса в порядке прохождения (контесты снизу вверх,
@@ -485,6 +492,14 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 	solvedWeight := 0.0
 	speedWeight := 0.0 // вес решённых С зафиксированным временем — числитель скорости
 	activeMin := 0.0
+	// Знаменатель скорости — время ТОЛЬКО решённых задач (время, утопленное в
+	// нерешённых, скорость не занижает — оно видно в активных часах и сигналах),
+	// с floor: t̃ = max(t, α·вес), чтобы «фантомно быстрые» решения (обдумывание
+	// до первой посылки сессии невидимо) не разгоняли скорость выше ×(1/α).
+	solvedFlooredMin := 0.0
+	// floorScale[norm] = t̃/t решённой задачи — тем же множителем масштабируются
+	// кванты сессий в EWMA текущей формы, чтобы обе скорости были согласованы.
+	floorScale := make(map[string]float64)
 	lastSolvedIdx := -1
 	solvedIdxs := make([]int, 0)
 	for i, t := range tasks {
@@ -499,8 +514,11 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 			// В скорость идут только решения с временем: задача без посылок с
 			// временем (ACMP, исключённый эпизод флага) даёт вес в числитель,
 			// не дав ни минуты в знаменатель, — и раздувала бы скорость.
-			if tt.taskMin[t.norm] > 0 {
+			if tm := tt.taskMin[t.norm]; tm > 0 {
 				speedWeight += weights[t.norm]
+				floored := math.Max(tm, courseSpeedFloorAlpha*weights[t.norm])
+				solvedFlooredMin += floored
+				floorScale[t.norm] = floored / tm
 			}
 		}
 	}
@@ -514,19 +532,23 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 
 	// Скорости.
 	cs.LowData = activeMin < courseMinActiveMin || cs.SolvedCount < courseMinSolved
-	if !cs.LowData && activeMin > 0 {
-		cs.Speed = round2(speedWeight / activeMin)
+	if !cs.LowData && solvedFlooredMin > 0 {
+		cs.Speed = round2(speedWeight / solvedFlooredMin)
 
-		// Текущая форма: EWMA по сессиям (вклад сессии — время на задачах курса
-		// и вес задач курса, решённых в этой сессии).
+		// Текущая форма: EWMA по сессиям (вклад сессии — время на РЕШЁННЫХ
+		// задачах курса с floor-масштабом и вес задач курса, решённых в этой
+		// сессии) — та же семантика, что у основной скорости.
 		num, den := 0.0, 0.0
 		for si := range tt.sessions {
 			s := &tt.sessions[si]
 			gamma := math.Pow(2, -now.Sub(s.end).Hours()/24/courseHalfLifeDays)
 			dur := 0.0
 			for norm, m := range s.quantum {
-				if _, ok := courseSet[norm]; ok {
-					dur += m
+				if _, ok := courseSet[norm]; !ok {
+					continue
+				}
+				if sc, solvedTimed := floorScale[norm]; solvedTimed {
+					dur += m * sc
 				}
 			}
 			w := 0.0

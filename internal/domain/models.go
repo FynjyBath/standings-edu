@@ -962,7 +962,9 @@ type StudentCourseStats struct {
 	// SolvedCount/TotalCount — решено задач курса / всего задач с весом.
 	SolvedCount int `json:"solved_count"`
 	TotalCount  int `json:"total_count"`
-	// Speed — скорость за всё время (×типичного темпа когорты); ноль — мало данных.
+	// Speed — скорость за всё время (×типичного темпа когорты); ноль — мало
+	// данных. Считается по времени решённых задач (время на нерешённых скорость
+	// не занижает) с floor α·вес на задачу от «фантомно быстрых» решений.
 	Speed float64 `json:"speed,omitempty"`
 	// SpeedRecent — «текущая форма» с экспоненциальным забыванием (полупериод 28 дней).
 	SpeedRecent float64 `json:"speed_recent,omitempty"`

@@ -675,3 +675,106 @@ func TestCourseDisplayWeights(t *testing.T) {
 		t.Fatalf("t1 без веса должен остаться 0: %v", std.Contests[0].Tasks[1].Weight)
 	}
 }
+
+// Скорость считается только по времени решённых задач (время на нерешённых её
+// не занижает), а «фантомно быстрые» решения (одинокая AC-посылка в сессии, где
+// модель видит лишь δ0) упираются в floor α·вес → скорость не выше ×(1/α).
+func TestSpeedSolvedOnlyWithFloor(t *testing.T) {
+	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	const nTasks = 15
+
+	tasks := make([]domain.GeneratedTask, 0, nTasks)
+	norms := make([]string, 0, nTasks)
+	for i := 0; i < nTasks; i++ {
+		norm := fmt.Sprintf("t%02d", i)
+		norms = append(norms, norm)
+		tasks = append(tasks, domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norm})
+	}
+	std := domain.GeneratedGroupStandings{
+		GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}},
+	}
+
+	// «Ровный» ученик: каждая задача — отдельная сессия из 3 посылок 0/+20/+40
+	// мин → активное время задачи = δ0(10) + 20 + 20 = 50 мин. Вес задач ≈ 50.
+	steady := func() *accountStatuses {
+		st := newAccountStatuses()
+		for i, norm := range norms {
+			s0 := base.Add(time.Duration(i) * 2 * time.Hour)
+			st.timed[norm] = []source.TimedSubmission{
+				{At: s0}, {At: s0.Add(20 * time.Minute)}, {At: s0.Add(40 * time.Minute), Solved: true},
+			}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+		}
+		return st
+	}
+
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 6; i++ {
+		id := fmt.Sprintf("bg%d", i)
+		students = append(students, domain.Student{ID: id})
+		statuses[id] = steady()
+	}
+
+	// «Утопающий»: решает как ровный, но дополнительно утопил ~3.5 часа в
+	// нерешённой задаче x (посылки каждые 30 мин одной сессией).
+	wasted := steady()
+	xSubs := []source.TimedSubmission{}
+	for d := 0.0; d <= 210; d += 30 {
+		xSubs = append(xSubs, source.TimedSubmission{At: base.Add(100 * time.Hour).Add(time.Duration(d) * time.Minute)})
+	}
+	wasted.timed["x"] = xSubs
+	wasted.attempted["x"] = struct{}{}
+	students = append(students, domain.Student{ID: "wasted"})
+	statuses["wasted"] = wasted
+	// x — тоже задача курса (иначе её время и так бы не считалось).
+	std.Contests[0].Tasks = append(std.Contests[0].Tasks, domain.GeneratedTask{Label: "X", NormalizedURL: "x"})
+
+	// «Фантом»: каждая задача — своя сессия из двух посылок в минуту (обдумал
+	// заранее, сел и сдал) → модель видит δ0 + 1 ≈ 11 мин на задачу при весе
+	// ≈ 50. Вторая посылка — чтобы не словить флаг «подряд с первой попытки»
+	// (тот исключил бы эпизоды из темпа — отдельный механизм).
+	phantom := newAccountStatuses()
+	for i, norm := range norms {
+		at := base.Add(time.Duration(i) * 3 * time.Hour)
+		phantom.timed[norm] = []source.TimedSubmission{{At: at}, {At: at.Add(time.Minute), Solved: true}}
+		phantom.solved[norm] = struct{}{}
+		phantom.attempted[norm] = struct{}{}
+	}
+	// Внекурсовая активность с обычными паузами, чтобы личный δ0 фантома не
+	// схлопнулся в 1 мин (δ0 — медиана внутрисессионных пауз ученика).
+	warm := []source.TimedSubmission{}
+	for i := 0; i < 20; i++ {
+		warm = append(warm, source.TimedSubmission{At: base.Add(-200 * time.Hour).Add(time.Duration(i) * 30 * time.Minute)})
+	}
+	phantom.timed["warmup"] = warm
+	phantom.attempted["warmup"] = struct{}{}
+	students = append(students, domain.Student{ID: "phantom"})
+	statuses["phantom"] = phantom
+
+	now := base.Add(30 * 24 * time.Hour)
+	stats := computeCourseStats(std, students, statuses, now, nil)
+
+	bg, ws, ph := stats["bg0"], stats["wasted"], stats["phantom"]
+	if bg == nil || ws == nil || ph == nil {
+		t.Fatal("nil stats")
+	}
+	if bg.LowData || ws.LowData || ph.LowData {
+		t.Fatalf("не должно быть low-data: bg=%v ws=%v ph=%v", bg.LowData, ws.LowData, ph.LowData)
+	}
+	// Время в нерешённой x не занижает скорость: «утопающий» равен ровному.
+	if ws.Speed != bg.Speed {
+		t.Fatalf("время на нерешённых не должно менять скорость: wasted=%v bg=%v", ws.Speed, bg.Speed)
+	}
+	// Но активные часы у «утопающего» больше — время видно там.
+	if ws.ActiveHours <= bg.ActiveHours {
+		t.Fatalf("часы утопающего должны быть больше: %v vs %v", ws.ActiveHours, bg.ActiveHours)
+	}
+	// «Фантом» упирается в floor: скорость ≈ ×(1/α) = 3, а не 50/10 = 5.
+	maxSpeed := 1.0/courseSpeedFloorAlpha + 0.2
+	if ph.Speed < 2.5 || ph.Speed > maxSpeed {
+		t.Fatalf("фантом должен быть ограничен ×%.1f: got %v", 1.0/courseSpeedFloorAlpha, ph.Speed)
+	}
+}

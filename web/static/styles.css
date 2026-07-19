@@ -1696,6 +1696,13 @@ button.summary-link-btn {
   background: color-mix(in srgb, var(--surface) 55%, transparent 45%);
 }
 
+/* display:flex выше перебивает браузерное [hidden]{display:none} (равная
+   специфичность, авторское правило важнее) — без этого плашка «анкет нет»
+   не скрывается через hidden, когда анкеты появляются. */
+.empty-state[hidden] {
+  display: none;
+}
+
 .empty-state-icon {
   font-size: 1.9rem;
   line-height: 1;

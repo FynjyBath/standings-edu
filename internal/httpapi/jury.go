@@ -113,6 +113,73 @@ func (h *Handlers) JuryContestMove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// JuryContestInlineSave добавляет inline-контест группы (жюри, по токену):
+// набор задач-ссылок с ОБЯЗАТЕЛЬНЫМ окном (начало и конец). Только создание
+// нового контеста tasks-типа (provider-контесты и редактирование — не жюри).
+func (h *Handlers) JuryContestInlineSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug        string   `json:"slug"`
+		Token       string   `json:"token"`
+		ID          string   `json:"id"`
+		Title       string   `json:"title"`
+		ScoreSystem string   `json:"score_system"`
+		TableName   string   `json:"table_name"`
+		Tasks       []string `json:"tasks"`
+		StartTime   string   `json:"start_time"`
+		EndTime     string   `json:"end_time"`
+		Freeze      string   `json:"freeze"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !h.juryAuthorized(slug, req.Token) {
+		juryDeny(w)
+		return
+	}
+	if !h.juryCanManageContests(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "у объединённой группы нет своих контестов"})
+		return
+	}
+	// Жюри обязано ввести время начала и конца.
+	if strings.TrimSpace(req.StartTime) == "" || strings.TrimSpace(req.EndTime) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "укажите время начала и конца контеста"})
+		return
+	}
+	tasks := make([]string, 0, len(req.Tasks))
+	for _, t := range req.Tasks {
+		if t = strings.TrimSpace(t); t != "" {
+			tasks = append(tasks, t)
+		}
+	}
+	if len(tasks) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "добавьте хотя бы одну задачу (ссылку)"})
+		return
+	}
+	score := strings.TrimSpace(req.ScoreSystem)
+	if score != "ioi" {
+		score = "edu"
+	}
+
+	areq := adminContestSaveRequest{
+		ID:          strings.TrimSpace(req.ID),
+		Title:       strings.TrimSpace(req.Title),
+		ScoreSystem: score,
+		TableName:   strings.TrimSpace(req.TableName),
+		StartTime:   strings.TrimSpace(req.StartTime),
+		EndTime:     strings.TrimSpace(req.EndTime),
+		Freeze:      strings.TrimSpace(req.Freeze),
+		Subcontests: []contestSubcontestReq{{Title: "Задачи", Tasks: tasks}},
+	}
+	id, code, msg := h.saveInlineContest(slug, areq, nil)
+	if msg != "" {
+		writeJSON(w, code, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
 // JuryKonduitCreate создаёт новый кондуит группы (жюри, по токену): только
 // название и число задач. Контест всегда inline manual_table (edu, плюсики),
 // id генерируется автоматически, добавляется в начало списка. Оценки жюри

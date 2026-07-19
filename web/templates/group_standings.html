@@ -180,6 +180,41 @@
       </div>
       <p class="jury-action-hint">Таблица ручного ввода оценок — редактор откроется сразу.</p>
     </div>
+    <div class="jury-action">
+      <label class="jury-action-label">Добавить свой контест (по ссылкам на задачи)</label>
+      <div class="jury-action-row">
+        <button type="button" id="jury-inline-toggle" class="admin-btn admin-btn--secondary">+ inline-контест</button>
+      </div>
+      <div id="jury-inline-form" hidden>
+        <div class="admin-form-grid" style="margin-top:0.5rem;">
+          <label><span>id *</span><input type="text" id="jury-inline-id" placeholder="olymp_2026_r1" /></label>
+          <label><span>Название</span><input type="text" id="jury-inline-title" placeholder="Тренировка 1" /></label>
+          <label><span>Тип оценивания</span>
+            <select id="jury-inline-score"><option value="edu">edu (плюсы)</option><option value="ioi">ioi (баллы)</option></select>
+          </label>
+          <label><span>Вкладка (table_name, опц.)</span><input type="text" id="jury-inline-table" placeholder="Соревнования" /></label>
+          <label><span>Начало * (<span class="c-tz">местное время</span>)</span><input type="datetime-local" id="jury-inline-start" step="60" /></label>
+          <label><span>Конец * (<span class="c-tz">местное время</span>)</span><input type="datetime-local" id="jury-inline-end" step="60" /></label>
+          <label><span>Заморозка (опц., от конца окна)</span>
+            <select id="jury-inline-freeze">
+              <option value="">нет</option>
+              <option value="30m">последние 30 мин</option>
+              <option value="1h">последний час</option>
+              <option value="1h30m">последние 1,5 ч</option>
+              <option value="2h">последние 2 ч</option>
+              <option value="all">всё соревнование</option>
+            </select>
+          </label>
+        </div>
+        <label style="display:block;margin-top:0.5rem;"><span>Задачи — по одной ссылке в строке</span>
+          <textarea id="jury-inline-tasks" class="account-list" rows="5" spellcheck="false" placeholder="https://codeforces.com/gym/105519&#10;https://informatics.msk.ru/mod/statements/view.php?id=12345&#10;https://ej.kod-u.ru/new-client?contest_id=933977"></textarea>
+        </label>
+        <p class="jury-action-hint">Ссылка на контест CF/сборник informatics/контест ejudge разворачивается в задачи. Отдельная ссылка — одна задача. Время начала и конца обязательны.</p>
+        <div class="jury-action-row" style="margin-top:0.4rem;">
+          <button type="button" id="jury-inline-save" class="admin-btn">Добавить контест</button>
+        </div>
+      </div>
+    </div>
   </div>
   {{if .JuryNewKonduits}}
   <div class="jury-konduits">
@@ -487,6 +522,39 @@
         .then(function (p) {
           location.href = "/standings/" + encodeURIComponent(slug) + "/jury-konduit?id=" + encodeURIComponent(p.id) + "&token=" + encodeURIComponent(token);
         })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    // Добавление inline-контеста: набор ссылок + обязательное окно начала/конца.
+    var inlineToggle = document.getElementById("jury-inline-toggle");
+    var inlineForm = document.getElementById("jury-inline-form");
+    if (inlineToggle && inlineForm) {
+      inlineToggle.addEventListener("click", function () { inlineForm.hidden = !inlineForm.hidden; });
+    }
+    function localToISO(v) {
+      v = (v || "").trim();
+      if (!v) return "";
+      var d = new Date(v); // datetime-local трактуется как местное время браузера
+      return isNaN(d.getTime()) ? "" : d.toISOString();
+    }
+    var inlineSave = document.getElementById("jury-inline-save");
+    if (inlineSave) inlineSave.addEventListener("click", function () {
+      var id = (document.getElementById("jury-inline-id").value || "").trim();
+      var start = localToISO(document.getElementById("jury-inline-start").value);
+      var end = localToISO(document.getElementById("jury-inline-end").value);
+      var tasks = (document.getElementById("jury-inline-tasks").value || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!id) { setStatus("Укажите id контеста", true); return; }
+      if (!start || !end) { setStatus("Укажите время начала и конца", true); return; }
+      if (!tasks.length) { setStatus("Добавьте хотя бы одну ссылку на задачу", true); return; }
+      setStatus("Добавление…", false);
+      post("/api/jury/group/contests/inline-save", {
+        slug: slug, token: token, id: id,
+        title: (document.getElementById("jury-inline-title").value || "").trim(),
+        score_system: document.getElementById("jury-inline-score").value,
+        table_name: (document.getElementById("jury-inline-table").value || "").trim(),
+        tasks: tasks, start_time: start, end_time: end,
+        freeze: document.getElementById("jury-inline-freeze").value
+      }).then(function () { location.reload(); })
         .catch(function (err) { setStatus(err.message, true); });
     });
   })();

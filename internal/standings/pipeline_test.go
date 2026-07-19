@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"testing"
+	"time"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/storage"
@@ -148,5 +149,59 @@ func TestSelectGroupsKeepsFrozenGroups(t *testing.T) {
 	// Контесты не фильтруются — builder сам решает, что пересобирать.
 	if len(out[1].Contests) != 2 {
 		t.Fatalf("contests must not be filtered: %+v", out[1].Contests)
+	}
+}
+
+// applyStaleContestPolicy: контест старше 3 месяцев (по концу окна) и уже
+// присутствующий в прошлых standings → update=false; свежий и «ещё не
+// сгенерированный» остаются update=true.
+func TestApplyStaleContestPolicy(t *testing.T) {
+	p := testPipeline(t)
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	old := now.AddDate(0, -4, 0)   // 4 месяца назад — устарел
+	fresh := now.AddDate(0, -1, 0) // месяц назад — свежий
+
+	// Прошлые standings содержат old и fresh, но НЕ never.
+	if err := p.writer.WriteGroupStandings(domain.GeneratedGroupStandings{
+		GroupSlug: "grp", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{ID: "c_old"}, {ID: "c_fresh"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data := &domain.SourceData{
+		Contests: map[string]domain.Contest{
+			"c_old":    {ID: "c_old", EndTime: &old},
+			"c_fresh":  {ID: "c_fresh", EndTime: &fresh},
+			"c_never":  {ID: "c_never", EndTime: &old},
+			"c_notime": {ID: "c_notime"},
+		},
+		Groups: []domain.GroupDefinition{{
+			Slug: "grp",
+			Contests: []domain.GroupContestRef{
+				{ID: "c_old", Update: true},
+				{ID: "c_fresh", Update: true},
+				{ID: "c_never", Update: true},
+				{ID: "c_notime", Update: true},
+			},
+		}},
+	}
+	p.applyStaleContestPolicy(data, now)
+
+	got := map[string]bool{}
+	for _, ref := range data.Groups[0].Contests {
+		got[ref.ID] = ref.Update
+	}
+	if got["c_old"] {
+		t.Errorf("c_old (4 мес, есть в прошлых) должен стать update=false")
+	}
+	if !got["c_fresh"] {
+		t.Errorf("c_fresh (1 мес) должен остаться update=true")
+	}
+	if !got["c_never"] {
+		t.Errorf("c_never (нет в прошлых standings) не должен понижаться")
+	}
+	if !got["c_notime"] {
+		t.Errorf("c_notime (без конца окна) не должен понижаться")
 	}
 }

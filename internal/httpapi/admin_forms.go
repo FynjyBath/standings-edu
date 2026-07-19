@@ -1235,10 +1235,21 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	contest, err := buildContestFromRequest(req.adminContestSaveRequest)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+	id, code, msg := h.saveInlineContest(slug, req.adminContestSaveRequest, req.Update)
+	if msg != "" {
+		writeJSON(w, code, map[string]any{"ok": false, "error": msg})
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+// saveInlineContest создаёт/обновляет inline-контест группы (общий код админа и
+// жюри). updateOverride!=nil задаёт entry-поле update; иначе — прежнее значение
+// при редактировании, true у нового. Возвращает (id, httpStatus, errMsg==""=ок).
+func (h *Handlers) saveInlineContest(slug string, req adminContestSaveRequest, updateOverride *bool) (string, int, string) {
+	contest, err := buildContestFromRequest(req)
+	if err != nil {
+		return "", http.StatusBadRequest, err.Error()
 	}
 	id := contest.ID
 	originalID := strings.TrimSpace(req.OriginalID)
@@ -1246,31 +1257,26 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 	// Кондуит: таблица оценок — в manual_tables.json группы, не в определении.
 	if originalID != "" && originalID != id {
 		if err := renameManualTablesEntry(h.groupManualTablesPath(slug), originalID, id); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
+			return "", http.StatusInternalServerError, err.Error()
 		}
 	}
 	if err := h.splitContestManualTable(&contest, h.groupManualTablesPath(slug)); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusBadRequest, err.Error()
 	}
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
 	// id должен быть уникален среди контестов группы (кроме редактируемого).
 	for _, e := range entries {
 		if e.id == id && e.id != originalID {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест с таким id уже есть в группе"})
-			return
+			return "", http.StatusBadRequest, "контест с таким id уже есть в группе"
 		}
 	}
 
 	// Entry-поле update форма контеста не редактирует: при редактировании
-	// сохраняем прежнее значение записи, для нового контеста — true. Заморозка
-	// и остальные параметры для inline живут в теле контеста и приходят из формы.
+	// сохраняем прежнее значение записи, для нового контеста — true.
 	update := true
 	if originalID != "" {
 		for _, e := range entries {
@@ -1280,27 +1286,24 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 			}
 		}
 	}
-	if req.Update != nil {
-		update = *req.Update
+	if updateOverride != nil {
+		update = *updateOverride
 	}
 
 	// Сериализуем контест и добавляем entry-level поле "update".
 	contestBlob, err := json.Marshal(contest)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(contestBlob, &m); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
 	updBlob, _ := json.Marshal(update)
 	m["update"] = updBlob
 	encoded, err := json.Marshal(m)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
 
 	out := make([]json.RawMessage, 0, len(entries)+1)
@@ -1319,10 +1322,9 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	return id, http.StatusOK, ""
 }
 
 // parseTableNameField разбирает поле table_name из формы: пусто → nil,
@@ -1437,29 +1439,33 @@ func (h *Handlers) AdminContestsPage(w http.ResponseWriter, _ *http.Request) {
 }
 
 type adminContestSaveRequest struct {
-	OriginalID       string `json:"original_id"`
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	ShortName        string `json:"short_name"`
-	ScoreSystem      string `json:"score_system"`
-	SourceType       string `json:"source_type"`
-	TableName        string `json:"table_name"`
-	StartTime        string `json:"start_time"`
-	EndTime          string `json:"end_time"`
-	ZeroPenalty      int    `json:"zero_penalty"`
-	SummaryTotalOnly bool   `json:"summary_total_only"`
-	Hidden           bool   `json:"hidden"`
-	Freeze           string `json:"freeze"`
-	Materials        []struct {
-		Title string `json:"title"`
-		URL   string `json:"url"`
-	} `json:"materials"`
-	Subcontests []struct {
-		Title string   `json:"title"`
-		Tasks []string `json:"tasks"`
-	} `json:"subcontests"`
-	Provider       string `json:"provider"`
-	ProviderConfig string `json:"provider_config"`
+	OriginalID       string                 `json:"original_id"`
+	ID               string                 `json:"id"`
+	Title            string                 `json:"title"`
+	ShortName        string                 `json:"short_name"`
+	ScoreSystem      string                 `json:"score_system"`
+	SourceType       string                 `json:"source_type"`
+	TableName        string                 `json:"table_name"`
+	StartTime        string                 `json:"start_time"`
+	EndTime          string                 `json:"end_time"`
+	ZeroPenalty      int                    `json:"zero_penalty"`
+	SummaryTotalOnly bool                   `json:"summary_total_only"`
+	Hidden           bool                   `json:"hidden"`
+	Freeze           string                 `json:"freeze"`
+	Materials        []contestMaterialReq   `json:"materials"`
+	Subcontests      []contestSubcontestReq `json:"subcontests"`
+	Provider         string                 `json:"provider"`
+	ProviderConfig   string                 `json:"provider_config"`
+}
+
+type contestMaterialReq struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+type contestSubcontestReq struct {
+	Title string   `json:"title"`
+	Tasks []string `json:"tasks"`
 }
 
 // buildContestFromRequest собирает domain.Contest из данных формы (общий код для

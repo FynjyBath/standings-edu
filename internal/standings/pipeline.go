@@ -42,6 +42,10 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 		return fmt.Errorf("load source data: %w", err)
 	}
 
+	// Контесты, закончившиеся более 3 месяцев назад, автоматически перестаём
+	// пересобирать (update=false): результаты финальны, а сеть/время экономятся.
+	p.applyStaleContestPolicy(data, time.Now())
+
 	selectedGroups := selectGroups(data.Groups, onlyGroup)
 	if onlyGroup != "" && len(selectedGroups) == 0 {
 		return fmt.Errorf("group %q not found", onlyGroup)
@@ -136,6 +140,55 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 
 	p.logger.Printf("INFO generation complete: updated %d/%d selected groups", generatedCount, len(buildGroups))
 	return nil
+}
+
+// staleContestMonths — контест, закончившийся раньше, чем столько месяцев назад,
+// автоматически становится update=false при генерации.
+const staleContestMonths = 3
+
+// applyStaleContestPolicy проставляет update=false контестам, закончившимся более
+// staleContestMonths месяцев назад. Понижаем только те, что уже есть в прошлых
+// сгенерированных standings группы (иначе контест без предыдущей версии просто
+// исчез бы) — их результаты берутся из прошлой генерации без пересбора.
+func (p *Pipeline) applyStaleContestPolicy(data *domain.SourceData, now time.Time) {
+	cutoff := now.AddDate(0, -staleContestMonths, 0)
+	for gi := range data.Groups {
+		g := &data.Groups[gi]
+		hasStaleCandidate := false
+		for ci := range g.Contests {
+			if g.Contests[ci].Update {
+				hasStaleCandidate = true
+				break
+			}
+		}
+		if !hasStaleCandidate {
+			continue
+		}
+		generated := make(map[string]struct{})
+		if std, err := p.generatedLoader.LoadGroupStandings(g.Slug); err == nil {
+			for _, c := range std.Contests {
+				generated[c.ID] = struct{}{}
+			}
+		}
+		for ci := range g.Contests {
+			ref := &g.Contests[ci]
+			if !ref.Update {
+				continue
+			}
+			if _, ok := generated[ref.ID]; !ok {
+				continue // ещё не генерировался — соберём хотя бы раз
+			}
+			contest, ok := resolveGroupContestDef(data, *ref)
+			if !ok || contest.EndTime == nil {
+				continue
+			}
+			if contest.EndTime.Before(cutoff) {
+				ref.Update = false
+				p.logger.Printf("INFO group=%s contest=%s старше %d мес (конец %s) → update=false",
+					g.Slug, ref.ID, staleContestMonths, contest.EndTime.Format("2006-01-02"))
+			}
+		}
+	}
 }
 
 // refreshContestMetadata накладывает актуальные отображаемые метаданные из конфига

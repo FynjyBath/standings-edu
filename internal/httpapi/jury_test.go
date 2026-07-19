@@ -362,3 +362,49 @@ func TestJuryKonduitPage(t *testing.T) {
 		t.Fatal("save button must be rendered")
 	}
 }
+
+// Жюри добавляет inline-контест: обязательны токен, окно (начало/конец) и задачи.
+func TestJuryContestInlineSave(t *testing.T) {
+	h, dataDir := juryTestSetup(t)
+	ok := func(body map[string]any) (int, map[string]any) { return juryPost(t, h.JuryContestInlineSave, body) }
+
+	base := map[string]any{
+		"slug": "g1", "token": "tok", "id": "olymp1", "title": "Олимпиада",
+		"score_system": "ioi", "table_name": "Соревнования",
+		"tasks":      []string{"https://codeforces.com/gym/105519"},
+		"start_time": "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z",
+		"freeze": "1h",
+	}
+	code, resp := ok(base)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("valid inline save: %d %v", code, resp)
+	}
+	// Контест записан в contests.json группы, сверху, с окном и update=true.
+	var entries []map[string]any
+	blob, _ := os.ReadFile(filepath.Join(dataDir, "groups", "g1", "contests.json"))
+	_ = json.Unmarshal(blob, &entries)
+	if entries[0]["id"] != "olymp1" || entries[0]["start_time"] == nil || entries[0]["end_time"] == nil {
+		t.Fatalf("inline контест должен быть сверху с окном: %+v", entries[0])
+	}
+	if entries[0]["update"] != true {
+		t.Fatalf("новый inline должен быть update=true: %+v", entries[0])
+	}
+
+	// Нет времени — 400.
+	noTime := map[string]any{"slug": "g1", "token": "tok", "id": "x", "tasks": []string{"u"}}
+	if code, _ := ok(noTime); code != http.StatusBadRequest {
+		t.Errorf("без окна ожидался 400, got %d", code)
+	}
+	// Нет задач — 400.
+	noTasks := map[string]any{"slug": "g1", "token": "tok", "id": "x", "tasks": []string{},
+		"start_time": "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z"}
+	if code, _ := ok(noTasks); code != http.StatusBadRequest {
+		t.Errorf("без задач ожидался 400, got %d", code)
+	}
+	// Неверный токен — 403.
+	bad := map[string]any{"slug": "g1", "token": "WRONG", "id": "x", "tasks": []string{"u"},
+		"start_time": "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z"}
+	if code, _ := ok(bad); code != http.StatusForbidden {
+		t.Errorf("неверный токен ожидался 403, got %d", code)
+	}
+}

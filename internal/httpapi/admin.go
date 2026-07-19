@@ -1301,6 +1301,9 @@ type adminGradesConfigColumn struct {
 	Metric    string          `json:"metric"`
 	Normalize json.RawMessage `json:"normalize"`
 	Upsolving *float64        `json:"upsolving"`
+	// IgnoreMissing — не учитывать целиком пропущенные контесты (см.
+	// domain.GradeColumn.IgnoreMissingContests). Только для type=table.
+	IgnoreMissing bool `json:"ignore_missing_contests"`
 }
 
 type adminGradesConfigSaveRequest struct {
@@ -1410,6 +1413,7 @@ func buildGradeColumns(in []adminGradesConfigColumn) ([]domain.GradeColumn, erro
 				}
 				col.Upsolving = &u
 			}
+			col.IgnoreMissingContests = c.IgnoreMissing
 		}
 		out = append(out, col)
 	}

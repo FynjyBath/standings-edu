@@ -822,7 +822,7 @@ func TestAdminGroupGradesConfigSave(t *testing.T) {
 	code, resp := postJSON(t, h.AdminGroupGradesConfigSave, `{
 		"slug":"grp","title":"Оценки","round":2,
 		"columns":[
-			{"id":"educational","title":"Тематические","weight":0.35,"type":"table","table_name":"Тематические","metric":"plus","normalize":"max","upsolving":0.5},
+			{"id":"educational","title":"Тематические","weight":0.35,"type":"table","table_name":"Тематические","metric":"plus","normalize":"max","upsolving":0.5,"ignore_missing_contests":true},
 			{"id":"olymp","title":"Соревнования","weight":0.35,"type":"table","metric":"score","normalize":25},
 			{"id":"zachet","title":"Зачет","weight":0.3,"type":"manual"}
 		]}`)
@@ -844,10 +844,11 @@ func TestAdminGroupGradesConfigSave(t *testing.T) {
 	}
 	c0 := gf.Grades.Columns[0]
 	if c0.ID != "educational" || c0.Type != "table" || c0.TableName != "Тематические" || c0.Metric != "plus" ||
-		c0.Normalize.Mode != domain.NormalizeMax || c0.Upsolving == nil || *c0.Upsolving != 0.5 {
+		c0.Normalize.Mode != domain.NormalizeMax || c0.Upsolving == nil || *c0.Upsolving != 0.5 || !c0.IgnoreMissingContests {
 		t.Fatalf("table column wrong: %+v", c0)
 	}
-	if gf.Grades.Columns[1].Normalize.Mode != domain.NormalizeFixed || gf.Grades.Columns[1].Normalize.Value != 25 {
+	if gf.Grades.Columns[1].Normalize.Mode != domain.NormalizeFixed || gf.Grades.Columns[1].Normalize.Value != 25 ||
+		gf.Grades.Columns[1].IgnoreMissingContests {
 		t.Fatalf("fixed normalize wrong: %+v", gf.Grades.Columns[1])
 	}
 	if gf.Grades.Columns[2].Type != "manual" {

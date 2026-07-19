@@ -129,6 +129,7 @@
           '<label><span>Нормировка</span><select class="gc-c-normmode"><option value="max">max (топ группы = 10)</option><option value="total">total (максимум задач)</option><option value="fixed">фикс. число</option></select></label>' +
           '<label class="gc-normfixed"><span>Значение нормировки</span><input type="number" class="gc-c-normval" step="0.5" placeholder="20" /></label>' +
           '<label><span>Учёт дорешки (0–1, опц.)</span><input type="number" class="gc-c-upsolving" min="0" max="1" step="0.1" placeholder="дорешка на полную" /></label>' +
+          '<label><span>Пропущенные контесты</span><select class="gc-c-countmissing"><option value="1">учитывать (как ноль)</option><option value="0">не учитывать (без попыток и баллов)</option></select></label>' +
         '</div>' +
         '<div style="margin-top:0.5rem;display:flex;gap:0.4rem;">' +
           '<button type="button" class="admin-btn admin-btn--secondary gc-up">↑</button>' +
@@ -146,6 +147,7 @@
       q(".gc-c-normmode").value = norm.mode;
       q(".gc-c-normval").value = norm.value;
       if (col.upsolving !== undefined && col.upsolving !== null) q(".gc-c-upsolving").value = String(col.upsolving);
+      q(".gc-c-countmissing").value = col.ignore_missing_contests ? "0" : "1";
 
       function syncType() { q(".gc-table-fields").style.display = (q(".gc-c-type").value === "table") ? "" : "none"; }
       function syncNorm() { q(".gc-normfixed").style.display = (q(".gc-c-normmode").value === "fixed") ? "" : "none"; }
@@ -186,6 +188,7 @@
           else col.normalize = "max";
           var up = (q(".gc-c-upsolving").value || "").trim();
           if (up !== "") col.upsolving = parseFloat(up);
+          if (q(".gc-c-countmissing").value === "0") col.ignore_missing_contests = true;
         }
         cols.push(col);
       });

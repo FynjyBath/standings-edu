@@ -90,7 +90,9 @@
           var span = document.createElement("span");
           span.className = "update-extra";
           el.appendChild(span);
-          return { el: el, extra: span, ms: Date.parse(el.getAttribute("data-updated") || "") };
+          // data-no-next — таблица не обновляется (контест с update=false): показываем
+          // только «сколько назад», без обратного отсчёта до следующего обновления.
+          return { el: el, extra: span, ms: Date.parse(el.getAttribute("data-updated") || ""), noNext: el.hasAttribute("data-no-next") };
         });
 
         function tick() {
@@ -100,7 +102,9 @@
           marks.forEach(function (m) {
             if (isNaN(m.ms)) { m.extra.textContent = ""; return; }
             var text = " · " + ago((n.getTime() - m.ms) / 1000);
-            if (intervalSec > 0) {
+            if (m.noNext) {
+              text += " · не обновляется";
+            } else if (intervalSec > 0) {
               text += " · " + countdown((m.ms + intervalSec * 1000 - n.getTime()) / 1000);
             }
             m.extra.textContent = text;

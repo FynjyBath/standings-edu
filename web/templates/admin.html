@@ -118,7 +118,7 @@
 <section class="admin-block admin-block--muted" id="archived-groups-block"{{if not .HasArchivedGroups}} hidden{{end}}>
   <h2>Архивные группы</h2>
   <p class="empty-hint">Не пересобираются при генерации (update=false), но их страницы остаются доступными. Из активных списков убраны. Достать из архива — на странице группы.</p>
-  <ul class="admin-groups-grid">
+  <ul class="admin-groups-grid admin-groups-grid--archived">
     {{range .Groups}}
     {{if and (not .IsCombined) .Archived}}
     <li>

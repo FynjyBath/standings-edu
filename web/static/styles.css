@@ -1145,6 +1145,11 @@ button.summary-link-btn {
   display: contents;
 }
 
+/* Архивный список: 4 элемента на строку (кнопка, slug, «Страница», бейдж). */
+.admin-groups-grid--archived {
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+}
+
 .admin-groups-grid li span {
   color: var(--muted);
 }

@@ -2128,6 +2128,71 @@ table.rows-collapsed.filter-active tbody tr:nth-child(n + 31) {
   white-space: nowrap;
 }
 
+/* Легенда показателей темпа: свёрнутая справка для преподавателя. */
+.metric-legend {
+  margin: 0.6rem 0 0;
+  border: 1px dashed color-mix(in srgb, var(--line) 70%, transparent 30%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent 45%);
+  font-size: 0.82rem;
+}
+.metric-legend[hidden] {
+  display: none;
+}
+.metric-legend > summary {
+  cursor: pointer;
+  padding: 0.45rem 0.8rem;
+  color: var(--muted);
+  user-select: none;
+  list-style: none;
+}
+.metric-legend > summary::-webkit-details-marker {
+  display: none;
+}
+.metric-legend > summary::after {
+  content: " ▸";
+  font-size: 0.7em;
+}
+.metric-legend[open] > summary::after {
+  content: " ▾";
+}
+.metric-legend[open] > summary {
+  border-bottom: 1px dashed color-mix(in srgb, var(--line) 70%, transparent 30%);
+}
+.metric-legend-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.45rem 0.9rem;
+  padding: 0.7rem 0.9rem 0.8rem;
+  align-items: baseline;
+}
+.metric-term {
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text);
+}
+.metric-term .course-chip,
+.metric-term .speed-pill {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.metric-desc {
+  color: var(--muted);
+  line-height: 1.45;
+}
+.metric-desc b {
+  color: var(--text);
+}
+@media (max-width: 640px) {
+  .metric-legend-grid {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .metric-desc {
+    margin-bottom: 0.45rem;
+  }
+}
+
 .course-chip a {
   color: inherit;
   text-decoration: none;

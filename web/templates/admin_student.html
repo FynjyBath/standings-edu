@@ -93,6 +93,8 @@
 </div>
 {{end}}
 
+{{if $p.CourseStats}}{{template "tempoLegend"}}{{end}}
+
 <!-- Темп группы: сессии, эмпирические веса, взвешенная скорость (docs/course_speed.pdf) -->
 {{range $p.CourseStats}}
 <section class="contest-block course-tempo-section">

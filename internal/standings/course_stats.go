@@ -28,7 +28,14 @@ const (
 	// скорость от «фантомно быстрых» решений (обдумывание до первой посылки сессии
 	// модель не видит и кредитует только δ0): по одной задаче скорость не может
 	// выйти выше ×(1/α) от типичной.
-	courseSpeedFloorAlpha = 1.0 / 3.0
+	courseSpeedFloorAlpha = 1.0 / 2.0
+	// Коррекция весов на редкость решения (survivorship bias): задачу, которую
+	// решают немногие из дошедших, решают сильные и быстрые — медиана их времени
+	// занижает сложность. Вес умножается на (reached/solved)^β, не выше cap;
+	// при меньше minReached дошедших доля слишком шумная — без коррекции.
+	courseRarityBeta       = 0.5
+	courseRarityCap        = 3.0
+	courseRarityMinReached = 5
 )
 
 // courseTask — задача курса в порядке прохождения (контесты снизу вверх,
@@ -149,7 +156,9 @@ func median(xs []float64) float64 {
 }
 
 // courseWeights — эмпирические веса задач: медиана активного времени решивших,
-// с байесовским сглаживанием к типичной задаче курса.
+// с байесовским сглаживанием к типичной задаче курса и коррекцией на редкость
+// решения (см. courseRarityBeta): задачи, которые решают немногие из дошедших,
+// дороже, чем говорит медиана времени их (сильных и быстрых) решателей.
 func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusByStudent map[string]*accountStatuses) map[string]float64 {
 	raw := make(map[string]float64, len(tasks))   // ŵ_j
 	count := make(map[string]float64, len(tasks)) // n_j
@@ -185,6 +194,36 @@ func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusB
 	for _, task := range tasks {
 		n := count[task.norm]
 		out[task.norm] = (n*raw[task.norm] + courseWeightN0*wbar) / (n + courseWeightN0)
+	}
+
+	// Коррекция на редкость решения. «Дошёл» — фронт ученика (последняя решённая
+	// по порядку курса) не раньше задачи: нормируем на дошедших, а не на всю
+	// когорту, иначе поздние задачи дорожали бы просто за позицию в курсе.
+	// Ученики без единой решённой задачи курса ни до чего не дошли.
+	reached := make([]int, len(tasks))
+	solvedN := make([]int, len(tasks))
+	for sid := range times {
+		st := statusByStudent[sid]
+		if st == nil {
+			continue
+		}
+		front := -1
+		for j, task := range tasks {
+			if _, ok := st.solved[task.norm]; ok {
+				front = j
+				solvedN[j]++
+			}
+		}
+		for j := 0; j <= front; j++ {
+			reached[j]++
+		}
+	}
+	for j, task := range tasks {
+		if reached[j] < courseRarityMinReached || solvedN[j] == 0 {
+			continue
+		}
+		p := float64(solvedN[j]) / float64(reached[j])
+		out[task.norm] *= math.Min(courseRarityCap, math.Pow(1/p, courseRarityBeta))
 	}
 	return out
 }
@@ -695,6 +734,13 @@ const (
 	courseFastWindow    = 5
 	courseFastShare     = 0.1
 	courseFastMinWeight = 30.0
+	// «Пачечная сдача»: в одной сессии решено от courseBatchLen задач курса при
+	// медианном личном времени меньше courseBatchShare от типичного — решения
+	// написаны до сессии, сдана только очередь посылок (пачки с промежуточными
+	// ошибками не ловятся ни серией first-try, ни «пулемётом»).
+	courseBatchLen       = 4
+	courseBatchShare     = 0.5
+	courseBatchMinWeight = 30.0
 	// Перерыв больше этого рвёт серию first-try: эпизод — компактная вспышка,
 	// а не растянутый на месяцы стиль решения.
 	courseStreakMaxGapDays = 14.0
@@ -862,6 +908,47 @@ func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studen
 		}
 		if wsum >= courseFastMinWeight && tsum < courseFastShare*wsum && !overlaps(win) {
 			appendFlag(fmt.Sprintf("%d задач при ~%.0f мин работы (обычно ~%.0f мин)", len(win), tsum, wsum), win)
+		}
+	}
+
+	// 4. Пачечная сдача: много решений курса одной сессией при медианном личном
+	// времени заметно меньше типичного. События отсортированы по времени, сессии
+	// тоже — индекс сессии двигается монотонно.
+	bySession := make(map[int][]solvedCourseEvent)
+	si := 0
+	for _, e := range events {
+		for si < len(tt.sessions) && !sessionContains(tt.sessions, si, e.at) {
+			si++
+		}
+		if si >= len(tt.sessions) {
+			break
+		}
+		bySession[si] = append(bySession[si], e)
+	}
+	sessionIDs := make([]int, 0, len(bySession))
+	for id := range bySession {
+		sessionIDs = append(sessionIDs, id)
+	}
+	sort.Ints(sessionIDs)
+	for _, id := range sessionIDs {
+		run := bySession[id]
+		if len(run) < courseBatchLen {
+			continue
+		}
+		ratios := make([]float64, 0, len(run))
+		wsum := 0.0
+		for _, e := range run {
+			w := weights[e.task.norm]
+			if w > 0 {
+				ratios = append(ratios, tt.taskMin[e.task.norm]/w)
+			}
+			wsum += w
+		}
+		if len(ratios) < courseBatchLen || wsum < courseBatchMinWeight || overlaps(run) {
+			continue
+		}
+		if m := median(ratios); m < courseBatchShare {
+			appendFlag(fmt.Sprintf("%d задач сданы одной сессией при времени ~%.0f%% от типичного", len(run), m*100), run)
 		}
 	}
 

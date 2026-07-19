@@ -2,6 +2,7 @@ package standings
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -772,10 +773,10 @@ func TestSpeedSolvedOnlyWithFloor(t *testing.T) {
 	if ws.ActiveHours <= bg.ActiveHours {
 		t.Fatalf("часы утопающего должны быть больше: %v vs %v", ws.ActiveHours, bg.ActiveHours)
 	}
-	// «Фантом» упирается в floor: скорость ≈ ×(1/α) = 3, а не 50/10 = 5.
-	maxSpeed := 1.0/courseSpeedFloorAlpha + 0.2
-	if ph.Speed < 2.5 || ph.Speed > maxSpeed {
-		t.Fatalf("фантом должен быть ограничен ×%.1f: got %v", 1.0/courseSpeedFloorAlpha, ph.Speed)
+	// «Фантом» упирается в floor: скорость ≈ ×(1/α), а не 50/11 ≈ 4.5.
+	want := 1.0 / courseSpeedFloorAlpha
+	if ph.Speed < want-0.3 || ph.Speed > want+0.2 {
+		t.Fatalf("фантом должен быть ограничен ×%.1f: got %v", want, ph.Speed)
 	}
 }
 
@@ -852,5 +853,147 @@ func TestForecastScaledByEfficiency(t *testing.T) {
 	}
 	if diff := dr.ForecastWeeks - bg.ForecastWeeks; diff < -0.5 || diff > 0.5 {
 		t.Fatalf("прогнозы должны быть ~равны (КПД компенсирует лишние часы): dr=%v bg=%v", dr.ForecastWeeks, bg.ForecastWeeks)
+	}
+}
+
+// Детектор «пачечной сдачи»: сессия с ≥4 решёнными задачами курса при медианном
+// времени < 50% типичного даёт флаг; честная плотная сессия (t/w ≈ 1) — нет.
+func TestDetectBatchSubmissionFlag(t *testing.T) {
+	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	const nTasks = 10
+
+	tasks := make([]domain.GeneratedTask, 0, nTasks)
+	norms := make([]string, 0, nTasks)
+	for i := 0; i < nTasks; i++ {
+		norm := fmt.Sprintf("t%02d", i)
+		norms = append(norms, norm)
+		tasks = append(tasks, domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norm})
+	}
+	std := domain.GeneratedGroupStandings{
+		GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}},
+	}
+
+	// Фон: решают каждую задачу за ~20 минут (2 посылки: промах + AC), отдельными
+	// сессиями → вес ≈ 20, first-try rate = 0 (стрик-детектор не мешает).
+	students := make([]domain.Student, 0)
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 7; i++ {
+		id := fmt.Sprintf("bg%d", i)
+		students = append(students, domain.Student{ID: id})
+		st := newAccountStatuses()
+		for j, norm := range norms {
+			s0 := base.Add(time.Duration(j) * 2 * time.Hour)
+			st.timed[norm] = []source.TimedSubmission{
+				{At: s0}, {At: s0.Add(20 * time.Minute), Solved: true},
+			}
+			st.solved[norm] = struct{}{}
+			st.attempted[norm] = struct{}{}
+		}
+		statuses[id] = st
+	}
+
+	// «Пачечник»: 6 задач одной сессией, на каждую по 2 посылки (промах + AC
+	// через 2 и 4 мин) — не first-try и паузы больше «пулемётных», но времени
+	// ~4 мин/задачу при типичных 20.
+	batch := newAccountStatuses()
+	cur := base.Add(100 * time.Hour)
+	for i := 0; i < 6; i++ {
+		batch.timed[norms[i]] = []source.TimedSubmission{
+			{At: cur.Add(4 * time.Minute)}, {At: cur.Add(8 * time.Minute), Solved: true},
+		}
+		batch.solved[norms[i]] = struct{}{}
+		batch.attempted[norms[i]] = struct{}{}
+		cur = cur.Add(8 * time.Minute)
+	}
+	students = append(students, domain.Student{ID: "batch"})
+	statuses["batch"] = batch
+
+	now := base.Add(30 * 24 * time.Hour)
+	stats := computeCourseStats(std, students, statuses, now, nil)
+
+	var batchFlags []domain.CourseFlag
+	for _, f := range stats["batch"].Flags {
+		if strings.Contains(f.Text, "одной сессией") {
+			batchFlags = append(batchFlags, f)
+		}
+	}
+	if len(batchFlags) != 1 {
+		t.Fatalf("у пачечника должен быть ровно один флаг пачки: %+v", stats["batch"].Flags)
+	}
+	if got := len(batchFlags[0].TaskURLs); got != 6 {
+		t.Fatalf("в эпизоде должно быть 6 задач: %d", got)
+	}
+	// Честные плотные сессии фона флаг не получают.
+	for _, f := range stats["bg0"].Flags {
+		if strings.Contains(f.Text, "одной сессией") {
+			t.Fatalf("у честного ученика не должно быть флага пачки: %+v", f)
+		}
+	}
+}
+
+// Коррекция весов на редкость решения: задача, решённая 4 из 8 дошедших, дорожает
+// в (8/4)^0.5 ≈ 1.41 раза; задача, решённая всеми дошедшими, — нет. Нормировка
+// по дошедшим: задача в конце курса, до которой дошли немногие, не дорожает
+// только из-за позиции.
+func TestCourseWeightsRarityCorrection(t *testing.T) {
+	tasks := []courseTask{{norm: "easy"}, {norm: "hard"}, {norm: "tail"}}
+	statuses := map[string]*accountStatuses{}
+	times := map[string]studentTaskTime{}
+	// 8 учеников: все решили easy за 10 мин; 4 решили hard за 10 мин;
+	// из них 2 решили tail за 10 мин (фронт этих двоих — tail).
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("s%d", i)
+		st := newAccountStatuses()
+		tm := map[string]float64{"easy": 10}
+		st.solved["easy"] = struct{}{}
+		if i < 4 {
+			st.solved["hard"] = struct{}{}
+			tm["hard"] = 10
+		}
+		if i < 2 {
+			st.solved["tail"] = struct{}{}
+			tm["tail"] = 10
+		}
+		statuses[id] = st
+		times[id] = studentTaskTime{taskMin: tm}
+	}
+	w := courseWeights(tasks, times, statuses)
+
+	// easy: решили 8 из 8 дошедших → без коррекции (сглаженный ≈ 10).
+	if w["easy"] < 9.9 || w["easy"] > 10.1 {
+		t.Fatalf("easy: вес должен остаться ~10: %v", w["easy"])
+	}
+	// hard: дошли 8 (фронт ≥ hard у решивших hard и tail... фронт «дошёл» у всех 8:
+	// фронт первых четырёх — hard/tail, у остальных — easy (не дошли).
+	// Дошли до hard: 4 (фронт hard) + 2 (фронт tail)... у i<4 фронт ≥ hard.
+	// reached(hard) = 4? Нет: фронт s0..s3 — hard или tail (≥1), s4..s7 — easy (0).
+	// reached(hard)=4, solved=4 → p=1 → без коррекции.
+	if w["hard"] < 9.9 || w["hard"] > 10.1 {
+		t.Fatalf("hard: все дошедшие решили → без коррекции: %v", w["hard"])
+	}
+	// tail: дошли 2 (фронт tail), решили 2 → p=1, но reached=2 < minReached →
+	// коррекции нет (шумно).
+	if w["tail"] < 9.9 || w["tail"] > 10.1 {
+		t.Fatalf("tail: мало дошедших → без коррекции: %v", w["tail"])
+	}
+
+	// Теперь редкость: до hard дошли 8 (у всех фронт ≥ hard), решили 4.
+	for i := 4; i < 8; i++ {
+		id := fmt.Sprintf("s%d", i)
+		st := statuses[id]
+		st.solved["tail"] = struct{}{} // фронт сдвигается на tail — дошли до hard, но не решили её
+		tm := times[id].taskMin
+		tm["tail"] = 10
+	}
+	w = courseWeights(tasks, times, statuses)
+	// hard: reached=8, solved=4 → множитель (8/4)^0.5 = √2 ≈ 1.41.
+	want := 10 * math.Sqrt2
+	if math.Abs(w["hard"]-want) > 0.5 {
+		t.Fatalf("hard: вес должен вырасти до ~%.1f: %v", want, w["hard"])
+	}
+	// easy: решили все 8 дошедших — по-прежнему без коррекции.
+	if w["easy"] < 9.9 || w["easy"] > 10.1 {
+		t.Fatalf("easy: вес должен остаться ~10: %v", w["easy"])
 	}
 }

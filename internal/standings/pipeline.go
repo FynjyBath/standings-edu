@@ -314,6 +314,7 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 	for _, contestRef := range group.Contests {
 		if contestRef.Update {
 			if contest, ok := updatedByID[contestRef.ID]; ok {
+				contest.NotUpdated = false
 				merged.Contests = append(merged.Contests, contest)
 				continue
 			}
@@ -333,6 +334,7 @@ func (p *Pipeline) mergeWithNonUpdatedContests(group domain.GroupDefinition, upd
 			p.logger.Printf("WARN group=%s contest=%s update=false but missing in previous standings", group.Slug, contestRef.ID)
 			continue
 		}
+		contest.NotUpdated = true // update=false → под таблицей показываем «обновлено»
 		reconcileContestRoster(&contest, group, students)
 		merged.Contests = append(merged.Contests, contest)
 	}

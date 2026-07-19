@@ -150,6 +150,20 @@ body {
   text-transform: uppercase;
 }
 
+.header-updated {
+  margin-right: auto;
+  font-size: 0.72rem;
+  color: color-mix(in srgb, currentColor 62%, transparent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.header-updated .update-extra {
+  color: color-mix(in srgb, currentColor 88%, transparent);
+}
+
 .theme-toggle {
   border: 1px solid color-mix(in srgb, var(--header-line) 68%, #ffffff 32%);
   background: color-mix(in srgb, var(--header-bg) 78%, var(--accent) 22%);
@@ -1400,6 +1414,10 @@ button.summary-link-btn {
 
   .header-inner {
     min-height: 54px;
+  }
+
+  .header-updated {
+    display: none;
   }
 
   .theme-toggle {

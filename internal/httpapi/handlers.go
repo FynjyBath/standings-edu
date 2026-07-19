@@ -406,6 +406,9 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 		TokenValid:      tokenValid,
 		CombinedMembers: h.combinedMemberTitles(slug),
 	}
+	if gf, ok := h.readSourceGroupFile(slug); ok {
+		page.GroupArchived = gf.Archived()
+	}
 	if tokenValid {
 		page.Token = token
 		h.juryStandingsExtras(slug, &page)
@@ -466,6 +469,10 @@ func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) 
 		if standings.Contests[i].ID != contestID {
 			continue
 		}
+		archived := false
+		if gf, ok := h.readSourceGroupFile(slug); ok {
+			archived = gf.Archived()
+		}
 		data := map[string]any{
 			"Contest":       standings.Contests[i],
 			"TokenValid":    false,
@@ -473,6 +480,7 @@ func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) 
 			"JuryKonduits":  map[string]bool(nil),
 			"GroupSlug":     standings.GroupSlug,
 			"Token":         "",
+			"GroupArchived": archived,
 		}
 		if err := h.renderer.RenderFragment(w, http.StatusOK, "group_standings.html", "contestBlockBody", data); err != nil {
 			h.logger.Printf("ERROR render contest fragment slug=%s id=%s err=%v", slug, contestID, err)
@@ -966,6 +974,9 @@ type GroupPageData struct {
 	// CombinedMembers — названия групп-участниц, если это объединённая группа
 	// (для подписи на странице). Пусто — обычная группа.
 	CombinedMembers []string
+	// GroupArchived — группа в архиве (update=false): под всеми её таблицами
+	// показываем «последнее обновление» (таблицы не пересобираются).
+	GroupArchived bool
 	// Жюри-панель (заполняется только при валидном токене):
 	// JuryCanManage — можно добавлять/двигать контесты (обычная группа);
 	// JuryAddable — глобальные контесты, которых ещё нет в группе;

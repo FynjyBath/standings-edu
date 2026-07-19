@@ -297,6 +297,12 @@ func (g GroupFile) TaskLinksShown() bool {
 	return g.ShowTaskLinks == nil || *g.ShowTaskLinks
 }
 
+// Archived — группа в архиве (update=false): её таблицы не пересобираются, но
+// страница остаётся доступной. nil/true — активная группа.
+func (g GroupFile) Archived() bool {
+	return g.Update != nil && !*g.Update
+}
+
 type GroupDefinition struct {
 	Slug         string
 	Title        string
@@ -551,6 +557,9 @@ type GeneratedContestStandings struct {
 	// с update=false он остаётся старым, поэтому видно, что таблица давно не
 	// обновлялась. nil — для таблиц, сгенерированных до появления этого поля.
 	GeneratedAt *time.Time `json:"generated_at,omitempty"`
+	// NotUpdated — контест не пересобирается (update=false, в т.ч. авто-архив
+	// старше 3 месяцев). Под такой таблицей показываем «последнее обновление».
+	NotUpdated bool `json:"not_updated,omitempty"`
 	// StartTime/EndTime — окно контеста (из определения или записи группы).
 	// До StartTime сервер не отдаёт ссылки на задачи; окно показывается в шапке.
 	StartTime *time.Time `json:"start_time,omitempty"`

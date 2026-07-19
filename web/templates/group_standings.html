@@ -3,7 +3,7 @@
 {{- end}}
 
 {{define "contestBlockBody"}}
-{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$canManage := .JuryCanManage}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}
+{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$canManage := .JuryCanManage}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}{{$groupArchived := .GroupArchived}}
 {{- with $contest}}
     <div class="contest-block-head">
       <h2>{{.Title}}</h2>
@@ -112,7 +112,7 @@
     {{if not .Tasks}}
     <p class="empty-hint">В контесте нет задач.</p>
     {{end}}
-    {{if contestGeneratedAt .GeneratedAt}}
+    {{if and (contestGeneratedAt .GeneratedAt) (or .NotUpdated $groupArchived)}}
     <p class="contest-generated-at" data-updated="{{contestGeneratedAtISO .GeneratedAt}}">Последнее обновление: {{contestGeneratedAt .GeneratedAt}}</p>
     {{end}}
 {{end}}
@@ -289,7 +289,7 @@
       <button type="button" class="rows-expand-btn lazy-load-btn">Показать таблицу</button>
     </div>
     {{else}}
-    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "JuryCanManage" $.JuryCanManage "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token)}}
+    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "JuryCanManage" $.JuryCanManage "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token "GroupArchived" $.GroupArchived)}}
     {{end}}
   </section>
   {{end}}

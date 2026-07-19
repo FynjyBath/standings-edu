@@ -127,4 +127,26 @@ func TestBuildGroupExportWorkbook(t *testing.T) {
 	if !strings.Contains(sor, "<v>100</v>") || !strings.Contains(sor, "<v>50</v>") {
 		t.Fatalf("баллы ioi должны быть числами: %s", sor)
 	}
+
+	// Подсветка: edu «+»/«−» — текстовые правила; ioi — шкала 0..100;
+	// колонка-сумма — шкала 0..макс задач с форматом «N / макс».
+	if !strings.Contains(tem, `operator="equal"`) || !strings.Contains(tem, `<formula>"+"</formula>`) {
+		t.Fatalf("на edu-листе должны быть правила для «+»: %s", tem)
+	}
+	if !strings.Contains(tem, `type="colorScale"`) {
+		t.Fatal("колонка-сумма должна иметь цветовую шкалу")
+	}
+	if !strings.Contains(sor, `<cfvo type="num" val="0"/><cfvo type="num" val="100"/>`) {
+		t.Fatalf("ioi-лист должен иметь шкалу 0..100: %s", sor)
+	}
+	styles := files["xl/styles.xml"]
+	if !strings.Contains(styles, `formatCode="0&#34; / 2&#34;"`) {
+		t.Fatalf("нужен формат «N / 2» для колонки-суммы: %s", styles)
+	}
+	if !strings.Contains(styles, `FF92D8AA`) || !strings.Contains(styles, `FFF8D7D7`) {
+		t.Fatal("в стилях должны быть цвета solved/attempted")
+	}
+	if !strings.Contains(tem, `9EE19E`) {
+		t.Fatal("шкала колонки-суммы должна использовать палитру сайта")
+	}
 }

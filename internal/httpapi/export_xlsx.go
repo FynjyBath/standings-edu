@@ -276,17 +276,57 @@ func fillContestsSheet(sheet *xlsx.Sheet, contests []domain.GeneratedContestStan
 		}
 		sheet.Rows = append(sheet.Rows, row)
 	}
+
+	// Подсветка как на сайте: «+» — зелёная, «−» — красная (edu-задачи);
+	// баллы ioi — белый→зелёный (0..100); колонки-суммы — красный→жёлтый→
+	// зелёный по доле от максимума.
+	if len(students) > 0 {
+		lastRow := 2 + len(students) - 1
+		for _, c := range contests {
+			p := placement[c.ID]
+			sqref := xlsx.CellRef(p.firstCol, 2) + ":" + xlsx.CellRef(p.lastCol, lastRow)
+			switch {
+			case p.totalOnly:
+				max := float64(p.taskCount)
+				if p.isIoi {
+					max *= 100
+				}
+				sheet.CondFmts = append(sheet.CondFmts, xlsx.CondFmt{
+					Sqref: sqref, Scale: true, Min: 0, Max: max,
+					Colors: []string{"E19E9E", "E1E19E", "9EE19E"},
+				})
+			case p.isIoi:
+				sheet.CondFmts = append(sheet.CondFmts, xlsx.CondFmt{
+					Sqref: sqref, Scale: true, Min: 0, Max: 100,
+					Colors: []string{"FFFFFF", "50B46E"},
+				})
+			default:
+				sheet.CondFmts = append(sheet.CondFmts,
+					xlsx.CondFmt{Sqref: sqref, Text: "+", Good: true},
+					xlsx.CondFmt{Sqref: sqref, Text: "−"},
+				)
+			}
+		}
+	}
 	return placement
 }
 
+// totalOnlyCell — ячейка контеста «только сумма»: число с форматом «N / макс»
+// (как «2 / 24» на сайте) — значение остаётся числом для формул.
 func totalOnlyCell(c domain.GeneratedContestStandings, row domain.GeneratedRow, has bool, isIoi bool) xlsx.Cell {
 	if !has {
 		return xlsx.Cell{}
 	}
+	max := len(c.Tasks)
 	if isIoi {
-		return xlsx.Number(strconv.Itoa(row.TotalScore))
+		max *= 100
 	}
-	return xlsx.Number(strconv.Itoa(row.SolvedCount))
+	numFmt := `0" / ` + strconv.Itoa(max) + `"`
+	value := row.SolvedCount
+	if isIoi {
+		value = row.TotalScore
+	}
+	return xlsx.Cell{Kind: xlsx.CellNumber, Value: strconv.Itoa(value), NumFmt: numFmt}
 }
 
 // taskCell — ячейка задачи: edu — «+» (решена, вкл. дорешку) / «−» (попытки) /

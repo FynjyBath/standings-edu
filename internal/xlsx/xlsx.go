@@ -38,6 +38,22 @@ type Cell struct {
 	Kind  CellKind
 	Value string
 	Style StyleID
+	// NumFmt — кастомный числовой формат (код Excel, напр. `0" / 24"`):
+	// значение остаётся числом для формул, показывается с подписью.
+	NumFmt string
+}
+
+// CondFmt — условное форматирование диапазона: либо правило «текст равен»
+// (готовые стили «хорошо»/«плохо»), либо цветовая шкала по числам.
+type CondFmt struct {
+	Sqref string // диапазон, напр. "D3:F12"
+	// Текстовое правило: ячейка равна Text → зелёный (Good) или красный фон.
+	Text string
+	Good bool
+	// Шкала: градиент от Min к Max цветами Colors (2 или 3 значений RRGGBB).
+	Scale    bool
+	Min, Max float64
+	Colors   []string
 }
 
 func Text(s string) Cell        { return Cell{Kind: CellText, Value: s} }
@@ -54,6 +70,7 @@ type Sheet struct {
 	Rows      [][]Cell
 	Merges    []string
 	ColWidths map[int]float64
+	CondFmts  []CondFmt
 	// FreezeRows/FreezeCols — закрепить первые строки/колонки.
 	FreezeRows int
 	FreezeCols int
@@ -148,20 +165,96 @@ func (wb *Workbook) Write(w io.Writer) error {
 		return err
 	}
 
+	// Кастомные числовые форматы: собираем со всех ячеек; каждой паре
+	// (базовый стиль, формат) — свой xf. Базовые xf 0..2 всегда на месте.
+	numFmtID := map[string]int{}
+	xfIndex := map[[2]interface{}]int{} // {StyleID, numFmt} → индекс xf
+	type xfDef struct {
+		style StyleID
+		fmtID int
+	}
+	extraXfs := []xfDef{}
+	nextFmt := 164
+	for _, s := range wb.Sheets {
+		for _, row := range s.Rows {
+			for _, c := range row {
+				if c.NumFmt == "" {
+					continue
+				}
+				id, ok := numFmtID[c.NumFmt]
+				if !ok {
+					id = nextFmt
+					nextFmt++
+					numFmtID[c.NumFmt] = id
+				}
+				key := [2]interface{}{c.Style, c.NumFmt}
+				if _, ok := xfIndex[key]; !ok {
+					xfIndex[key] = 3 + len(extraXfs)
+					extraXfs = append(extraXfs, xfDef{style: c.Style, fmtID: id})
+				}
+			}
+		}
+	}
+	resolveXf := func(c Cell) int {
+		if c.NumFmt == "" {
+			return int(c.Style)
+		}
+		return xfIndex[[2]interface{}{c.Style, c.NumFmt}]
+	}
+
 	// Стили: 0 — обычный; 1 — жирный по центру с переносом; 2 — серый.
-	if err := add("xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><sz val="10"/><color rgb="FF808080"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>`); err != nil {
+	// dxf 0/1 — «хорошо»/«плохо» для условного форматирования (палитра сайта).
+	var st strings.Builder
+	st.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
+	if len(numFmtID) > 0 {
+		fmt.Fprintf(&st, `<numFmts count="%d">`, len(numFmtID))
+		fmts := make([]string, 0, len(numFmtID))
+		for f := range numFmtID {
+			fmts = append(fmts, f)
+		}
+		sortStrings(fmts, numFmtID)
+		for _, f := range fmts {
+			fmt.Fprintf(&st, `<numFmt numFmtId="%d" formatCode="%s"/>`, numFmtID[f], esc(f))
+		}
+		st.WriteString(`</numFmts>`)
+	}
+	st.WriteString(`<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><sz val="10"/><color rgb="FF808080"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>`)
+	fmt.Fprintf(&st, `<cellXfs count="%d">`, 3+len(extraXfs))
+	st.WriteString(`<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>`)
+	for _, xf := range extraXfs {
+		fontID := 0
+		if xf.style == StyleHeader {
+			fontID = 1
+		} else if xf.style == StyleMuted {
+			fontID = 2
+		}
+		fmt.Fprintf(&st, `<xf numFmtId="%d" fontId="%d" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`, xf.fmtID, fontID)
+	}
+	st.WriteString(`</cellXfs>`)
+	st.WriteString(`<dxfs count="2"><dxf><font><color rgb="FF123622"/></font><fill><patternFill><bgColor rgb="FF92D8AA"/></patternFill></fill></dxf><dxf><font><color rgb="FF7B2323"/></font><fill><patternFill><bgColor rgb="FFF8D7D7"/></patternFill></fill></dxf></dxfs>`)
+	st.WriteString(`</styleSheet>`)
+	if err := add("xl/styles.xml", st.String()); err != nil {
 		return err
 	}
 
 	for i, s := range wb.Sheets {
-		if err := add(fmt.Sprintf("xl/worksheets/sheet%d.xml", i+1), sheetXML(s)); err != nil {
+		if err := add(fmt.Sprintf("xl/worksheets/sheet%d.xml", i+1), sheetXML(s, resolveXf)); err != nil {
 			return err
 		}
 	}
 	return z.Close()
 }
 
-func sheetXML(s *Sheet) string {
+// sortStrings сортирует форматы по их id — стабильный порядок в styles.xml.
+func sortStrings(fmts []string, ids map[string]int) {
+	for i := 1; i < len(fmts); i++ {
+		for j := i; j > 0 && ids[fmts[j-1]] > ids[fmts[j]]; j-- {
+			fmts[j-1], fmts[j] = fmts[j], fmts[j-1]
+		}
+	}
+}
+
+func sheetXML(s *Sheet, resolveXf func(Cell) int) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
 
@@ -198,13 +291,13 @@ func sheetXML(s *Sheet) string {
 	for ri, row := range s.Rows {
 		fmt.Fprintf(&b, `<row r="%d">`, ri+1)
 		for ci, cell := range row {
-			if cell.Kind == CellEmpty && cell.Style == StyleDefault {
+			if cell.Kind == CellEmpty && cell.Style == StyleDefault && cell.NumFmt == "" {
 				continue
 			}
 			ref := CellRef(ci, ri)
 			style := ""
-			if cell.Style != StyleDefault {
-				style = fmt.Sprintf(` s="%d"`, cell.Style)
+			if xf := resolveXf(cell); xf != 0 {
+				style = fmt.Sprintf(` s="%d"`, xf)
 			}
 			switch cell.Kind {
 			case CellText:
@@ -227,6 +320,34 @@ func sheetXML(s *Sheet) string {
 			fmt.Fprintf(&b, `<mergeCell ref="%s"/>`, m)
 		}
 		b.WriteString(`</mergeCells>`)
+	}
+
+	// Условное форматирование: текстовые правила ссылаются на dxf 0 («хорошо»,
+	// зелёный) и 1 («плохо», красный); шкалы — градиент по числам.
+	prio := 1
+	for _, cf := range s.CondFmts {
+		fmt.Fprintf(&b, `<conditionalFormatting sqref="%s">`, esc(cf.Sqref))
+		if cf.Scale {
+			fmt.Fprintf(&b, `<cfRule type="colorScale" priority="%d"><colorScale>`, prio)
+			switch len(cf.Colors) {
+			case 3:
+				fmt.Fprintf(&b, `<cfvo type="num" val="%g"/><cfvo type="num" val="%g"/><cfvo type="num" val="%g"/>`, cf.Min, (cf.Min+cf.Max)/2, cf.Max)
+			default:
+				fmt.Fprintf(&b, `<cfvo type="num" val="%g"/><cfvo type="num" val="%g"/>`, cf.Min, cf.Max)
+			}
+			for _, c := range cf.Colors {
+				fmt.Fprintf(&b, `<color rgb="FF%s"/>`, esc(c))
+			}
+			b.WriteString(`</colorScale></cfRule>`)
+		} else {
+			dxf := 1
+			if cf.Good {
+				dxf = 0
+			}
+			fmt.Fprintf(&b, `<cfRule type="cellIs" dxfId="%d" priority="%d" operator="equal"><formula>"%s"</formula></cfRule>`, dxf, prio, esc(cf.Text))
+		}
+		b.WriteString(`</conditionalFormatting>`)
+		prio++
 	}
 	b.WriteString(`</worksheet>`)
 	return b.String()

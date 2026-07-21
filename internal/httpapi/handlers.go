@@ -894,8 +894,10 @@ func (h *Handlers) buildDirectory() []DirectoryGroup {
 
 func (h *Handlers) buildFooterInfo() FooterInfo {
 	now := time.Now()
+	// Всё показываемое время — в поясе браузера (JS перерисовывает по ISO).
+	// ServerTime/LastUpdatedMSK — лишь фолбэк-текст на случай без JS (в МСК).
 	footer := FooterInfo{
-		ServerTime:      now.Format("02.01.2006 15:04:05 MST"),
+		ServerTime:      now.In(moscowLocation).Format("15:04:05"),
 		ServerTimeISO:   now.Format(time.RFC3339),
 		LastUpdatedMSK:  "—",
 		IntervalSeconds: int(h.generateInterval / time.Second),
@@ -909,7 +911,7 @@ func (h *Handlers) buildFooterInfo() FooterInfo {
 		return footer
 	}
 
-	footer.LastUpdatedMSK = updatedAt.In(moscowLocation).Format("02.01.2006 15:04:05 MST")
+	footer.LastUpdatedMSK = updatedAt.In(moscowLocation).Format("02.01.2006 15:04:05") + " МСК"
 	footer.LastUpdatedISO = updatedAt.Format(time.RFC3339)
 	return footer
 }

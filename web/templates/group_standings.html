@@ -15,7 +15,7 @@
       </div>
     </div>
     {{if .FrozenAt}}
-    <p class="empty-hint">Результаты после {{contestGeneratedAt .FrozenAt}} скрыты до разморозки.</p>
+    <p class="empty-hint">Результаты после {{localTimeSec .FrozenAt}} скрыты до разморозки.</p>
     {{end}}
     {{if and $tokenValid $canManage}}
     <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
@@ -112,8 +112,8 @@
     {{if not .Tasks}}
     <p class="empty-hint">В контесте нет задач.</p>
     {{end}}
-    {{if and (contestGeneratedAt .GeneratedAt) (or .NotUpdated $groupArchived)}}
-    <p class="contest-generated-at" data-updated="{{contestGeneratedAtISO .GeneratedAt}}" data-no-next>Последнее обновление: {{contestGeneratedAt .GeneratedAt}}</p>
+    {{if and (contestGeneratedAtISO .GeneratedAt) (or .NotUpdated $groupArchived)}}
+    <p class="contest-generated-at" data-updated="{{contestGeneratedAtISO .GeneratedAt}}" data-no-next>Последнее обновление: {{localTimeSec .GeneratedAt}}</p>
     {{end}}
 {{end}}
 {{end}}
@@ -300,21 +300,15 @@
 
 <script>
   // «Умный» чип статуса контеста справа от названия: до старта / идёт / завершён.
-  // Всё время — в местном поясе зрителя (считаем из ISO на клиенте), полное окно
-  // старт–конец кладём в подсказку (title). Часы клиента синхронизируем по
-  // серверному «сейчас» (data-server-now в футере), чтобы отсчёт был точным даже
-  // при неверных часах у зрителя.
+  // Всё абсолютное время — в поясе браузера (window.LT), полное окно старт–конец
+  // кладём в подсказку (title). Часы клиента синхронизируем по серверному
+  // «сейчас» (data-server-now в футере), чтобы отсчёт был точным даже при
+  // неверных часах у зрителя.
   (function () {
     var cfg = document.querySelector("[data-server-now]");
     var serverNowMs = cfg ? Date.parse(cfg.getAttribute("data-server-now") || "") : NaN;
     var skew = isNaN(serverNowMs) ? 0 : (serverNowMs - Date.now());
-    var MON = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
     function pad2(n) { return String(n).padStart(2, "0"); }
-    function hhmm(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
-    function dayMon(d) { return d.getDate() + " " + MON[d.getMonth()]; }
-    function sameDay(a, b) {
-      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    }
     // Точный обратный отсчёт H:MM:SS (или «N дн H:MM:SS»).
     function clock(ms) {
       var t = Math.max(0, Math.floor(ms / 1000));
@@ -341,13 +335,13 @@
         el.dataset.statusReady = "1";
         var x = { el: el, start: Date.parse(el.getAttribute("data-start") || ""), end: Date.parse(el.getAttribute("data-end") || "") };
         if (isNaN(x.start) || isNaN(x.end)) return;
-        var s = new Date(x.start), e = new Date(x.end);
-        x.startLabel = sameDay(s, e) ? hhmm(s) : dayMon(s) + " " + hhmm(s);
-        x.endLabel = dayMon(e) + " " + hhmm(e);
-        // Подсказка — полное окно контеста в местном поясе.
-        x.el.title = sameDay(s, e)
-          ? dayMon(s) + ", " + hhmm(s) + " – " + hhmm(e)
-          : dayMon(s) + " " + hhmm(s) + " – " + x.endLabel;
+        var same = window.LT.sameDay(x.start, x.end);
+        x.startLabel = same ? window.LT.hhmm(x.start) : window.LT.dayMon(x.start) + " " + window.LT.hhmm(x.start);
+        x.endLabel = window.LT.dayMon(x.end) + " " + window.LT.hhmm(x.end);
+        // Подсказка — полное окно контеста в поясе браузера.
+        x.el.title = same
+          ? window.LT.dayMon(x.start) + ", " + window.LT.hhmm(x.start) + " – " + window.LT.hhmm(x.end)
+          : window.LT.dayMon(x.start) + " " + window.LT.hhmm(x.start) + " – " + x.endLabel;
         nodes.push(x);
       });
     }
@@ -419,6 +413,7 @@
     var slug = {{.Standings.GroupSlug}};
 
     function initScope(sec) {
+      if (window.LT) window.LT.paint(sec); // локальное время в подгруженном блоке
       if (window.groupCollectStatus) window.groupCollectStatus(sec);
       if (window.groupInitUV) window.groupInitUV(sec);
       if (window.standingsInitScope) window.standingsInitScope(sec);

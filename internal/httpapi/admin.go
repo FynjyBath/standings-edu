@@ -52,9 +52,11 @@ type AdminActionResult struct {
 	Success   bool     `json:"success"`
 	ExitCode  int      `json:"exit_code"`
 	StartedAt string   `json:"started_at"`
-	Duration  string   `json:"duration"`
-	Output    string   `json:"output"`
-	Errors    []string `json:"errors,omitempty"`
+	// StartedAtISO — тот же момент в ISO для показа в поясе браузера (data-localtime).
+	StartedAtISO string   `json:"started_at_iso,omitempty"`
+	Duration     string   `json:"duration"`
+	Output       string   `json:"output"`
+	Errors       []string `json:"errors,omitempty"`
 }
 
 type AdminPageData struct {
@@ -1606,13 +1608,14 @@ func newAdminResult(action string, success bool, exitCode int, started time.Time
 		errorsList = nil
 	}
 	return AdminActionResult{
-		Action:    action,
-		Success:   success,
-		ExitCode:  exitCode,
-		StartedAt: started.Format("2006-01-02 15:04:05 MST"),
-		Duration:  duration.String(),
-		Output:    output,
-		Errors:    errorsList,
+		Action:       action,
+		Success:      success,
+		ExitCode:     exitCode,
+		StartedAt:    started.In(moscowLocation).Format("2006-01-02 15:04:05") + " МСК",
+		StartedAtISO: started.Format(time.RFC3339),
+		Duration:     duration.String(),
+		Output:       output,
+		Errors:       errorsList,
 	}
 }
 

@@ -66,6 +66,8 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"numText":                 numText,
 			"pct":                     func(v float64) int { return int(math.Round(v * 100)) },
 			"submissionTime":          submissionTime,
+			"localTime":               localTime,
+			"localTimeSec":            localTimeSec,
 			"flagPeriod":              flagPeriod,
 			"unixMs":                  func(t time.Time) int64 { return t.UnixMilli() },
 			"join":                    strings.Join,
@@ -462,7 +464,42 @@ func gradeFixed(v *float64, decimals *int) string {
 	return strconv.FormatFloat(*v, 'f', d, 64)
 }
 
-// submissionTime форматирует время посылки в MSK для ленты профиля.
+// Всё показываемое абсолютное время — в поясе браузера смотрящего. Сервер
+// отдаёт момент в ISO (с зоной) внутри <time data-localtime>, а клиент (window.LT
+// в layout) переписывает текст в локальный формат. Серверный текст — фолбэк в
+// МСК на случай без JS. asTime принимает time.Time и *time.Time.
+func asTime(v any) (time.Time, bool) {
+	switch t := v.(type) {
+	case time.Time:
+		return t, true
+	case *time.Time:
+		if t == nil {
+			return time.Time{}, false
+		}
+		return *t, true
+	}
+	return time.Time{}, false
+}
+
+func localTimeHTML(v any, withSec bool) template.HTML {
+	t, ok := asTime(v)
+	if !ok || t.IsZero() {
+		return ""
+	}
+	layout, sec := "02.01.2006 15:04", "0"
+	if withSec {
+		layout, sec = "02.01.2006 15:04:05", "1"
+	}
+	fallback := t.In(moscowLocation).Format(layout) + " МСК"
+	return template.HTML(fmt.Sprintf(`<time data-localtime="%s" data-sec="%s">%s</time>`,
+		t.Format(time.RFC3339), sec, template.HTMLEscapeString(fallback)))
+}
+
+// localTime/localTimeSec — момент в поясе браузера (мин / с секундами). Пусто — нет.
+func localTime(v any) template.HTML    { return localTimeHTML(v, false) }
+func localTimeSec(v any) template.HTML { return localTimeHTML(v, true) }
+
+// submissionTime форматирует время посылки в МСК (фолбэк-текст ленты профиля).
 func submissionTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
@@ -470,13 +507,16 @@ func submissionTime(t time.Time) string {
 	return t.In(moscowLocation).Format("02.01.2006 15:04")
 }
 
-// flagPeriod — период эпизода флага: одна метка для компактного эпизода,
-// диапазон «от — до», если эпизод растянут больше чем на сутки.
-func flagPeriod(at, until time.Time) string {
-	if until.IsZero() || until.Sub(at) < 24*time.Hour {
-		return submissionTime(at)
+// flagPeriod — период эпизода флага (в поясе браузера): одна метка для
+// компактного эпизода, диапазон «от — до», если эпизод растянут больше суток.
+func flagPeriod(at, until time.Time) template.HTML {
+	if at.IsZero() {
+		return ""
 	}
-	return submissionTime(at) + " — " + submissionTime(until)
+	if until.IsZero() || until.Sub(at) < 24*time.Hour {
+		return localTime(at)
+	}
+	return localTime(at) + " — " + localTime(until)
 }
 
 // siteName — человекочитаемое имя сайта для профиля участника.
@@ -520,7 +560,7 @@ func contestGeneratedAt(generatedAt *time.Time) string {
 	if generatedAt == nil || generatedAt.IsZero() {
 		return ""
 	}
-	return generatedAt.In(moscowLocation).Format("02.01.2006 15:04:05 MST")
+	return generatedAt.In(moscowLocation).Format("02.01.2006 15:04:05") + " МСК"
 }
 
 // contestGeneratedAtISO — то же время в ISO 8601 (для «живого» относительного

@@ -49,7 +49,7 @@
   {{if .NotGenerated}}
   <p class="empty-hint">Профиль ещё не сгенерирован. Он появится после ближайшей генерации таблиц (кнопка «Сгенерировать» в админке).</p>
   {{else}}
-  <p class="empty-hint">Активность и посылки — только Codeforces и Informatics (ACMP не отдаёт время посылок). Данные на момент последней генерации{{with contestGeneratedAt $p.GeneratedAt}}: {{.}}{{end}}.</p>
+  <p class="empty-hint">Активность и посылки — только Codeforces и Informatics (ACMP не отдаёт время посылок). Время показывается в вашем часовом поясе. Данные на момент последней генерации{{with localTimeSec $p.GeneratedAt}}: {{.}}{{end}}.</p>
   {{end}}
 </section>
 
@@ -66,7 +66,7 @@
     <div class="stat-card"><span class="stat-value">{{$s.Submissions30d}}</span><span class="stat-label">посылок за 30 дней</span></div>
     <div class="stat-card"><span class="stat-value">{{$s.TotalSubmissions}}</span><span class="stat-label">посылок всего</span></div>
     <div class="stat-card"><span class="stat-value">{{$s.ActiveDays}}</span><span class="stat-label">активных дней</span></div>
-    <div class="stat-card"><span class="stat-value stat-value--text">{{with contestGeneratedAt $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span class="stat-label">последняя активность</span></div>
+    <div class="stat-card"><span class="stat-value stat-value--text">{{with localTimeSec $s.LastActivity}}{{.}}{{else}}—{{end}}</span><span class="stat-label">последняя активность</span></div>
   </div>
   {{if gt $s.SolvedWithTimes 0}}
   <p class="empty-hint">По {{$s.SolvedWithTimes}} задачам с известным временем посылок: в среднем <strong>{{numText $s.AvgAttemptsToSolve}}</strong> посылок до решения; с первой попытки — <strong>{{$s.FirstTrySolved}}</strong>.</p>
@@ -76,7 +76,7 @@
     <span class="profile-chart-title">Посылки по дням — 90 дней</span>
     <span class="empty-hint">макс. за день: {{.MaxDaily}}</span>
   </div>
-  <div class="activity-bar" title="Посылки по дням (MSK)">
+  <div class="activity-bar" title="Посылки по дням (сутки по МСК)">
     {{range $p.DailyActivity}}
     <span class="activity-cell{{if .Count}} has-count{{end}}" style="height:{{barHeight .Count $.MaxDaily}}px;" title="{{dayLabel .Date}}: {{.Count}}"></span>
     {{end}}
@@ -116,11 +116,11 @@
       </span>
     </span>
     {{else if eq .Resolution "violation"}}
-    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note flag-review-note--violation">нарушение · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note flag-review-note--violation">нарушение · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{else if eq .Resolution "transfer"}}
-    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">⇄ перенос · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">⇄ перенос · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{else}}
-    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">✓ сам решил · {{submissionTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">✓ сам решил · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
     {{end}}
     {{end}}
     </div>
@@ -142,11 +142,11 @@
   </div>
   <div class="table-wrap">
     <table class="standings-table data-table" data-collapse-rows="30">
-      <thead><tr><th>Время (MSK)</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
+      <thead><tr><th>Время</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
       <tbody id="subs-body">
         {{range $p.Recent}}
         <tr class="{{if .Solved}}is-solved{{end}}" data-task="{{.TaskURL}}" data-at="{{unixMs .At}}" data-filter-text="{{siteName .Site}} {{.Label}} {{if .Solved}}решено{{else}}попытка{{end}}">
-          <td>{{submissionTime .At}}</td>
+          <td>{{localTime .At}}</td>
           <td class="site-tag">{{siteName .Site}}</td>
           <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer" title="{{if $sub}}Посылки ученика по задаче на сайте{{else}}Открыть задачу{{end}}">{{.Label}}</a></td>
           <td>{{if .Solved}}<span class="result-pill result-pill--ok">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="result-pill result-pill--try">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>

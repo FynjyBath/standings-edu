@@ -119,7 +119,9 @@
     var root = $("contest-form");
 
     function pad2(n) { return String(n).padStart(2, "0"); }
-    // RFC3339 (как в JSON) -> значение datetime-local в локальном времени браузера.
+    // Время контеста препод вводит и видит в своём поясе браузера (как и весь
+    // показ времени на сайте); сервер хранит момент абсолютным (ISO со сдвигом).
+    // RFC3339 (как в JSON) -> значение datetime-local в поясе браузера.
     function timeFromISO(iso) {
       if (!iso) return "";
       var d = new Date(iso);

@@ -23,6 +23,36 @@
         document.documentElement.setAttribute("data-theme", theme);
       })();
     </script>
+    <script>
+      // Всё абсолютное время на сайте показываем в поясе браузера смотрящего.
+      // Сервер отдаёт моменты в ISO 8601 (с зоной), клиент форматирует локально —
+      // так время всегда «как у зрителя на часах», без путаницы поясов.
+      window.LT = (function () {
+        var MON = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+        function pad2(n) { return String(n).padStart(2, "0"); }
+        function hhmm(ms) { var d = new Date(ms); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+        function hhmmss(ms) { var d = new Date(ms); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()); }
+        function dayMon(ms) { var d = new Date(ms); return d.getDate() + " " + MON[d.getMonth()]; }
+        function sameDay(a, b) { a = new Date(a); b = new Date(b); return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+        // Полная дата-время: «ДД.ММ.ГГГГ ЧЧ:ММ[:СС]».
+        function full(ms, withSec) {
+          var d = new Date(ms);
+          var s = pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + "." + d.getFullYear() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+          return withSec ? s + ":" + pad2(d.getSeconds()) : s;
+        }
+        // Заполняет локальным временем все элементы [data-localtime] (ISO в
+        // атрибуте, data-sec="1" — с секундами). Идемпотентно (можно звать после
+        // ленивой подгрузки). Если разбор не удался — оставляет серверный текст.
+        function paint(scope) {
+          (scope || document).querySelectorAll("[data-localtime]").forEach(function (el) {
+            var ms = Date.parse(el.getAttribute("data-localtime") || "");
+            if (!isNaN(ms)) el.textContent = full(ms, el.getAttribute("data-sec") === "1");
+          });
+        }
+        return { hhmm: hhmm, hhmmss: hhmmss, dayMon: dayMon, sameDay: sameDay, full: full, paint: paint };
+      })();
+      document.addEventListener("DOMContentLoaded", function () { window.LT.paint(document); });
+    </script>
     <link rel="stylesheet" href="/static/styles.css" />
     <script src="/static/app.js" defer></script>
 
@@ -36,7 +66,7 @@
     <header class="site-header">
       <div class="container header-inner">
         <a class="brand" href="/standings">standings</a>
-        {{if .Footer.LastUpdatedISO}}<span class="header-updated" data-updated="{{.Footer.LastUpdatedISO}}">Последнее обновление: {{.Footer.LastUpdatedMSK}}</span>{{end}}
+        {{if .Footer.LastUpdatedISO}}<span class="header-updated" data-updated="{{.Footer.LastUpdatedISO}}">Последнее обновление: <span data-localtime="{{.Footer.LastUpdatedISO}}" data-sec="1">{{.Footer.LastUpdatedMSK}}</span></span>{{end}}
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Переключить тему" aria-pressed="false">
           <span class="theme-icon theme-icon--sun" aria-hidden="true">☀</span>
           <span class="theme-icon theme-icon--moon" aria-hidden="true">☾</span>
@@ -49,8 +79,8 @@
     <footer class="site-footer" data-server-now="{{.Footer.ServerTimeISO}}" data-generate-interval="{{.Footer.IntervalSeconds}}">
       <div class="container footer-inner">
         <div class="footer-line"><a href="https://t.me/fynjybath" target="_blank" rel="noopener noreferrer">Anton Nyikin</a> · <a href="https://github.com/FynjyBath/standings-edu" target="_blank" rel="noopener noreferrer">standings-edu на GitHub</a></div>
-        <div class="footer-line" data-updated="{{.Footer.LastUpdatedISO}}">Последнее обновление: {{.Footer.LastUpdatedMSK}}</div>
-        <div class="footer-line">Время на сервере: <span class="server-clock">{{.Footer.ServerTime}}</span></div>
+        <div class="footer-line" data-updated="{{.Footer.LastUpdatedISO}}">Последнее обновление: <span data-localtime="{{.Footer.LastUpdatedISO}}" data-sec="1">{{.Footer.LastUpdatedMSK}}</span></div>
+        <div class="footer-line">Сейчас: <span class="server-clock">{{.Footer.ServerTime}}</span></div>
       </div>
     </footer>
     <script>
@@ -97,7 +127,7 @@
 
         function tick() {
           var n = new Date(nowMs());
-          var clock = pad2(n.getHours()) + ":" + pad2(n.getMinutes()) + ":" + pad2(n.getSeconds());
+          var clock = window.LT.hhmmss(n.getTime());
           clocks.forEach(function (c) { c.textContent = clock; });
           marks.forEach(function (m) {
             if (isNaN(m.ms)) { m.extra.textContent = ""; return; }

@@ -417,6 +417,48 @@ button.summary-link-btn {
   vertical-align: middle;
 }
 
+/* Тег «архив» у группы в каталоге — приглушённый, без акцентного цвета. */
+.dir-tag--archived {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, var(--surface) 88%);
+  border-color: color-mix(in srgb, var(--muted) 35%, var(--line) 65%);
+}
+
+/* Свёрнутый блок архивных групп внизу каталога. */
+.dir-archive {
+  margin-top: 1.1rem;
+  border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent 30%);
+  padding-top: 0.6rem;
+}
+.dir-archive > summary {
+  cursor: pointer;
+  padding: 0.4rem 0.2rem;
+  color: var(--muted);
+  font-weight: 700;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dir-archive > summary::-webkit-details-marker { display: none; }
+.dir-archive > summary::after {
+  content: "▸";
+  font-size: 0.8em;
+  color: var(--muted);
+}
+.dir-archive[open] > summary::after { content: "▾"; }
+.dir-archive-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, var(--surface) 86%);
+}
+/* Архивные строки — чуть приглушены, чтобы отличались от активных. */
+.dir-archive .dir-title { color: color-mix(in srgb, var(--text) 78%, var(--muted) 22%); }
+
 .dir-slug {
   color: var(--muted);
   font-size: 0.8rem;

@@ -844,7 +844,14 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if dirToken := h.readDirectoryToken(); dirToken != "" && token != "" &&
 		subtle.ConstantTimeCompare([]byte(token), []byte(dirToken)) == 1 {
-		page.Directory = h.buildDirectory()
+		// Активные и архивные группы — в каталоге разными списками (архив свёрнут).
+		for _, g := range h.buildDirectory() {
+			if g.Archived {
+				page.ArchivedGroups = append(page.ArchivedGroups, g)
+			} else {
+				page.Directory = append(page.Directory, g)
+			}
+		}
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "index.html", page); err != nil {
 		h.logger.Printf("ERROR render index: %v", err)
@@ -880,6 +887,7 @@ func (h *Handlers) buildDirectory() []DirectoryGroup {
 			Title:      title,
 			StudentURL: "/standings/" + slug,
 			Combined:   len(gf.MemberGroups) > 0,
+			Archived:   gf.Archived(),
 		}
 		if tok := strings.TrimSpace(gf.GroupSecretToken); tok != "" {
 			item.TeacherURL = "/standings/" + slug + "?token=" + url.QueryEscape(tok)
@@ -948,8 +956,10 @@ type FooterInfo struct {
 type IndexPageData struct {
 	PageTitle string
 	Footer    FooterInfo
-	// Directory — список групп (по директорному токену). nil — обычный экран.
-	Directory []DirectoryGroup
+	// Directory — активные группы каталога (по директорному токену). nil — обычный
+	// экран. ArchivedGroups — группы в архиве (показываются свёрнутым блоком).
+	Directory      []DirectoryGroup
+	ArchivedGroups []DirectoryGroup
 }
 
 // DirectoryGroup — одна строка каталога групп: ссылка для ученика и (если есть
@@ -960,6 +970,7 @@ type DirectoryGroup struct {
 	StudentURL string
 	TeacherURL string // пусто — у группы нет токена жюри
 	Combined   bool
+	Archived   bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
 }
 
 type GroupPageData struct {

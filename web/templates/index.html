@@ -1,30 +1,9 @@
-{{define "content"}}
-{{if .Directory}}
-<section class="page-head">
-  <h1>Все группы</h1>
-  <p class="empty-hint">Каталог для преподавателей: ссылка для ученика и ссылка с токеном жюри (просмотр без заморозки, скрытые контесты, статистика участников). Ссылка с токеном — секретная, не давайте её ученикам.</p>
-</section>
-
-<section class="admin-block">
-  <div class="dir-toolbar">
-    <input type="search" id="dir-filter" class="dir-filter" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false" />
-    <span class="dir-count" id="dir-count"></span>
-  </div>
-  <div class="table-wrap">
-    <table class="standings-table data-table" id="dir-table">
-      <thead>
-        <tr>
-          <th class="student-col">Группа</th>
-          <th>Ссылка для ученика</th>
-          <th>Ссылка для преподавателя (с токеном)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Directory}}
+{{define "dirRow"}}
         <tr class="dir-row" data-name="{{.Title}} {{.Slug}}">
           <td class="student-name">
             <span class="dir-title">{{.Title}}</span>
             {{if .Combined}}<span class="dir-tag">объединённая</span>{{end}}
+            {{if .Archived}}<span class="dir-tag dir-tag--archived">архив</span>{{end}}
             <span class="dir-slug">{{.Slug}}</span>
           </td>
           <td>
@@ -44,11 +23,60 @@
             {{end}}
           </td>
         </tr>
-        {{end}}
+{{end}}
+
+{{define "content"}}
+{{if or .Directory .ArchivedGroups}}
+<section class="page-head">
+  <h1>Все группы</h1>
+  <p class="empty-hint">Каталог для преподавателей: ссылка для ученика и ссылка с токеном жюри (просмотр без заморозки, скрытые контесты, статистика участников). Ссылка с токеном — секретная, не давайте её ученикам.</p>
+</section>
+
+<section class="admin-block">
+  <div class="dir-toolbar">
+    <input type="search" id="dir-filter" class="dir-filter" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false" />
+    <span class="dir-count" id="dir-count"></span>
+  </div>
+  {{if .Directory}}
+  <div class="table-wrap">
+    <table class="standings-table data-table" id="dir-table">
+      <thead>
+        <tr>
+          <th class="student-col">Группа</th>
+          <th>Ссылка для ученика</th>
+          <th>Ссылка для преподавателя (с токеном)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Directory}}{{template "dirRow" .}}{{end}}
       </tbody>
     </table>
   </div>
+  {{else}}
+  <p class="empty-hint">Активных групп нет — все в архиве (ниже).</p>
+  {{end}}
   <p class="empty-hint dir-empty" id="dir-empty" hidden>Ничего не найдено.</p>
+
+  {{if .ArchivedGroups}}
+  <details class="dir-archive" id="dir-archive">
+    <summary><span class="dir-archive-title">🗄 Архив групп</span> <span class="dir-archive-count">{{len .ArchivedGroups}}</span></summary>
+    <p class="empty-hint">Эти группы в архиве: таблицы не пересобираются, но страницы доступны по прежним ссылкам.</p>
+    <div class="table-wrap">
+      <table class="standings-table data-table" id="dir-archive-table">
+        <thead>
+          <tr>
+            <th class="student-col">Группа</th>
+            <th>Ссылка для ученика</th>
+            <th>Ссылка для преподавателя (с токеном)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .ArchivedGroups}}{{template "dirRow" .}}{{end}}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {{end}}
 </section>
 
 <script>
@@ -57,19 +85,25 @@
     var filter = document.getElementById("dir-filter");
     var countNode = document.getElementById("dir-count");
     var emptyNode = document.getElementById("dir-empty");
+    var archive = document.getElementById("dir-archive");
     var rows = [].slice.call(document.querySelectorAll(".dir-row"));
+
+    function inArchive(row) { return archive && archive.contains(row); }
 
     function applyFilter() {
       var q = (filter.value || "").trim().toLowerCase();
-      var shown = 0;
+      var shown = 0, archiveHits = 0;
       rows.forEach(function (row) {
         var hay = (row.getAttribute("data-name") || "").toLowerCase();
         var match = !q || hay.indexOf(q) !== -1;
         row.hidden = !match;
-        if (match) shown++;
+        if (match) { shown++; if (inArchive(row)) archiveHits++; }
       });
       if (countNode) countNode.textContent = q ? shown + " из " + rows.length : rows.length + " " + plural(rows.length);
       if (emptyNode) emptyNode.hidden = shown !== 0;
+      // Есть совпадение в архиве при активном поиске — раскрываем архив, чтобы
+      // найденное было видно (при пустом запросе не трогаем — пусть свёрнут).
+      if (archive && q && archiveHits > 0) archive.open = true;
     }
     function plural(n) {
       var d10 = n % 10, d100 = n % 100;

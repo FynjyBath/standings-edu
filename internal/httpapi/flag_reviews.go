@@ -163,9 +163,10 @@ func (h *Handlers) findFlagSnapshot(studentID, groupSlug, flagKey string) *domai
 }
 
 type flagReviewRequest struct {
-	// Slug/Token — только для жюри-эндпоинта (группа токена = группа флага).
+	// Slug/RoleToken — только для жюри-эндпоинта: подпись роли из панели группы
+	// (группа роли должна совпадать с группой флага).
 	Slug      string `json:"slug"`
-	Token     string `json:"token"`
+	RoleToken string `json:"role_token"`
 	StudentID string `json:"student_id"`
 	GroupSlug string `json:"group_slug"`
 	FlagKey   string `json:"flag_key"`
@@ -225,7 +226,7 @@ func (h *Handlers) JuryFlagReviewSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.juryAuthorized(slug, req.Token) {
+	if !h.juryAuthorized(slug, req.RoleToken) {
 		juryDeny(w)
 		return
 	}

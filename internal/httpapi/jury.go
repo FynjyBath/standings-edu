@@ -8,26 +8,24 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/source"
 )
 
-// Жюри-панель: операции по group_secret_token (без админского логина), строго в
-// рамках своей группы. Разрешено только:
-//   - добавить в группу ссылку на уже созданный глобальный контест (сверху);
-//   - поменять контесты местами;
-//   - выставить ручные оценки (grades_manual.json);
-//   - заполнить кондуит (provider_config.table inline-контеста manual_table).
+// Операции жюри: по role-token'у панели группы (роль «жюри» и выше), строго в
+// рамках своей группы:
+//   - выставить ручные оценки и настроить таблицу оценок (см. group_panel.go);
+//   - создать кондуит и заполнить его (manual_table);
+//   - разметить флаги нечестности.
 //
-// Никаких inline-редактирований контестов, настроек и удалений.
+// Управление контестами — роль «админ группы», см. group_panel.go.
 
-// juryAuthorized проверяет slug и токен группы. Требует настроенной админки
-// (жюри-операции пишут те же файлы теми же helpers).
-func (h *Handlers) juryAuthorized(slug, token string) bool {
-	return h.admin != nil && domain.IsValidSlug(slug) && strings.TrimSpace(token) != "" && h.groupTokenValid(slug, strings.TrimSpace(token))
+// juryAuthorized — права жюри по role-token'у панели (см. group_access.go).
+// Токена группы (?token=) для операций НЕДОСТАТОЧНО: он даёт только просмотр.
+func (h *Handlers) juryAuthorized(slug, roleToken string) bool {
+	return h.admin != nil && h.groupRole(slug, "", roleToken).AtLeast(RoleJury)
 }
 
 // juryCanManageContests — у объединённой группы нет своих контестов (они
@@ -41,145 +39,6 @@ func juryDeny(w http.ResponseWriter) {
 	writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "неверный токен группы"})
 }
 
-// JuryContestAddRef добавляет ссылку на глобальный контест в начало списка
-// контестов группы (жюри, по токену).
-func (h *Handlers) JuryContestAddRef(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Slug  string `json:"slug"`
-		Token string `json:"token"`
-		ID    string `json:"id"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	id := strings.TrimSpace(req.ID)
-	if !h.juryAuthorized(slug, req.Token) {
-		juryDeny(w)
-		return
-	}
-	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
-		return
-	}
-	if !h.juryCanManageContests(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "у объединённой группы нет своих контестов"})
-		return
-	}
-	if status, msg := h.addGroupContestRef(slug, id); msg != "" {
-		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// JuryContestMove меняет контест группы местами с соседним (жюри, по токену).
-func (h *Handlers) JuryContestMove(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Slug  string `json:"slug"`
-		Token string `json:"token"`
-		ID    string `json:"id"`
-		Dir   string `json:"dir"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	id := strings.TrimSpace(req.ID)
-	dir := strings.TrimSpace(req.Dir)
-	if !h.juryAuthorized(slug, req.Token) {
-		juryDeny(w)
-		return
-	}
-	if id == "" || (dir != "up" && dir != "down") {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
-		return
-	}
-	if !h.juryCanManageContests(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "у объединённой группы нет своих контестов"})
-		return
-	}
-	entries, err := h.loadGroupContestEntries(slug)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	if status, msg := h.moveGroupContestEntry(slug, id, dir, entries); msg != "" {
-		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// JuryContestInlineSave добавляет inline-контест группы (жюри, по токену):
-// набор задач-ссылок с ОБЯЗАТЕЛЬНЫМ окном (начало и конец). Только создание
-// нового контеста tasks-типа (provider-контесты и редактирование — не жюри).
-func (h *Handlers) JuryContestInlineSave(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Slug        string   `json:"slug"`
-		Token       string   `json:"token"`
-		ID          string   `json:"id"`
-		Title       string   `json:"title"`
-		ScoreSystem string   `json:"score_system"`
-		TableName   string   `json:"table_name"`
-		Tasks       []string `json:"tasks"`
-		StartTime   string   `json:"start_time"`
-		EndTime     string   `json:"end_time"`
-		Freeze      string   `json:"freeze"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	if !h.juryAuthorized(slug, req.Token) {
-		juryDeny(w)
-		return
-	}
-	if !h.juryCanManageContests(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "у объединённой группы нет своих контестов"})
-		return
-	}
-	// Жюри обязано ввести время начала и конца.
-	if strings.TrimSpace(req.StartTime) == "" || strings.TrimSpace(req.EndTime) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "укажите время начала и конца контеста"})
-		return
-	}
-	tasks := make([]string, 0, len(req.Tasks))
-	for _, t := range req.Tasks {
-		if t = strings.TrimSpace(t); t != "" {
-			tasks = append(tasks, t)
-		}
-	}
-	if len(tasks) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "добавьте хотя бы одну задачу (ссылку)"})
-		return
-	}
-	score := strings.TrimSpace(req.ScoreSystem)
-	if score != "ioi" {
-		score = "edu"
-	}
-
-	areq := adminContestSaveRequest{
-		ID:          strings.TrimSpace(req.ID),
-		Title:       strings.TrimSpace(req.Title),
-		ScoreSystem: score,
-		TableName:   strings.TrimSpace(req.TableName),
-		StartTime:   strings.TrimSpace(req.StartTime),
-		EndTime:     strings.TrimSpace(req.EndTime),
-		Freeze:      strings.TrimSpace(req.Freeze),
-		Subcontests: []contestSubcontestReq{{Title: "Задачи", Tasks: tasks}},
-	}
-	id, code, msg := h.saveInlineContest(slug, areq, nil)
-	if msg != "" {
-		writeJSON(w, code, map[string]any{"ok": false, "error": msg})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
-}
-
 // JuryKonduitCreate создаёт новый кондуит группы (жюри, по токену): только
 // название и число задач. Контест всегда inline manual_table (edu, плюсики),
 // id генерируется автоматически, добавляется в начало списка. Оценки жюри
@@ -187,7 +46,7 @@ func (h *Handlers) JuryContestInlineSave(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) JuryKonduitCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Slug      string `json:"slug"`
-		Token     string `json:"token"`
+		RoleToken string `json:"role_token"`
 		Title     string `json:"title"`
 		TaskCount int    `json:"task_count"`
 	}
@@ -197,7 +56,7 @@ func (h *Handlers) JuryKonduitCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.TrimSpace(req.Slug)
 	title := strings.TrimSpace(req.Title)
-	if !h.juryAuthorized(slug, req.Token) {
+	if !h.juryAuthorized(slug, req.RoleToken) {
 		juryDeny(w)
 		return
 	}
@@ -268,29 +127,6 @@ func generateKonduitID(taken map[string]struct{}) (string, error) {
 		}
 	}
 	return "", errors.New("не удалось подобрать уникальный id")
-}
-
-// JuryGradesSave сохраняет ручные оценки группы (жюри, по токену).
-func (h *Handlers) JuryGradesSave(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Slug   string                        `json:"slug"`
-		Token  string                        `json:"token"`
-		Grades map[string]map[string]float64 `json:"grades"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	if !h.juryAuthorized(slug, req.Token) {
-		juryDeny(w)
-		return
-	}
-	if status, msg := h.saveManualGrades(slug, req.Grades); msg != "" {
-		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 const maxJuryKonduitTableBytes = 512 * 1024
@@ -367,7 +203,7 @@ func (h *Handlers) globalManualTableContest(id string) (domain.Contest, bool) {
 func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Slug      string `json:"slug"`
-		Token     string `json:"token"`
+		RoleToken string `json:"role_token"`
 		ID        string `json:"id"`
 		Table     string `json:"table"`
 		TaskCount int    `json:"task_count"`
@@ -378,7 +214,7 @@ func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.TrimSpace(req.Slug)
 	id := strings.TrimSpace(req.ID)
-	if !h.juryAuthorized(slug, req.Token) {
+	if !h.juryAuthorized(slug, req.RoleToken) {
 		juryDeny(w)
 		return
 	}
@@ -587,80 +423,13 @@ type JuryGradesPageData struct {
 	Rows       []AdminManualGradeRow
 }
 
-// JuryGradesPage — редактор ручных оценок по токену группы (только значения,
-// без конструктора столбцов).
-func (h *Handlers) JuryGradesPage(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	if !h.juryAuthorized(slug, token) {
-		http.NotFound(w, r)
-		return
-	}
-	groupFile, ok, err := h.readGroupFile(slug)
-	if err != nil || !ok {
-		http.NotFound(w, r)
-		return
-	}
-	title := strings.TrimSpace(groupFile.Title)
-	if title == "" {
-		title = slug
-	}
-
-	manualColumns := manualGradeColumns(groupFile)
-	columns := make([]AdminManualGradeColumn, 0, len(manualColumns))
-	for _, col := range manualColumns {
-		colTitle := strings.TrimSpace(col.Title)
-		if colTitle == "" {
-			colTitle = col.ID
-		}
-		columns = append(columns, AdminManualGradeColumn{ID: col.ID, Title: colTitle})
-	}
-
-	publicNames := h.loadPublicNames()
-	manual, err := h.loadManualGrades(slug)
-	if err != nil {
-		h.logger.Printf("ERROR jury grades read manual slug=%s err=%v", slug, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	rows := make([]AdminManualGradeRow, 0, len(groupFile.StudentIDs))
-	for _, studentID := range domain.NormalizeGroups(groupFile.StudentIDs) {
-		publicName := publicNames[studentID]
-		if publicName == "" {
-			publicName = studentID
-		}
-		values := make([]string, len(manualColumns))
-		for i, col := range manualColumns {
-			if byStudent, ok := manual[col.ID]; ok {
-				if v, ok := byStudent[studentID]; ok {
-					values[i] = strconv.FormatFloat(v, 'f', -1, 64)
-				}
-			}
-		}
-		rows = append(rows, AdminManualGradeRow{StudentID: studentID, PublicName: publicName, Values: values})
-	}
-	sortManualGradeRows(rows)
-
-	page := JuryGradesPageData{
-		PageTitle:  "Оценки (жюри) — " + title,
-		Footer:     h.buildFooterInfo(),
-		GroupSlug:  slug,
-		GroupTitle: title,
-		Token:      token,
-		Columns:    columns,
-		Rows:       rows,
-	}
-	if err := h.renderer.Render(w, http.StatusOK, "jury_grades.html", page); err != nil {
-		h.logger.Printf("ERROR render jury grades slug=%s err=%v", slug, err)
-	}
-}
-
 type JuryKonduitPageData struct {
-	PageTitle    string
-	Footer       FooterInfo
-	GroupSlug    string
-	GroupTitle   string
-	Token        string
+	PageTitle  string
+	Footer     FooterInfo
+	GroupSlug  string
+	GroupTitle string
+	// RoleToken — подпись роли жюри для сохранения кондуита из панели.
+	RoleToken    string
 	ContestID    string
 	ContestTitle string
 	Labels       []string
@@ -681,9 +450,12 @@ type JuryKonduitRow struct {
 // ученики группы).
 func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
-	if !h.juryAuthorized(slug, token) || id == "" {
+	role, roleToken, authorized := h.authorizePanelRequest(w, r, slug)
+	if !authorized {
+		return
+	}
+	if !role.AtLeast(RoleJury) || id == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -762,7 +534,7 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 		Footer:       h.buildFooterInfo(),
 		GroupSlug:    slug,
 		GroupTitle:   title,
-		Token:        token,
+		RoleToken:    roleToken,
 		ContestID:    id,
 		ContestTitle: contestTitle,
 		Labels:       labels,
@@ -778,9 +550,9 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 // juryStandingsExtras заполняет данные жюри-панели страницы группы (по
 // валидному токену): глобальные контесты для добавления, кондуиты для
 // заполнения, наличие ручных оценок.
-func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData) {
-	if h.admin == nil {
-		return
+func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, role GroupRole) {
+	if h.admin == nil || !role.AtLeast(RoleJury) {
+		return // наблюдателю панельные блоки не нужны
 	}
 	gf, ok, err := h.readGroupFile(slug)
 	if err != nil || !ok {
@@ -791,7 +563,8 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData) {
 	if len(gf.MemberGroups) > 0 {
 		return // объединённая группа: своих контестов нет
 	}
-	page.JuryCanManage = true
+	// Управление контестами — только админ группы; жюри видит кондуиты.
+	page.JuryCanManage = role.AtLeast(RoleAdmin)
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {

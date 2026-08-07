@@ -108,7 +108,7 @@
     {{if not .ReviewedAt}}
     <span class="course-chip course-chip--flag" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}
       <span class="flag-review-actions">{{template "flagSubsBtn" .}}
-        {{- if .Key}}
+        {{- if and .Key $.CanReviewFlags}}
         <button type="button" class="flag-review-btn flag-review-btn--legit" data-flag-key="{{.Key}}" data-resolution="legit" title="Реально решил сам: посылки корректные, эпизод вернётся в подсчёт темпа">✓ сам решил</button>
         <button type="button" class="flag-review-btn flag-review-btn--transfer" data-flag-key="{{.Key}}" data-resolution="transfer" title="Перенос посылок (например, с другого сайта): посылки корректные, но в темпе не учитываются">⇄ перенос</button>
         <button type="button" class="flag-review-btn flag-review-btn--violation" data-flag-key="{{.Key}}" data-resolution="violation" title="Нарушение (списывание и т.п.): в темпе не учитывается, отметка остаётся в профиле на будущее">⛔ нарушение</button>
@@ -116,11 +116,11 @@
       </span>
     </span>
     {{else if eq .Resolution "violation"}}
-    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note flag-review-note--violation">нарушение · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag course-chip--flag-violation" title="{{join .Tasks ", "}}">⛔ {{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note flag-review-note--violation">нарушение · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{if $.CanReviewFlags}}{{template "flagClearBtn" .}}{{end}}</span>
     {{else if eq .Resolution "transfer"}}
-    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">⇄ перенос · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">⇄ перенос · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{if $.CanReviewFlags}}{{template "flagClearBtn" .}}{{end}}</span>
     {{else}}
-    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">✓ сам решил · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{template "flagClearBtn" .}}</span>
+    <span class="course-chip course-chip--flag-done" title="{{join .Tasks ", "}}">{{.Text}} · {{flagPeriod .At .Until}}<span class="flag-review-note">✓ сам решил · {{localTime .ReviewedAt}}{{if .ReviewComment}} — {{.ReviewComment}}{{end}}</span>{{template "flagSubsBtn" .}}{{if $.CanReviewFlags}}{{template "flagClearBtn" .}}{{end}}</span>
     {{end}}
     {{end}}
     </div>
@@ -267,7 +267,9 @@
     var buttons = [].slice.call(document.querySelectorAll(".flag-review-btn"));
     if (!buttons.length) return;
     var student = "{{.StudentID}}";
-    var token = "{{.Token}}";
+    var roleToken = "{{.RoleToken}}";
+    // Разметка флагов: админка — /api/admin, панель группы — /api/jury с
+    // role-token'ом роли «жюри». По одному токену группы разметка недоступна.
     var juryView = {{if .TokenView}}true{{else}}false{{end}};
     var PROMPTS = {
       legit: "«Сам решил» — посылки корректные, эпизод вернётся в подсчёт темпа.\nКомментарий (необязательно):",
@@ -288,7 +290,7 @@
         }
         var body = { student_id: student, group_slug: group, flag_key: btn.getAttribute("data-flag-key"), resolution: resolution, comment: comment || "" };
         var url = "/api/admin/flags/review";
-        if (juryView) { url = "/api/jury/flags/review"; body.slug = group; body.token = token; }
+        if (juryView) { url = "/api/jury/flags/review"; body.slug = group; body.role_token = roleToken; }
         btn.disabled = true;
         fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
           .then(function (r) { return r.json(); })

@@ -290,6 +290,33 @@ type GroupFile struct {
 	// ученикам. nil/absent или true — показывать (как раньше); false — на
 	// публичной странице ссылок на задачи нет (по токену жюри видны всегда).
 	ShowTaskLinks *bool `json:"show_task_links,omitempty"`
+	// PanelAccess — учётки панели группы (вход на /standings/<slug>/panel):
+	// жюри (оценки, кондуиты) и админ группы (+ управление контестами). nil —
+	// панели у группы нет, доступен только просмотр по токену.
+	PanelAccess *GroupPanelAccess `json:"panel_access,omitempty"`
+}
+
+// GroupPanelAccess — пары логин/пароль для ролей панели группы. Пароли хранятся
+// как есть (см. admin_credentials.json): файл группы секретный, из бандла
+// экспорта учётки вырезаются вместе с group_secret_token.
+type GroupPanelAccess struct {
+	Jury  *GroupPanelCredential `json:"jury,omitempty"`
+	Admin *GroupPanelCredential `json:"admin,omitempty"`
+}
+
+type GroupPanelCredential struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+}
+
+// Valid — учётка заполнена (обе части непустые).
+func (c *GroupPanelCredential) Valid() bool {
+	return c != nil && strings.TrimSpace(c.Login) != "" && c.Password != ""
+}
+
+// PanelConfigured — у группы есть хотя бы одна учётка панели.
+func (g GroupFile) PanelConfigured() bool {
+	return g.PanelAccess != nil && (g.PanelAccess.Jury.Valid() || g.PanelAccess.Admin.Valid())
 }
 
 // TaskLinksShown — показывать ли ссылки на задачи (по умолчанию да).

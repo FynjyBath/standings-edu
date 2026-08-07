@@ -1,0 +1,23 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Контесты группы: {{.GroupTitle}} <span class="grade-weight">({{.GroupSlug}})</span></h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/panel">← В панель группы</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .GroupToken}}?token={{.GroupToken}}{{end}}" target="_blank" rel="noopener noreferrer">Страница группы ↗</a>
+    <span class="panel-role-badge">🛠 {{.RoleTitle}}</span>
+  </p>
+  <p class="empty-hint">Управление контестами своей группы. Глобальные контесты правятся только в общей админке — здесь их можно добавить ссылкой, переставить, настроить и убрать. Свои (inline) контесты создаются и редактируются полностью; у них обязательно указывать время начала и конца.</p>
+</section>
+
+{{template "groupContests" .}}
+
+<script>
+  // Операции подтверждаются role-token'ом, выданным при входе в панель.
+  window.GroupContestsCfg = {
+    slug: {{.GroupSlug}},
+    apiBase: "/api/group-panel",
+    auth: { role_token: {{.RoleToken}} }
+  };
+</script>
+{{template "groupContestsScript" .}}
+{{end}}

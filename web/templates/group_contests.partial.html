@@ -1,0 +1,286 @@
+{{/* Управление контестами группы — общий блок админки и панели группы.
+     Разметка одна, различается только источник API:
+       админка — /api/admin/group (Basic Auth админа),
+       панель  — /api/group-panel (role-token админа группы).
+     Страница-хозяин задаёт window.GroupContestsCfg до подключения скрипта. */}}
+{{define "groupContests"}}
+<section class="admin-block">
+  <h2>Контесты группы ({{len .Entries}})</h2>
+  <p class="empty-hint">Ссылка берёт контест из глобального <code>contests.json</code>. Inline-контест хранится прямо в группе. После изменений не забудьте перегенерировать.</p>
+  {{if .Entries}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по названию или id…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#group-entries-tbody > tr" data-filter-count="#group-entries-count" data-filter-empty="#group-entries-empty" />
+    <span class="filter-count" id="group-entries-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="standings-table data-table">
+      <thead><tr><th>Контест</th><th>Тип</th><th>Обновлять</th><th>table_name</th><th>Окно (начало / конец, опц., <span class="c-tz">местное время</span>)</th><th>Заморозка</th><th>Σ в сводной</th><th>Показывать</th><th>Штраф за ноль</th><th></th></tr></thead>
+      <tbody id="group-entries-tbody">
+        {{range .Entries}}
+        <tr data-id="{{.ID}}" data-inline="{{if .Inline}}1{{else}}0{{end}}" data-filter-text="{{.Title}} {{.ID}} {{.Kind}}">
+          <td>{{.Title}} <span class="grade-weight">{{.ID}}{{if .Missing}} · нет в contests.json{{end}}</span></td>
+          <td>{{if .Inline}}inline{{else}}ссылка{{end}}{{if .Kind}}<div class="grade-weight">{{.Kind}}</div>{{end}}</td>
+          <td><input type="checkbox" class="c-update" {{if .Update}}checked{{end}} /></td>
+          <td><input type="text" class="c-tablename" value="{{.TableName}}" placeholder="{{if .Inline}}через запятую{{else if .InhTableName}}как у контеста: {{.InhTableName}}{{else}}как у контеста{{end}}" style="min-width:11rem;" /></td>
+          <td>
+            {{if .IsProvider}}
+            <span class="grade-weight" title="Окно контеста не применяется: результаты provider-контеста берутся из источника целиком.">—</span>
+            {{else}}
+            <input type="datetime-local" class="c-start" step="60" data-iso="{{.StartTime}}" />
+            <input type="datetime-local" class="c-end" step="60" data-iso="{{.EndTime}}" />
+            {{if and (not .Inline) .InhStart}}
+            <div class="grade-weight c-inh-window" data-start="{{.InhStart}}" data-end="{{.InhEnd}}">насл.: …</div>
+            {{end}}
+            {{end}}
+          </td>
+          <td>
+            {{if .IsProvider}}
+            <span class="grade-weight" title="Заморозка не применяется к provider-контестам.">—</span>
+            {{else}}
+            <select class="c-freeze-sel" data-freeze="{{.Freeze}}" title="Заморозка: скрыть результаты последней части соревнования (или всего). Пусто — как задано у контеста. Для применения перегенерируйте.">
+              {{if .Inline}}
+              <option value="">нет</option>
+              {{else}}
+              <option value="">как у контеста{{if .InhFreeze}} ({{.InhFreeze}}){{end}}</option>
+              <option value="none">выключена</option>
+              {{end}}
+              <option value="30m">последние 30 мин</option>
+              <option value="1h">последний час</option>
+              <option value="1h30m">последние 1,5 ч</option>
+              <option value="2h">последние 2 ч</option>
+              <option value="3h">последние 3 ч</option>
+              <option value="all">всё соревнование</option>
+              <option value="custom">другое…</option>
+            </select>
+            <input type="text" class="c-freeze" value="" placeholder="45m / 2h15m" style="max-width:6rem;display:none;" title="Go-длительность: 45m, 2h15m…" />
+            {{end}}
+          </td>
+          <td>
+            <select class="c-summarytotal" data-value="{{.SummaryTotal}}" title="В сводной — только колонка суммы, без задач.">
+              {{if .Inline}}
+              <option value="">нет</option>
+              {{else}}
+              <option value="">как у контеста ({{.InhSummaryTotal}})</option>
+              {{end}}
+              <option value="1">да</option>
+              <option value="0">нет</option>
+            </select>
+          </td>
+          <td>
+            <select class="c-hidden" data-value="{{.Hidden}}" title="Показывать ли контест на страницах школьников. По токену жюри виден всегда; в оценках учитывается независимо.">
+              {{if .Inline}}
+              <option value="">показывать</option>
+              {{else}}
+              <option value="">как у контеста ({{.InhHidden}})</option>
+              {{end}}
+              <option value="0">показывать</option>
+              <option value="1">скрыть</option>
+            </select>
+          </td>
+          <td>{{if .IsProvider}}<span class="grade-weight" title="Штраф за ноль не применяется к provider-контестам.">—</span>{{else}}<input type="number" class="c-zeropenalty" min="0" step="1" value="{{.ZeroPenalty}}" placeholder="{{if .Inline}}0{{else if .InhZeroPenalty}}насл.: {{.InhZeroPenalty}}{{else}}как у контеста{{end}}" style="max-width:6.5rem;" title="Штраф за задачу без баллов (только ioi). Пусто — как у контеста, 0 — выключить." />{{end}}</td>
+          <td style="white-space:nowrap;">
+            <button type="button" class="admin-btn admin-btn--secondary c-move-up" title="Поднять выше">↑</button>
+            <button type="button" class="admin-btn admin-btn--secondary c-move-down" title="Опустить ниже">↓</button>
+            <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
+            {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
+            <button type="button" class="admin-btn admin-btn--secondary c-remove">Удал.</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="group-entries-empty" hidden>Ничего не найдено.</p>
+  {{else}}
+  <p class="empty-hint">В группе пока нет контестов.</p>
+  {{end}}
+
+  <div class="admin-editor-tools" style="margin-top:0.9rem;flex-wrap:wrap;gap:0.5rem;">
+    <label class="field-inline">
+      <span>Добавить из глобальных:</span>
+      <select id="add-ref-select" data-searchable data-placeholder="Поиск контеста по названию или id…">
+        <option value="">— выберите контест —</option>
+        {{range .AddableContests}}<option value="{{.ID}}">{{.Title}} ({{.ID}}{{if .Kind}} · {{.Kind}}{{end}})</option>{{end}}
+      </select>
+    </label>
+    <button type="button" id="add-ref-btn" class="admin-btn">Добавить ссылку</button>
+    <button type="button" id="add-inline-btn" class="admin-btn admin-btn--secondary">+ inline-контест</button>
+    <span id="contests-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block" id="inline-form-block" style="display:none;">
+  {{template "contestForm" .}}
+  <div class="admin-editor-tools" style="margin-top:0.8rem;">
+    <button type="button" id="inline-save" class="admin-btn">Сохранить inline-контест</button>
+    <button type="button" id="inline-cancel" class="admin-btn admin-btn--secondary">Отмена</button>
+    <span id="inline-status" class="admin-editor-status"></span>
+  </div>
+</section>
+<script id="inline-data" type="application/json">{{.InlineJSON}}</script>
+<script id="group-members-data" type="application/json">{{.MembersJSON}}</script>
+{{end}}
+
+{{define "groupContestsScript"}}
+<script>
+  (function () {
+    var CFG = window.GroupContestsCfg || {};
+    var slug = CFG.slug;
+    var inlineById = {};
+    try { inlineById = JSON.parse(document.getElementById("inline-data").textContent || "{}") || {}; } catch (e) {}
+    // Участники группы — для сетки кондуита в форме контеста.
+    try { ContestForm.setStudents(JSON.parse(document.getElementById("group-members-data").textContent || "[]")); } catch (e) {}
+
+    // post(path, body): к пути дописывается apiBase, в тело — slug и (в
+    // панели) role-token, которым сервер проверяет роль админа группы.
+    function post(path, body) {
+      body = body || {};
+      body.slug = slug;
+      if (CFG.auth) { Object.keys(CFG.auth).forEach(function (k) { body[k] = CFG.auth[k]; }); }
+      return fetch((CFG.apiBase || "") + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
+    }
+
+    var status = document.getElementById("contests-status");
+    function setStatus(m, err) { status.textContent = m; status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+
+    document.querySelectorAll("tr[data-id]").forEach(function (row) {
+      var id = row.dataset.id;
+      // Окно показываем в локальном времени браузера, на сервер шлём RFC3339.
+      var st = row.querySelector(".c-start");
+      var en = row.querySelector(".c-end");
+      if (st) st.value = ContestForm.timeFromISO(st.dataset.iso || "");
+      if (en) en.value = ContestForm.timeFromISO(en.dataset.iso || "");
+
+      // Подпись наследуемого окна («как у контеста») в локальном времени.
+      var inhWindow = row.querySelector(".c-inh-window");
+      if (inhWindow) {
+        var inhText = ContestForm.timeFromISO(inhWindow.dataset.start || "").replace("T", " ");
+        var inhEndText = ContestForm.timeFromISO(inhWindow.dataset.end || "").replace("T", " ");
+        inhWindow.textContent = "как у контеста: " + inhText + (inhEndText ? " — " + inhEndText : "");
+      }
+
+      // «Σ в сводной»: селект-переопределение ("" — как у контеста).
+      var sumSel = row.querySelector(".c-summarytotal");
+      if (sumSel) sumSel.value = sumSel.dataset.value || "";
+
+      // «Показывать»: селект-переопределение hidden ("" — как у контеста).
+      var hidSel = row.querySelector(".c-hidden");
+      if (hidSel) hidSel.value = hidSel.dataset.value || "";
+
+      // Заморозка: селект с пресетами; «другое…» открывает свободный ввод.
+      var fzSel = row.querySelector(".c-freeze-sel");
+      var fzCustom = row.querySelector(".c-freeze");
+      function syncFreezeCustom() {
+        if (fzCustom) fzCustom.style.display = (fzSel && fzSel.value === "custom") ? "" : "none";
+      }
+      if (fzSel) {
+        var current = (fzSel.dataset.freeze || "").trim();
+        var hasPreset = [].slice.call(fzSel.options).some(function (o) { return o.value === current; });
+        if (current && !hasPreset) {
+          fzSel.value = "custom";
+          if (fzCustom) fzCustom.value = current;
+        } else {
+          fzSel.value = current;
+        }
+        fzSel.addEventListener("change", syncFreezeCustom);
+        syncFreezeCustom();
+      }
+      function freezeValue() {
+        if (!fzSel) return "";
+        if (fzSel.value === "custom") return fzCustom ? (fzCustom.value || "").trim() : "";
+        return fzSel.value;
+      }
+
+      var apply = row.querySelector(".c-apply");
+      if (apply) apply.addEventListener("click", function () {
+        var tn = row.querySelector(".c-tablename");
+        var zp = row.querySelector(".c-zeropenalty");
+        var zpRaw = zp ? (zp.value || "").trim() : "";
+        var sumRaw = sumSel ? sumSel.value : "";
+        var hidRaw = hidSel ? hidSel.value : "";
+        setStatus("Сохранение…", false);
+        post("/contests/set-options", {
+          slug: slug, id: id,
+          update: row.querySelector(".c-update").checked,
+          table_name: tn ? (tn.value || "").trim() : "",
+          start_time: st ? ContestForm.timeToISO(st.value) : "",
+          end_time: en ? ContestForm.timeToISO(en.value) : "",
+          freeze: freezeValue(),
+          zero_penalty: zpRaw === "" ? null : parseInt(zpRaw, 10),
+          summary_total_only: sumRaw === "" ? null : sumRaw === "1",
+          hidden: hidRaw === "" ? null : hidRaw === "1"
+        }).then(function () { setStatus("Сохранено. Не забудьте перегенерировать.", false); })
+          .catch(function (err) { setStatus(err.message, true); });
+      });
+      var remove = row.querySelector(".c-remove");
+      if (remove) remove.addEventListener("click", function () {
+        if (!confirm("Убрать контест «" + id + "» из группы?")) return;
+        post("/contests/remove", { slug: slug, id: id })
+          .then(function () { location.reload(); })
+          .catch(function (err) { alert(err.message); });
+      });
+      var editInline = row.querySelector(".c-edit-inline");
+      if (editInline) editInline.addEventListener("click", function () {
+        var c = inlineById[id];
+        if (c) { ContestForm.fill(c); openInlineForm(); }
+      });
+      function move(dir) {
+        post("/contests/move", { slug: slug, id: id, dir: dir })
+          .then(function () { location.reload(); })
+          .catch(function (err) { setStatus(err.message, true); });
+      }
+      var moveUp = row.querySelector(".c-move-up");
+      if (moveUp) moveUp.addEventListener("click", function () { move("up"); });
+      var moveDown = row.querySelector(".c-move-down");
+      if (moveDown) moveDown.addEventListener("click", function () { move("down"); });
+    });
+
+    // Крайние стрелки некуда двигать — гасим.
+    var contestRows = document.querySelectorAll("tr[data-id]");
+    if (contestRows.length) {
+      var firstUp = contestRows[0].querySelector(".c-move-up");
+      if (firstUp) firstUp.disabled = true;
+      var lastDown = contestRows[contestRows.length - 1].querySelector(".c-move-down");
+      if (lastDown) lastDown.disabled = true;
+    }
+
+    document.getElementById("add-ref-btn").addEventListener("click", function () {
+      var sel = document.getElementById("add-ref-select");
+      var id = sel.value;
+      if (!id) { setStatus("Выберите контест", true); return; }
+      setStatus("Добавление…", false);
+      post("/contests/add-ref", { slug: slug, id: id })
+        .then(function () { location.reload(); })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    // ---- Inline-форма ----
+    var block = document.getElementById("inline-form-block");
+    var inlineStatus = document.getElementById("inline-status");
+    function setInlineStatus(m, err) { inlineStatus.textContent = m; inlineStatus.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok"; }
+    function openInlineForm() {
+      block.style.display = "";
+      ContestForm.show();
+      block.scrollIntoView({ behavior: "smooth" });
+    }
+
+    document.getElementById("add-inline-btn").addEventListener("click", function () {
+      ContestForm.reset();
+      setInlineStatus("", false);
+      openInlineForm();
+    });
+    document.getElementById("inline-cancel").addEventListener("click", function () {
+      block.style.display = "none";
+      setInlineStatus("", false);
+    });
+    document.getElementById("inline-save").addEventListener("click", function () {
+      var body = ContestForm.collect();
+      setInlineStatus("Сохранение…", false);
+      post("/contests/inline-save", body)
+        .then(function () { location.reload(); })
+        .catch(function (err) { setInlineStatus(err.message, true); });
+    });  })();
+</script>
+{{end}}

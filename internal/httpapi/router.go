@@ -27,6 +27,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/group/register-names/apply", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupRegisterNamesApply)))
 	mux.HandleFunc("POST /api/admin/group/token/set", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupTokenSet)))
 	mux.HandleFunc("POST /api/admin/group/short-name/set", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupSetShortName)))
+	mux.HandleFunc("POST /api/admin/group/panel-access/set", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupPanelAccessSet)))
 	mux.HandleFunc("POST /api/admin/group/archive/set", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupSetArchived)))
 	mux.HandleFunc("POST /api/admin/group/show-task-links/set", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupSetShowTaskLinks)))
 	mux.HandleFunc("POST /api/admin/group/contests/add-ref", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupContestAddRef)))
@@ -60,14 +61,25 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	// Жюри-панель: операции по group_secret_token (авторизация внутри хендлеров).
 	mux.HandleFunc("POST /api/admin/flags/review", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminFlagReviewSet)))
 	mux.HandleFunc("POST /api/jury/flags/review", handlers.SerializeDataWrite(handlers.JuryFlagReviewSet))
-	mux.HandleFunc("POST /api/jury/group/contests/add-ref", handlers.SerializeDataWrite(handlers.JuryContestAddRef))
-	mux.HandleFunc("POST /api/jury/group/contests/inline-save", handlers.SerializeDataWrite(handlers.JuryContestInlineSave))
-	mux.HandleFunc("POST /api/jury/group/contests/move", handlers.SerializeDataWrite(handlers.JuryContestMove))
-	mux.HandleFunc("POST /api/jury/group/grades/save", handlers.SerializeDataWrite(handlers.JuryGradesSave))
 	mux.HandleFunc("POST /api/jury/group/konduit/save", handlers.SerializeDataWrite(handlers.JuryKonduitSave))
 	mux.HandleFunc("POST /api/jury/group/konduit/create", handlers.SerializeDataWrite(handlers.JuryKonduitCreate))
-	mux.HandleFunc("GET /standings/{group_name}/jury-grades", handlers.JuryGradesPage)
 	mux.HandleFunc("GET /standings/{group_name}/jury-konduit", handlers.JuryKonduitPage)
+
+	// Панель группы: вход по логину/паролю из group.json (Basic Auth), операции —
+	// по role-token'у. Роль «жюри» — оценки и кондуиты, «админ группы» — ещё и
+	// управление контестами.
+	mux.HandleFunc("GET /standings/{group_name}/panel", handlers.GroupPanelPage)
+	mux.HandleFunc("GET /standings/{group_name}/panel/grades", handlers.GroupPanelGradesPage)
+	mux.HandleFunc("GET /standings/{group_name}/panel/contests", handlers.GroupPanelContestsPage)
+	mux.HandleFunc("GET /standings/{group_name}/panel/participants", handlers.GroupPanelParticipantsPage)
+	mux.HandleFunc("GET /standings/{group_name}/panel/student", handlers.GroupPanelStudentPage)
+	mux.HandleFunc("POST /api/group-panel/contests/add-ref", handlers.SerializeDataWrite(handlers.PanelContestAddRef))
+	mux.HandleFunc("POST /api/group-panel/contests/remove", handlers.SerializeDataWrite(handlers.PanelContestRemove))
+	mux.HandleFunc("POST /api/group-panel/contests/move", handlers.SerializeDataWrite(handlers.PanelContestMove))
+	mux.HandleFunc("POST /api/group-panel/contests/set-options", handlers.SerializeDataWrite(handlers.PanelContestSetOptions))
+	mux.HandleFunc("POST /api/group-panel/contests/inline-save", handlers.SerializeDataWrite(handlers.PanelContestInlineSave))
+	mux.HandleFunc("POST /api/group-panel/group-grades/save", handlers.SerializeDataWrite(handlers.PanelGradesSave))
+	mux.HandleFunc("POST /api/group-panel/group-grades/config-save", handlers.SerializeDataWrite(handlers.PanelGradesConfigSave))
 	mux.HandleFunc("GET /standings", handlers.IndexPage)
 	mux.HandleFunc("GET /standings/{group_name}", handlers.GroupStandingsPage)
 	mux.HandleFunc("GET /standings/{group_name}/grades", handlers.GroupGradesPage)

@@ -2,7 +2,7 @@
 <section class="page-head">
   <h1>Кондуит: {{.ContestTitle}} <span class="grade-weight">({{.GroupTitle}})</span></h1>
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}?token={{.Token}}">← К таблицам</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/panel">← В панель группы</a>
   </p>
   {{if .Shared}}
   <p class="empty-hint">🔗 Общий кондуит: контест подключён по ссылке в несколько групп, оценки синхронизируются. Здесь показаны только ученики вашей группы — строки других групп не видны и при сохранении не меняются.</p>
@@ -44,7 +44,7 @@
 <script>
   (function () {
     var slug = {{.GroupSlug}};
-    var token = {{.Token}};
+    var roleToken = {{.RoleToken}};
     var contestId = {{.ContestID}};
     var labels = [];
     try { labels = JSON.parse(document.getElementById("k-labels").textContent || "[]") || []; } catch (e) {}
@@ -116,7 +116,7 @@
       var btn = document.getElementById("k-save");
       btn.disabled = true;
       setStatus("Сохранение…", false);
-      fetch("/api/jury/group/konduit/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, token: token, id: contestId, table: table, task_count: labels.length }) })
+      fetch("/api/jury/group/konduit/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, role_token: roleToken, id: contestId, table: table, task_count: labels.length }) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); setStatus("Сохранено. Изменения появятся после генерации.", false); }); })
         .catch(function (err) { setStatus(err.message, true); })
         .finally(function () { btn.disabled = false; });

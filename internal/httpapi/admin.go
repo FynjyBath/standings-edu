@@ -48,10 +48,10 @@ type adminState struct {
 }
 
 type AdminActionResult struct {
-	Action    string   `json:"action"`
-	Success   bool     `json:"success"`
-	ExitCode  int      `json:"exit_code"`
-	StartedAt string   `json:"started_at"`
+	Action    string `json:"action"`
+	Success   bool   `json:"success"`
+	ExitCode  int    `json:"exit_code"`
+	StartedAt string `json:"started_at"`
 	// StartedAtISO — тот же момент в ISO для показа в поясе браузера (data-localtime).
 	StartedAtISO string   `json:"started_at_iso,omitempty"`
 	Duration     string   `json:"duration"`
@@ -112,6 +112,16 @@ type AdminGroupGradesPageData struct {
 	// для формы-конструктора столбцов. TableNames — вкладки группы для подсказок.
 	ConfigJSON template.JS
 	TableNames []string
+	// APIBase — префикс эндпоинтов сохранения: "/api/admin" в админке,
+	// "/api/group-panel" в панели группы. RoleToken — подпись роли для панели
+	// (пусто в админке). BackURL/BackLabel — ссылка «назад».
+	APIBase   string
+	RoleToken string
+	RoleTitle string
+	BackURL   string
+	BackLabel string
+	// GroupToken — токен группы для ссылки на её страницу из панели.
+	GroupToken string
 }
 
 type AdminStudentProfilePageData struct {
@@ -126,8 +136,13 @@ type AdminStudentProfilePageData struct {
 	BackLabel string
 	// TokenView — просмотр по токену группы (не админ): без админ-ссылок на группы.
 	TokenView bool
-	// Token — токен группы для жюри-запросов со страницы (пуст в админ-режиме).
+	// Token — токен группы для ссылок со страницы (пуст в админ-режиме).
 	Token string
+	// RoleToken — подпись роли жюри: только с ней доступна разметка флагов при
+	// просмотре по ссылке группы (наблюдатель профиль видит, но не размечает).
+	RoleToken string
+	// CanReviewFlags — можно размечать флаги нечестности (админка или панель жюри).
+	CanReviewFlags bool
 	// HasGlobalCourse — хотя бы у одного курса есть глобальный вариант темпа
 	// (когорта шире группы): показываем тумблер «эта группа / все группы».
 	HasGlobalCourse bool
@@ -147,10 +162,11 @@ func (h *Handlers) AdminStudentProfilePage(w http.ResponseWriter, r *http.Reques
 	}
 
 	page := AdminStudentProfilePageData{
-		Footer:    h.buildFooterInfo(),
-		StudentID: id,
-		BackURL:   "/standings/admin/students",
-		BackLabel: "← Ученики",
+		Footer:         h.buildFooterInfo(),
+		StudentID:      id,
+		BackURL:        "/standings/admin/students",
+		BackLabel:      "← Ученики",
+		CanReviewFlags: true,
 	}
 	h.fillStudentProfilePage(&page, id, nil)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
@@ -1084,20 +1100,38 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
-	if !domain.IsValidSlug(slug) {
-		http.NotFound(w, r)
-		return
-	}
-
-	groupFile, ok, err := h.readGroupFile(slug)
+	page, ok, err := h.buildGroupGradesData(slug)
 	if err != nil {
-		h.logger.Printf("ERROR admin group grades read group slug=%s err=%v", slug, err)
+		h.logger.Printf("ERROR admin group grades slug=%s err=%v", slug, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if !ok {
 		http.NotFound(w, r)
 		return
+	}
+	page.APIBase = "/api/admin"
+	page.BackURL = "/standings/admin/group?slug=" + slug
+	page.BackLabel = "Управление группой"
+	if err := h.renderer.Render(w, http.StatusOK, "admin_group_grades.html", page); err != nil {
+		h.logger.Printf("ERROR render admin group grades slug=%s err=%v", slug, err)
+	}
+}
+
+// buildGroupGradesData собирает страницу оценок группы: конструктор столбцов
+// (веса, метрика, нормировка, коэффициенты) и сетка ручных оценок. Общая для
+// админки и панели группы (роль «жюри»). ok=false — группы нет.
+func (h *Handlers) buildGroupGradesData(slug string) (AdminGroupGradesPageData, bool, error) {
+	var empty AdminGroupGradesPageData
+	if !domain.IsValidSlug(slug) {
+		return empty, false, nil
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil {
+		return empty, false, err
+	}
+	if !ok {
+		return empty, false, nil
 	}
 
 	title := strings.TrimSpace(groupFile.Title)
@@ -1117,9 +1151,7 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 	publicNames := h.loadPublicNames()
 	manual, err := h.loadManualGrades(slug)
 	if err != nil {
-		h.logger.Printf("ERROR admin group grades read manual slug=%s err=%v", slug, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return empty, false, err
 	}
 
 	rows := make([]AdminManualGradeRow, 0, len(groupFile.StudentIDs))
@@ -1147,9 +1179,7 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 	}
 	cfgBlob, err := json.Marshal(cfg)
 	if err != nil {
-		h.logger.Printf("ERROR admin group grades marshal config slug=%s err=%v", slug, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return empty, false, err
 	}
 
 	page := AdminGroupGradesPageData{
@@ -1162,9 +1192,7 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 		ConfigJSON: template.JS(cfgBlob),
 		TableNames: h.groupTableNames(slug),
 	}
-	if err := h.renderer.Render(w, http.StatusOK, "admin_group_grades.html", page); err != nil {
-		h.logger.Printf("ERROR render admin group grades slug=%s err=%v", slug, err)
-	}
+	return page, true, nil
 }
 
 // groupTableNames собирает различающиеся вкладки (table_name) контестов группы —
@@ -1309,10 +1337,12 @@ type adminGradesConfigColumn struct {
 }
 
 type adminGradesConfigSaveRequest struct {
-	Slug    string                    `json:"slug"`
-	Title   string                    `json:"title"`
-	Round   *int                      `json:"round"`
-	Columns []adminGradesConfigColumn `json:"columns"`
+	Slug string `json:"slug"`
+	// RoleToken — подпись роли жюри при сохранении из панели группы.
+	RoleToken string                    `json:"role_token"`
+	Title     string                    `json:"title"`
+	Round     *int                      `json:"round"`
+	Columns   []adminGradesConfigColumn `json:"columns"`
 }
 
 // AdminGroupGradesConfigSave сохраняет конфигурацию столбцов оценок (grades в
@@ -1328,23 +1358,27 @@ func (h *Handlers) AdminGroupGradesConfigSave(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	slug := strings.TrimSpace(req.Slug)
-	if !domain.IsValidSlug(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+	if status, msg := h.saveGradesConfig(strings.TrimSpace(req.Slug), req); msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// saveGradesConfig записывает конфигурацию оценок группы (заголовок, округление,
+// столбцы с весами и параметрами). Общий код админки и панели (роль «жюри»).
+func (h *Handlers) saveGradesConfig(slug string, req adminGradesConfigSaveRequest) (int, string) {
+	if !domain.IsValidSlug(slug) {
+		return http.StatusBadRequest, "invalid slug"
 	}
 	groupFile, ok, err := h.readGroupFile(slug)
 	if err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
+		return http.StatusBadRequest, "group not found"
 	}
-
 	columns, err := buildGradeColumns(req.Columns)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusBadRequest, err.Error()
 	}
-
 	if len(columns) == 0 {
 		// Нет столбцов — оценок у группы нет, убираем секцию целиком.
 		groupFile.Grades = nil
@@ -1356,10 +1390,9 @@ func (h *Handlers) AdminGroupGradesConfigSave(w http.ResponseWriter, r *http.Req
 		}
 	}
 	if err := h.writeGroupFile(slug, groupFile); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 // buildGradeColumns валидирует и собирает столбцы оценок из формы.

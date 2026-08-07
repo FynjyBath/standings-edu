@@ -312,6 +312,10 @@ type AdminGroupManagePageData struct {
 	ShowTaskLinks bool
 	// Archived — группа в архиве (update=false).
 	Archived bool
+	// PanelJuryLogin/PanelAdminLogin — логины учёток панели группы (пароли не
+	// показываем). Пусто — роль не настроена.
+	PanelJuryLogin  string
+	PanelAdminLogin string
 }
 
 type AdminGroupMember struct {
@@ -435,19 +439,37 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
-	if !domain.IsValidSlug(slug) {
-		http.NotFound(w, r)
-		return
-	}
-	groupFile, ok, err := h.readGroupFile(slug)
+	page, ok, err := h.buildGroupManageData(slug)
 	if err != nil {
-		h.logger.Printf("ERROR admin group manage read group slug=%s: %v", slug, err)
+		h.logger.Printf("ERROR admin group manage slug=%s: %v", slug, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if !ok {
 		http.NotFound(w, r)
 		return
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "admin_group.html", page); err != nil {
+		h.logger.Printf("ERROR render admin group manage slug=%s: %v", slug, err)
+	}
+}
+
+// buildGroupManageData собирает данные страницы управления группой: участники,
+// записи контестов (со всеми переопределениями и наследуемыми значениями),
+// список добавляемых глобальных контестов, JSON inline-контестов и участников.
+// Используется и админкой, и панелью группы (роль «админ группы»).
+// ok=false — группы нет.
+func (h *Handlers) buildGroupManageData(slug string) (AdminGroupManagePageData, bool, error) {
+	var empty AdminGroupManagePageData
+	if !domain.IsValidSlug(slug) {
+		return empty, false, nil
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil {
+		return empty, false, err
+	}
+	if !ok {
+		return empty, false, nil
 	}
 	title := strings.TrimSpace(groupFile.Title)
 	if title == "" {
@@ -467,15 +489,11 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
-		h.logger.Printf("ERROR admin group manage read contests slug=%s: %v", slug, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return empty, false, err
 	}
 	globalContests, err := h.loadContestsList()
 	if err != nil {
-		h.logger.Printf("ERROR admin group manage read global contests: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return empty, false, err
 	}
 	globalByID := make(map[string]domain.Contest, len(globalContests))
 	for _, c := range globalContests {
@@ -584,9 +602,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 
 	inlineBlob, err := json.Marshal(inlineByID)
 	if err != nil {
-		h.logger.Printf("ERROR admin group manage marshal inline: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return empty, false, err
 	}
 
 	// Участники для сетки кондуита: полное ФИО, если есть (лучше матчится).
@@ -604,9 +620,7 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 	}
 	membersBlob, err := json.Marshal(memberRefs)
 	if err != nil {
-		h.logger.Printf("ERROR admin group manage marshal members: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return empty, false, err
 	}
 
 	page := AdminGroupManagePageData{
@@ -625,9 +639,15 @@ func (h *Handlers) AdminGroupManagePage(w http.ResponseWriter, r *http.Request) 
 		ShowTaskLinks:   groupFile.TaskLinksShown(),
 		Archived:        groupFile.Update != nil && !*groupFile.Update,
 	}
-	if err := h.renderer.Render(w, http.StatusOK, "admin_group.html", page); err != nil {
-		h.logger.Printf("ERROR render admin group manage slug=%s: %v", slug, err)
+	if groupFile.PanelAccess != nil {
+		if c := groupFile.PanelAccess.Jury; c.Valid() {
+			page.PanelJuryLogin = strings.TrimSpace(c.Login)
+		}
+		if c := groupFile.PanelAccess.Admin; c.Valid() {
+			page.PanelAdminLogin = strings.TrimSpace(c.Login)
+		}
 	}
+	return page, true, nil
 }
 
 func (h *Handlers) AdminGroupMemberRemove(w http.ResponseWriter, r *http.Request) {
@@ -963,21 +983,25 @@ func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	slug := strings.TrimSpace(req.Slug)
-	id := strings.TrimSpace(req.ID)
-	if !domain.IsValidSlug(slug) || id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+	if status, msg := h.removeGroupContestEntry(strings.TrimSpace(req.Slug), strings.TrimSpace(req.ID)); msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// removeGroupContestEntry убирает контест из группы (и таблицу inline-кондуита,
+// если она была). Пустое сообщение — успех.
+func (h *Handlers) removeGroupContestEntry(slug, id string) (int, string) {
+	if !domain.IsValidSlug(slug) || id == "" {
+		return http.StatusBadRequest, "bad request"
 	}
 	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
+		return http.StatusBadRequest, "group not found"
 	}
-
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
 	out := make([]json.RawMessage, 0, len(entries))
 	removed := false
@@ -989,18 +1013,16 @@ func (h *Handlers) AdminGroupContestRemove(w http.ResponseWriter, r *http.Reques
 		out = append(out, e.raw)
 	}
 	if !removed {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест не найден в группе"})
-		return
+		return http.StatusBadRequest, "контест не найден в группе"
 	}
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
 	// Таблица inline-кондуита (если была) больше не нужна.
 	if err := removeManualTablesEntry(h.groupManualTablesPath(slug), id); err != nil {
 		h.logger.Printf("WARN remove group manual table slug=%s id=%s: %v", slug, id, err)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 // AdminGroupContestMove меняет контест местами с соседним (вверх/вниз),
@@ -1083,58 +1105,63 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
 		return
 	}
-	var req struct {
-		Slug      string `json:"slug"`
-		ID        string `json:"id"`
-		Update    bool   `json:"update"`
-		TableName string `json:"table_name"`
-		StartTime string `json:"start_time"`
-		EndTime   string `json:"end_time"`
-		// Переопределения с наследованием: пустая строка / null — «как у
-		// контеста» (ключ убирается из записи).
-		Freeze           string `json:"freeze"`
-		ZeroPenalty      *int   `json:"zero_penalty"`
-		SummaryTotalOnly *bool  `json:"summary_total_only"`
-		Hidden           *bool  `json:"hidden"`
-	}
+	var req adminGroupContestOptionsRequest
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	slug := strings.TrimSpace(req.Slug)
+	if status, msg := h.setGroupContestOptions(strings.TrimSpace(req.Slug), req); msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// adminGroupContestOptionsRequest — настройки записи контеста в группе. Пустая
+// строка / null у переопределяемых полей — «как у контеста».
+type adminGroupContestOptionsRequest struct {
+	Slug             string `json:"slug"`
+	RoleToken        string `json:"role_token"`
+	ID               string `json:"id"`
+	Update           bool   `json:"update"`
+	TableName        string `json:"table_name"`
+	StartTime        string `json:"start_time"`
+	EndTime          string `json:"end_time"`
+	Freeze           string `json:"freeze"`
+	ZeroPenalty      *int   `json:"zero_penalty"`
+	SummaryTotalOnly *bool  `json:"summary_total_only"`
+	Hidden           *bool  `json:"hidden"`
+}
+
+// setGroupContestOptions применяет настройки записи контеста группы (общий код
+// админки и панели). Пустое сообщение — успех.
+func (h *Handlers) setGroupContestOptions(slug string, req adminGroupContestOptionsRequest) (int, string) {
 	id := strings.TrimSpace(req.ID)
 	if !domain.IsValidSlug(slug) || id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
-		return
+		return http.StatusBadRequest, "bad request"
 	}
 	startTime, ok := parseAdminTime(req.StartTime)
 	if !ok && strings.TrimSpace(req.StartTime) != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "start_time: ожидается ISO (напр. 2026-09-01T18:00:00+03:00)"})
-		return
+		return http.StatusBadRequest, "start_time: ожидается ISO (напр. 2026-09-01T18:00:00+03:00)"
 	}
 	endTime, ok := parseAdminTime(req.EndTime)
 	if !ok && strings.TrimSpace(req.EndTime) != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "end_time: ожидается ISO"})
-		return
+		return http.StatusBadRequest, "end_time: ожидается ISO"
 	}
 	freeze := strings.TrimSpace(req.Freeze)
 	if _, err := domain.ParseFreezeSpec(freeze); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusBadRequest, err.Error()
 	}
 	if req.ZeroPenalty != nil && *req.ZeroPenalty < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "zero_penalty: ожидается неотрицательное число"})
-		return
+		return http.StatusBadRequest, "zero_penalty: ожидается неотрицательное число"
 	}
 	if _, ok, err := h.readGroupFile(slug); err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
+		return http.StatusBadRequest, "group not found"
 	}
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
 	out := make([]json.RawMessage, 0, len(entries))
 	found := false
@@ -1149,8 +1176,7 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			// объекта, тело контеста — как есть.
 			var m map[string]json.RawMessage
 			if err := json.Unmarshal(e.raw, &m); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-				return
+				return http.StatusInternalServerError, err.Error()
 			}
 			upd, _ := json.Marshal(req.Update)
 			m["update"] = upd
@@ -1203,8 +1229,7 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			}
 			encoded, err := json.Marshal(m)
 			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-				return
+				return http.StatusInternalServerError, err.Error()
 			}
 			out = append(out, encoded)
 		} else {
@@ -1234,21 +1259,18 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 			}
 			encoded, err := json.Marshal(entry)
 			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-				return
+				return http.StatusInternalServerError, err.Error()
 			}
 			out = append(out, encoded)
 		}
 	}
 	if !found {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "контест не найден в группе"})
-		return
+		return http.StatusBadRequest, "контест не найден в группе"
 	}
 	if err := h.writeGroupContestRaw(slug, out); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 // AdminGroupContestInlineSave создаёт/редактирует inline-контест группы через

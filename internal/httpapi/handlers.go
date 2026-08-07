@@ -51,6 +51,10 @@ type Handlers struct {
 	pageCache groupPageCache
 	// summaryCache — готовые байты /summary-data (JSON + gzip, см. page_cache.go).
 	summaryCache summaryDataCache
+	// panelSecretValue — секрет подписи role-token'ов панелей групп (лениво
+	// читается/создаётся в data/credentials/panel_secret.json).
+	panelSecretMu    sync.Mutex
+	panelSecretValue []byte
 }
 
 // SerializeDataWrite оборачивает мутирующий data-файлы админ-хендлер общим
@@ -213,7 +217,13 @@ func (h *Handlers) mergeCombinedMembers(slug string, gf domain.GroupFile, visiti
 // вырезаются. Возвращает true при токенном просмотре.
 func (h *Handlers) applyFreezeView(standings *domain.GeneratedGroupStandings, slug string, r *http.Request) bool {
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	if token != "" && h.groupTokenValid(slug, token) {
+	return h.applyFreezeViewForRole(standings, slug, h.groupRole(slug, token, "").AtLeast(RoleObserver))
+}
+
+// applyFreezeViewForRole — то же по уже вычисленной роли: elevated (наблюдатель
+// и выше) видит полные версии замороженных таблиц и скрытые контесты.
+func (h *Handlers) applyFreezeViewForRole(standings *domain.GeneratedGroupStandings, slug string, elevated bool) bool {
+	if elevated {
 		standings.SwapInFullRows()
 		return true
 	}
@@ -367,11 +377,31 @@ func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	role := h.groupRole(slug, token, "")
+	h.renderGroupPage(w, r, slug, role, token, "")
+}
 
+// GroupPanelPage — страница группы для жюри/админа группы: вход по логину и
+// паролю панели (Basic Auth), роль определяется совпавшей парой учёток. Токен
+// группы подставляется сервером, чтобы ссылки внутри страницы работали.
+func (h *Handlers) GroupPanelPage(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	role, roleToken, ok := h.authorizePanelRequest(w, r, slug)
+	if !ok {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	h.renderGroupPage(w, r, slug, role, h.groupTokenOf(slug), roleToken)
+}
+
+// renderGroupPage рендерит страницу группы под заданную роль. Публичный вид
+// (RoleGuest) отдаётся из кэша готового HTML; вид по токену и панели — всегда
+// свежий рендер.
+func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug string, role GroupRole, token, roleToken string) {
 	// Публичный вид (без токена) отдаём из кэша готового HTML, если входы не
 	// менялись; серверное время в HTML подставляется актуальное.
 	cacheVersion := ""
-	if token == "" {
+	if role == RoleGuest {
 		if v, ok := h.groupPageVersion(slug); ok {
 			cacheVersion = v
 			if html, hit := h.cachedGroupPage(slug, v); hit {
@@ -396,22 +426,29 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	unfrozen := h.applyFreezeView(&standings, slug, r)
-	tokenValid := token != "" && h.groupTokenValid(slug, token)
+	elevated := role.AtLeast(RoleObserver)
+	unfrozen := h.applyFreezeViewForRole(&standings, slug, elevated)
 	page := GroupPageData{
 		PageTitle:       standings.GroupTitle,
 		Standings:       standings,
 		Footer:          h.buildFooterInfo(),
 		UnfrozenView:    unfrozen,
-		TokenValid:      tokenValid,
+		TokenValid:      elevated,
+		Role:            role.String(),
+		RoleTitle:       role.Title(),
+		RoleToken:       roleToken,
+		InPanel:         roleToken != "",
+		CanGrade:        role.AtLeast(RoleJury),
 		CombinedMembers: h.combinedMemberTitles(slug),
 	}
 	if gf, ok := h.readSourceGroupFile(slug); ok {
 		page.GroupArchived = gf.Archived()
+		// Ссылка «войти в панель» на странице по токену — если панель настроена.
+		page.PanelConfigured = gf.PanelConfigured()
 	}
-	if tokenValid {
+	if elevated {
 		page.Token = token
-		h.juryStandingsExtras(slug, &page)
+		h.juryStandingsExtras(slug, &page, role)
 	}
 
 	if cacheVersion != "" {
@@ -510,7 +547,7 @@ func (h *Handlers) combinedMemberTitles(slug string) []string {
 	return titles
 }
 
-// GroupParticipantsPage — статистика участников группы по токену жюри.
+// GroupParticipantsPage — статистика участников группы по токену (наблюдатель).
 func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
@@ -518,6 +555,21 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
+	h.renderParticipantsPage(w, r, slug, token, false)
+}
+
+// GroupPanelParticipantsPage — те же участники, но из панели: ссылки на профили
+// ведут в панель (там доступна разметка флагов).
+func (h *Handlers) GroupPanelParticipantsPage(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	if _, _, ok := h.authorizePanelRequest(w, r, slug); !ok {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	h.renderParticipantsPage(w, r, slug, h.groupTokenOf(slug), true)
+}
+
+func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request, slug, token string, panelView bool) {
 	gf, ok := h.readSourceGroupFile(slug)
 	if !ok {
 		http.NotFound(w, r)
@@ -580,6 +632,7 @@ func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request)
 		GroupSlug:  slug,
 		GroupTitle: title,
 		Token:      token,
+		PanelView:  panelView,
 		Rows:       rows,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_participants.html", page); err != nil {
@@ -626,6 +679,36 @@ func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Reques
 	h.fillStudentProfilePage(&page, id, &slug)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
 		h.logger.Printf("ERROR render group student profile slug=%s id=%s err=%v", slug, id, err)
+	}
+}
+
+// GroupPanelStudentPage — профиль участника из панели: то же, что по токену, но
+// с разметкой флагов нечестности (роль «жюри» и выше).
+func (h *Handlers) GroupPanelStudentPage(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("group_name")
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	role, roleToken, ok := h.authorizePanelRequest(w, r, slug)
+	if !ok {
+		return
+	}
+	if !role.AtLeast(RoleJury) || !domain.IsValidSlug(id) || !h.groupContainsStudent(slug, id) {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	page := AdminStudentProfilePageData{
+		Footer:         h.buildFooterInfo(),
+		StudentID:      id,
+		BackURL:        "/standings/" + slug + "/panel/participants",
+		BackLabel:      "← Участники",
+		TokenView:      true,
+		Token:          h.groupTokenOf(slug),
+		RoleToken:      roleToken,
+		CanReviewFlags: true,
+	}
+	h.fillStudentProfilePage(&page, id, &slug)
+	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
+		h.logger.Printf("ERROR render panel student slug=%s id=%s err=%v", slug, id, err)
 	}
 }
 
@@ -981,9 +1064,22 @@ type GroupPageData struct {
 	// замороженных таблиц. Token протаскивается в ссылки страницы.
 	UnfrozenView bool
 	Token        string
-	// TokenValid — токен группы верный: доступна статистика участников (даже
-	// если замороженных таблиц нет и UnfrozenView=false).
+	// TokenValid — доступ не ниже наблюдателя: полные (размороженные) таблицы,
+	// скрытые контесты, статистика участников, экспорт.
 	TokenValid bool
+	// Role/RoleTitle — роль запроса («observer»/«jury»/«admin») и её название
+	// для шапки страницы. RoleToken — подпись роли для API панели (пусто вне
+	// панели). InPanel — страница открыта из панели (по логину и паролю).
+	Role      string
+	RoleTitle string
+	RoleToken string
+	InPanel   bool
+	// CanGrade — роль не ниже жюри: ручные оценки, кондуиты, настройка таблицы
+	// оценок, разметка флагов.
+	CanGrade bool
+	// PanelConfigured — у группы заданы учётки панели: наблюдателю показываем
+	// ссылку «войти как жюри/админ».
+	PanelConfigured bool
 	// CombinedMembers — названия групп-участниц, если это объединённая группа
 	// (для подписи на странице). Пусто — обычная группа.
 	CombinedMembers []string
@@ -1023,7 +1119,10 @@ type GroupParticipantsPageData struct {
 	GroupSlug  string
 	GroupTitle string
 	Token      string
-	Rows       []ParticipantRow
+	// PanelView — открыто из панели: ссылки на профили ведут в панель, где
+	// доступна разметка флагов.
+	PanelView bool
+	Rows      []ParticipantRow
 }
 
 type GroupGradesPageData struct {

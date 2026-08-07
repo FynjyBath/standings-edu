@@ -19,6 +19,9 @@ var (
 	fxKey2 = domain.CourseFlagKey([]string{"t9"})
 )
 
+// fxJuryToken — role-token роли «жюри» тестовой группы g1.
+func fxJuryToken(h *Handlers) string { return juryRoleToken(h) }
+
 // juryFlagSetup — juryTestSetup + сгенерированный профиль s1 с флагами в g1
 // (снапшот для отметки берётся из него).
 func juryFlagSetup(t *testing.T) (*Handlers, string) {
@@ -51,7 +54,7 @@ func TestJuryFlagReviewSetAndClear(t *testing.T) {
 	h, dataDir := juryFlagSetup(t)
 
 	code, resp := juryPost(t, h.JuryFlagReviewSet, map[string]any{
-		"slug": "g1", "token": "tok",
+		"slug": "g1", "role_token": fxJuryToken(h),
 		"student_id": "s1", "group_slug": "g1", "flag_key": fxKey1,
 		"resolution": "transfer", "comment": "перенёс с ejudge",
 	})
@@ -93,7 +96,7 @@ func TestJuryFlagReviewSetAndClear(t *testing.T) {
 
 	// Снятие отметки удаляет запись.
 	code, resp = juryPost(t, h.JuryFlagReviewSet, map[string]any{
-		"slug": "g1", "token": "tok",
+		"slug": "g1", "role_token": fxJuryToken(h),
 		"student_id": "s1", "group_slug": "g1", "flag_key": fxKey1,
 		"resolution": "",
 	})
@@ -137,7 +140,7 @@ func TestFlagReviewOldKeyMigration(t *testing.T) {
 
 	// Снятие клиентским ключом со старой страницы: exact miss → по составу задач.
 	code, resp := juryPost(t, h.JuryFlagReviewSet, map[string]any{
-		"slug": "g1", "token": "tok",
+		"slug": "g1", "role_token": fxJuryToken(h),
 		"student_id": "s1", "group_slug": "g1", "flag_key": fxKey1, "resolution": "",
 	})
 	if code != http.StatusOK || resp["ok"] != true {
@@ -157,7 +160,7 @@ func TestFlagReviewResurrectsFromSnapshot(t *testing.T) {
 	set := func(key, resolution string) {
 		t.Helper()
 		code, resp := juryPost(t, h.JuryFlagReviewSet, map[string]any{
-			"slug": "g1", "token": "tok",
+			"slug": "g1", "role_token": fxJuryToken(h),
 			"student_id": "s1", "group_slug": "g1", "flag_key": key, "resolution": resolution,
 		})
 		if code != http.StatusOK || resp["ok"] != true {
@@ -209,11 +212,11 @@ func TestJuryFlagReviewForbidden(t *testing.T) {
 		body map[string]any
 		want int
 	}{
-		{map[string]any{"slug": "g1", "token": "WRONG", "student_id": "s1", "group_slug": "g1", "flag_key": "k", "resolution": "legit"}, http.StatusForbidden},
-		{map[string]any{"slug": "g1", "token": "tok", "student_id": "s1", "group_slug": "g2", "flag_key": "k", "resolution": "legit"}, http.StatusForbidden},
-		{map[string]any{"slug": "g1", "token": "tok", "student_id": "stranger", "group_slug": "g1", "flag_key": "k", "resolution": "legit"}, http.StatusForbidden},
-		{map[string]any{"slug": "g1", "token": "tok", "student_id": "s1", "group_slug": "g1", "flag_key": fxKey1, "resolution": "guilty"}, http.StatusBadRequest},
-		{map[string]any{"slug": "g1", "token": "tok", "student_id": "s1", "group_slug": "g1", "flag_key": "no-such-flag", "resolution": "legit"}, http.StatusNotFound},
+		{map[string]any{"slug": "g1", "role_token": "WRONG", "student_id": "s1", "group_slug": "g1", "flag_key": "k", "resolution": "legit"}, http.StatusForbidden},
+		{map[string]any{"slug": "g1", "role_token": fxJuryToken(h), "student_id": "s1", "group_slug": "g2", "flag_key": "k", "resolution": "legit"}, http.StatusForbidden},
+		{map[string]any{"slug": "g1", "role_token": fxJuryToken(h), "student_id": "stranger", "group_slug": "g1", "flag_key": "k", "resolution": "legit"}, http.StatusForbidden},
+		{map[string]any{"slug": "g1", "role_token": fxJuryToken(h), "student_id": "s1", "group_slug": "g1", "flag_key": fxKey1, "resolution": "guilty"}, http.StatusBadRequest},
+		{map[string]any{"slug": "g1", "role_token": fxJuryToken(h), "student_id": "s1", "group_slug": "g1", "flag_key": "no-such-flag", "resolution": "legit"}, http.StatusNotFound},
 	}
 	for i, c := range cases {
 		if code, _ := juryPost(t, h.JuryFlagReviewSet, c.body); code != c.want {
@@ -265,7 +268,7 @@ func TestFlagReviewSyncsAcrossGroups(t *testing.T) {
 	h, _ := juryFlagSetup(t)
 
 	code, resp := juryPost(t, h.JuryFlagReviewSet, map[string]any{
-		"slug": "g1", "token": "tok",
+		"slug": "g1", "role_token": fxJuryToken(h),
 		"student_id": "s1", "group_slug": "g1", "flag_key": fxKey1,
 		"resolution": "transfer", "comment": "перенос",
 	})

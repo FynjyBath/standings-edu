@@ -91,7 +91,7 @@ func makeSource(t *testing.T) string {
 	 {"id":"c3","title":"Не используется","score_system":"edu"}
 	]`)
 	write(t, filepath.Join(dir, "groups", "grp", "group.json"),
-		`{"title":"Группа","student_ids":["ivanov","petrov"],"group_secret_token":"secret123"}`)
+		`{"title":"Группа","student_ids":["ivanov","petrov"],"group_secret_token":"secret123","panel_access":{"jury":{"login":"j","password":"jp"}}}`)
 	write(t, filepath.Join(dir, "groups", "grp", "contests.json"),
 		`[{"id":"c1","update":true}]`)
 	write(t, filepath.Join(dir, "groups", "combo", "group.json"),
@@ -342,8 +342,15 @@ func TestExportStripToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, g := range bundle.Groups {
-		if g.Slug == "grp" && strings.Contains(string(g.Group), "group_secret_token") {
+		if g.Slug != "grp" {
+			continue
+		}
+		if strings.Contains(string(g.Group), "group_secret_token") {
 			t.Fatal("токен должен быть вырезан при includeTokens=false")
+		}
+		// Учётки панели группы — такой же секрет, как токен.
+		if strings.Contains(string(g.Group), "panel_access") {
+			t.Fatal("учётки панели должны быть вырезаны при includeTokens=false")
 		}
 	}
 }

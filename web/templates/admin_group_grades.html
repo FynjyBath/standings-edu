@@ -2,9 +2,10 @@
 <section class="page-head">
   <h1>Оценки группы: {{.GroupTitle}}</h1>
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
-    <a class="summary-link-btn" href="/standings/admin/group?slug={{.GroupSlug}}">Управление группой</a>
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/grades" target="_blank" rel="noopener noreferrer">Страница оценок</a>
+    <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
+    {{if not .RoleToken}}<a class="summary-link-btn" href="/standings/admin">← В админку</a>{{end}}
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/grades{{if .GroupToken}}?token={{.GroupToken}}{{end}}" target="_blank" rel="noopener noreferrer">Страница оценок ↗</a>
+    {{if .RoleTitle}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
   </p>
 </section>
 
@@ -80,6 +81,11 @@
 <script>
   (function () {
     var slug = {{.GroupSlug}};
+    // Админка сохраняет через /api/admin (Basic Auth), панель группы — через
+    // /api/group-panel с role-token'ом роли «жюри».
+    var API_BASE = {{if .APIBase}}{{.APIBase}}{{else}}"/api/admin"{{end}};
+    var ROLE_TOKEN = {{.RoleToken}};
+    function withAuth(body) { if (ROLE_TOKEN) body.role_token = ROLE_TOKEN; return body; }
 
     // ---- Конструктор столбцов оценок ----
     var box = document.getElementById("gc-columns");
@@ -204,7 +210,7 @@
         columns: collectColumns()
       };
       setStatus("Сохранение…", false);
-      fetch("/api/admin/group-grades/config-save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      fetch(API_BASE + "/group-grades/config-save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withAuth(body)) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
         .then(function () { location.reload(); })
         .catch(function (err) { setStatus(err.message, true); });
@@ -235,7 +241,7 @@
         });
         saveBtn.disabled = true;
         setGStatus("Сохранение…", false);
-        fetch("/api/admin/group-grades/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, grades: grades }) })
+        fetch(API_BASE + "/group-grades/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withAuth({ slug: slug, grades: grades })) })
           .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); setGStatus("Сохранено. Изменения появятся после генерации.", false); }); })
           .catch(function (err) { setGStatus(err.message, true); })
           .finally(function () { saveBtn.disabled = false; });

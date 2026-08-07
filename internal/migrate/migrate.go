@@ -125,7 +125,7 @@ type GroupReport struct {
 
 // BuildBundle собирает бандл из data-директории по выбору sel. Группы-участницы
 // объединённых групп добавляются автоматически и целиком. includeTokens=false
-// вырезает group_secret_token из group.json.
+// вырезает group_secret_token и panel_access из group.json.
 func BuildBundle(dataDir string, sel Selection, includeTokens bool) (*Bundle, error) {
 	groupsDir := filepath.Join(dataDir, "groups")
 
@@ -843,7 +843,8 @@ func maybeStripToken(raw []byte, include bool) []byte {
 	if include {
 		return raw
 	}
-	return stripKey(raw, "group_secret_token")
+	// Учётки панели группы — такой же секрет, как токен: из бандла вырезаем.
+	return stripKey(stripKey(raw, "group_secret_token"), "panel_access")
 }
 
 // stripKey удаляет ключ верхнего уровня из JSON-объекта, сохраняя остальные поля.

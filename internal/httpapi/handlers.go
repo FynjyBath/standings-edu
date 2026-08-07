@@ -468,8 +468,6 @@ func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug 
 	}
 	if gf, ok := h.readSourceGroupFile(slug); ok {
 		page.GroupArchived = gf.Archived()
-		// Ссылка «войти в панель» на странице по токену — если панель настроена.
-		page.PanelConfigured = gf.PanelConfigured()
 	}
 	if elevated {
 		page.Token = token
@@ -1105,9 +1103,6 @@ type GroupPageData struct {
 	// CanGrade — роль не ниже жюри: ручные оценки, кондуиты, настройка таблицы
 	// оценок, разметка флагов.
 	CanGrade bool
-	// PanelConfigured — у группы заданы учётки панели: наблюдателю показываем
-	// ссылку «войти как жюри/админ».
-	PanelConfigured bool
 	// CombinedMembers — названия групп-участниц, если это объединённая группа
 	// (для подписи на странице). Пусто — обычная группа.
 	CombinedMembers []string

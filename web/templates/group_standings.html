@@ -21,9 +21,6 @@
     {{if and .CanGrade .JuryHasGrades}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/panel/grades">✏️ Выставить оценки</a>
     {{end}}
-    {{if and .PanelConfigured (not .InPanel)}}
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/panel" title="Вход по логину и паролю: оценки (Жюри) и управление контестами (Админ)">🔑 Войти в панель</a>
-    {{end}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/export.xlsx?token={{.Token}}" title="Книга Excel: листы — вкладки сводной, оценки с формулами. Импортируется в Google Таблицы (Файл → Импорт).">⬇ Excel</a>
     {{end}}
   </p>

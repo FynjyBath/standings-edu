@@ -39,7 +39,7 @@
 
 <section class="admin-block">
   <h2>Ссылки на задачи</h2>
-  <p class="empty-hint">Показывать ли ученикам ссылки на условия задач в таблицах. Если снять — на странице для учеников останутся только метки задач (A, B, C…), без переходов к условиям и посылкам. Жюри по токену ссылки видит всегда. Действует сразу, без перегенерации.</p>
+  <p class="empty-hint">Показывать ли ученикам ссылки на условия задач в таблицах. Если снять — на странице для учеников останутся только метки задач (A, B, C…), без переходов к условиям и посылкам. По ссылке наблюдателя ссылки на задачи видны всегда. Действует сразу, без перегенерации.</p>
   <div class="admin-editor-tools">
     <label style="display:flex;align-items:center;gap:0.5rem;">
       <input type="checkbox" id="show-task-links" style="width:auto;"{{if .ShowTaskLinks}} checked{{end}} />
@@ -94,13 +94,13 @@
 </section>
 
 <section class="admin-block">
-  <h2>Токен жюри (просмотр без заморозки)</h2>
+  <h2>Токен наблюдателя (просмотр без заморозки)</h2>
   {{if .SecretToken}}
   <p>Токен: <code id="jury-token">{{.SecretToken}}</code></p>
-  <p>Ссылка для жюри: <a id="jury-link" href="/standings/{{.GroupSlug}}?token={{.SecretToken}}" target="_blank" rel="noopener noreferrer"></a></p>
-  <p class="empty-hint">По ссылке замороженные контесты показываются полностью. Смена или удаление токена действует сразу, без перегенерации.</p>
+  <p>Ссылка наблюдателя: <a id="jury-link" href="/standings/{{.GroupSlug}}?token={{.SecretToken}}" target="_blank" rel="noopener noreferrer"></a></p>
+  <p class="empty-hint">По ссылке видны размороженные и скрытые контесты, статистика участников и экспорт — но ничего нельзя изменить (для этого нужна панель ниже). Смена или удаление токена действует сразу, без перегенерации.</p>
   {{else}}
-  <p class="empty-hint">Токен не задан — размороженный просмотр недоступен. Сгенерируйте токен и отдайте ссылку жюри.</p>
+  <p class="empty-hint">Токен не задан — размороженный просмотр недоступен. Сгенерируйте токен и отдайте ссылку тем, кому нужен только просмотр.</p>
   {{end}}
   <div class="admin-editor-tools">
     <button type="button" id="token-generate" class="admin-btn">{{if .SecretToken}}Перегенерировать{{else}}Сгенерировать{{end}}</button>
@@ -111,7 +111,7 @@
 
 <section class="admin-block">
   <h2>Доступ преподавателей (панель группы)</h2>
-  <p class="empty-hint">Вход по логину и паролю на <a href="/standings/{{.GroupSlug}}/panel" target="_blank" rel="noopener noreferrer">/standings/{{.GroupSlug}}/panel</a> — как в админке, только для этой группы. <b>Жюри</b>: оценки (столбцы, веса, коэффициенты), кондуиты, разметка флагов. <b>Админ группы</b>: то же плюс управление контестами группы. Токен из блока выше даёт только просмотр — без панели.</p>
+  <p class="empty-hint">Вход по логину и паролю на <a href="/standings/{{.GroupSlug}}/panel" target="_blank" rel="noopener noreferrer">/standings/{{.GroupSlug}}/panel</a> — как в админке, только для этой группы. <b>Жюри</b>: оценки (столбцы, веса, коэффициенты), кондуиты, разметка флагов. <b>Админ</b>: то же плюс управление контестами группы. Токен наблюдателя из блока выше даёт только просмотр — без панели.</p>
   <div class="panel-access-grid">
     <div class="panel-access-card">
       <div class="panel-access-head">Жюри {{if .PanelJuryLogin}}<span class="panel-access-on">✓ {{.PanelJuryLogin}}</span>{{else}}<span class="grade-weight">не настроено</span>{{end}}</div>
@@ -123,7 +123,7 @@
       </div>
     </div>
     <div class="panel-access-card">
-      <div class="panel-access-head">Админ группы {{if .PanelAdminLogin}}<span class="panel-access-on">✓ {{.PanelAdminLogin}}</span>{{else}}<span class="grade-weight">не настроено</span>{{end}}</div>
+      <div class="panel-access-head">Админ {{if .PanelAdminLogin}}<span class="panel-access-on">✓ {{.PanelAdminLogin}}</span>{{else}}<span class="grade-weight">не настроено</span>{{end}}</div>
       <div class="admin-editor-tools">
         <input type="text" id="pa-admin-login" value="{{.PanelAdminLogin}}" placeholder="логин" autocomplete="off" style="max-width:10rem;" />
         <input type="text" id="pa-admin-password" value="" placeholder="пароль" autocomplete="off" style="max-width:12rem;" />
@@ -147,12 +147,12 @@
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
     }
 
-    // Токен жюри: полная ссылка строится от текущего адреса сайта.
+    // Токен наблюдателя: полная ссылка строится от текущего адреса сайта.
     var juryLink = document.getElementById("jury-link");
     if (juryLink) juryLink.textContent = location.origin + juryLink.getAttribute("href");
     var tokenStatus = document.getElementById("token-status");
     function tokenAction(clear) {
-      if (clear && !confirm("Убрать токен? Старая ссылка жюри перестанет работать сразу.")) return;
+      if (clear && !confirm("Убрать токен? Старая ссылка наблюдателя перестанет работать сразу.")) return;
       post("/api/admin/group/token/set", { slug: slug, clear: clear })
         .then(function () { location.reload(); })
         .catch(function (err) { tokenStatus.textContent = err.message; tokenStatus.className = "admin-editor-status admin-editor-status--error"; });

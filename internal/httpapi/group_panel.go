@@ -1,6 +1,6 @@
 package httpapi
 
-// Панель группы: страницы и API для ролей «жюри» и «админ группы».
+// Панель группы: страницы и API для ролей «Жюри» и «Админ».
 // Вход — /standings/<slug>/panel (Basic Auth по учёткам из group.json), дальше
 // каждая операция подтверждается role-token'ом (см. group_access.go).
 //
@@ -27,7 +27,7 @@ type GroupPanelContestsPageData struct {
 	GroupToken string
 }
 
-// GroupPanelContestsPage — управление контестами группы (роль «админ группы»):
+// GroupPanelContestsPage — управление контестами группы (роль «Админ»):
 // та же таблица и та же форма контеста, что в админке.
 func (h *Handlers) GroupPanelContestsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
@@ -36,7 +36,7 @@ func (h *Handlers) GroupPanelContestsPage(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !role.AtLeast(RoleAdmin) {
-		http.Error(w, "нужны права админа группы", http.StatusForbidden)
+		http.Error(w, "нужны права роли «Админ»", http.StatusForbidden)
 		return
 	}
 	base, found, err := h.buildGroupManageData(slug)
@@ -62,7 +62,7 @@ func (h *Handlers) GroupPanelContestsPage(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// GroupPanelGradesPage — редактор оценок группы (роль «жюри»): настройка
+// GroupPanelGradesPage — редактор оценок группы (роль «Жюри»): настройка
 // столбцов (веса, метрика, нормировка, коэффициенты) и сетка ручных оценок.
 // Тот же шаблон, что в админке.
 func (h *Handlers) GroupPanelGradesPage(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +72,7 @@ func (h *Handlers) GroupPanelGradesPage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !role.AtLeast(RoleJury) {
-		http.Error(w, "нужны права жюри", http.StatusForbidden)
+		http.Error(w, "нужны права роли «Жюри»", http.StatusForbidden)
 		return
 	}
 	page, found, err := h.buildGroupGradesData(slug)
@@ -227,7 +227,7 @@ func (h *Handlers) PanelContestInlineSave(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
-// PanelGradesSave — ручные оценки группы (роль жюри).
+// PanelGradesSave — ручные оценки группы (роль «Жюри»).
 func (h *Handlers) PanelGradesSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Slug      string                        `json:"slug"`
@@ -250,7 +250,7 @@ func (h *Handlers) PanelGradesSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // PanelGradesConfigSave — настройка таблицы оценок: столбцы, веса, метрика,
-// нормировка, коэффициент дорешки, учёт пропущенных контестов (роль жюри).
+// нормировка, коэффициент дорешки, учёт пропущенных контестов (роль «Жюри»).
 func (h *Handlers) PanelGradesConfigSave(w http.ResponseWriter, r *http.Request) {
 	var req adminGradesConfigSaveRequest
 	if err := decodeAdminJSON(r, &req); err != nil {

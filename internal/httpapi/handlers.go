@@ -381,7 +381,7 @@ func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	h.renderGroupPage(w, r, slug, role, token, "")
 }
 
-// GroupPanelPage — страница группы для жюри/админа группы: вход по логину и
+// GroupPanelPage — страница группы для жюри/роли «Админ»: вход по логину и
 // паролю панели (Basic Auth), роль определяется совпавшей парой учёток. Токен
 // группы подставляется сервером, чтобы ссылки внутри страницы работали.
 func (h *Handlers) GroupPanelPage(w http.ResponseWriter, r *http.Request) {
@@ -513,7 +513,6 @@ func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) 
 		data := map[string]any{
 			"Contest":       standings.Contests[i],
 			"TokenValid":    false,
-			"JuryCanManage": false,
 			"JuryKonduits":  map[string]bool(nil),
 			"GroupSlug":     standings.GroupSlug,
 			"Token":         "",
@@ -683,7 +682,7 @@ func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Reques
 }
 
 // GroupPanelStudentPage — профиль участника из панели: то же, что по токену, но
-// с разметкой флагов нечестности (роль «жюри» и выше).
+// с разметкой флагов нечестности (роль «Жюри» и выше).
 func (h *Handlers) GroupPanelStudentPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
@@ -1086,15 +1085,16 @@ type GroupPageData struct {
 	// GroupArchived — группа в архиве (update=false): под всеми её таблицами
 	// показываем «последнее обновление» (таблицы не пересобираются).
 	GroupArchived bool
-	// Жюри-панель (заполняется только при валидном токене):
-	// JuryCanManage — можно добавлять/двигать контесты (обычная группа);
+	// Панель группы (заполняется от роли «Жюри»):
+	// CanManageContests — управление контестами группы (роль «админ», обычная
+	// группа: у объединённой своих контестов нет);
 	// JuryAddable — глобальные контесты, которых ещё нет в группе;
 	// JuryKonduits — id inline-кондуитов (жюри может заполнять оценки);
 	// JuryHasGrades — у группы есть ручные столбцы оценок (ссылка на редактор).
-	JuryCanManage bool
-	JuryAddable   []AdminGroupContestOption
-	JuryKonduits  map[string]bool
-	JuryHasGrades bool
+	CanManageContests bool
+	JuryAddable       []AdminGroupContestOption
+	JuryKonduits      map[string]bool
+	JuryHasGrades     bool
 	// JuryNewKonduits — кондуиты группы, которых ещё нет в сгенерированных
 	// таблицах (только что созданы): ссылки на редактор показываются в панели.
 	JuryNewKonduits []AdminGroupContestOption

@@ -9,13 +9,13 @@
 </section>
 
 <section class="admin-block">
-  <h2>Токен жюри (просмотр без заморозки)</h2>
+  <h2>Токен наблюдателя (просмотр без заморозки)</h2>
   {{if .Token}}
   <p>Токен: <code id="jury-token">{{.Token}}</code></p>
-  <p>Ссылка для жюри: <a id="jury-link" href="/standings/{{.Slug}}?token={{.Token}}" target="_blank" rel="noopener noreferrer"></a></p>
+  <p>Ссылка наблюдателя: <a id="jury-link" href="/standings/{{.Slug}}?token={{.Token}}" target="_blank" rel="noopener noreferrer"></a></p>
   <p class="empty-hint">По ссылке замороженные контесты показываются полностью и доступна статистика участников. Смена или удаление токена действует сразу.</p>
   {{else}}
-  <p class="empty-hint">Токен не задан — размороженный просмотр и статистика участников недоступны. Сгенерируйте токен и отдайте ссылку жюри.</p>
+  <p class="empty-hint">Токен не задан — размороженный просмотр и статистика участников недоступны. Сгенерируйте токен и отдайте ссылку тем, кому нужен только просмотр.</p>
   {{end}}
   <div class="admin-editor-tools">
     <button type="button" id="token-generate" class="admin-btn">{{if .Token}}Перегенерировать{{else}}Сгенерировать{{end}}</button>
@@ -59,12 +59,12 @@
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
     }
 
-    // Токен жюри — тот же эндпоинт, что и у обычных групп.
+    // Токен наблюдателя — тот же эндпоинт, что и у обычных групп.
     var juryLink = document.getElementById("jury-link");
     if (juryLink) juryLink.textContent = location.origin + juryLink.getAttribute("href");
     var tokenStatus = document.getElementById("token-status");
     function tokenAction(clear) {
-      if (clear && !confirm("Убрать токен? Старая ссылка жюри перестанет работать сразу.")) return;
+      if (clear && !confirm("Убрать токен? Старая ссылка наблюдателя перестанет работать сразу.")) return;
       post("/api/admin/group/token/set", { slug: slug, clear: clear })
         .then(function () { location.reload(); })
         .catch(function (err) { tokenStatus.textContent = err.message; tokenStatus.className = "admin-editor-status admin-editor-status--error"; });

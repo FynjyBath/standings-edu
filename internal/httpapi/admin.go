@@ -1120,7 +1120,7 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 
 // buildGroupGradesData собирает страницу оценок группы: конструктор столбцов
 // (веса, метрика, нормировка, коэффициенты) и сетка ручных оценок. Общая для
-// админки и панели группы (роль «жюри»). ok=false — группы нет.
+// админки и панели группы (роль «Жюри»). ok=false — группы нет.
 func (h *Handlers) buildGroupGradesData(slug string) (AdminGroupGradesPageData, bool, error) {
 	var empty AdminGroupGradesPageData
 	if !domain.IsValidSlug(slug) {
@@ -1366,7 +1366,7 @@ func (h *Handlers) AdminGroupGradesConfigSave(w http.ResponseWriter, r *http.Req
 }
 
 // saveGradesConfig записывает конфигурацию оценок группы (заголовок, округление,
-// столбцы с весами и параметрами). Общий код админки и панели (роль «жюри»).
+// столбцы с весами и параметрами). Общий код админки и панели (роль «Жюри»).
 func (h *Handlers) saveGradesConfig(slug string, req adminGradesConfigSaveRequest) (int, string) {
 	if !domain.IsValidSlug(slug) {
 		return http.StatusBadRequest, "invalid slug"

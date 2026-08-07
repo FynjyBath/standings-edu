@@ -16,7 +16,7 @@
             {{if .TeacherURL}}
             <span class="dir-links">
               <a class="summary-link-btn" href="{{.TeacherURL}}" target="_blank" rel="noopener noreferrer">Открыть&nbsp;↗</a>
-              <button type="button" class="dir-copy" data-url="{{.TeacherURL}}" title="Скопировать ссылку с токеном (секретная)">⧉ Копировать</button>
+              <button type="button" class="dir-copy" data-url="{{.TeacherURL}}" title="Скопировать ссылку наблюдателя (секретная)">⧉ Копировать</button>
             </span>
             {{else}}
             <span class="dir-slug">токена нет</span>
@@ -29,7 +29,7 @@
 {{if or .Directory .ArchivedGroups}}
 <section class="page-head">
   <h1>Все группы</h1>
-  <p class="empty-hint">Каталог для преподавателей: ссылка для ученика и ссылка с токеном жюри (просмотр без заморозки, скрытые контесты, статистика участников). Ссылка с токеном — секретная, не давайте её ученикам.</p>
+  <p class="empty-hint">Каталог для преподавателей: ссылка для ученика и ссылка наблюдателя с токеном (просмотр без заморозки, скрытые контесты, статистика участников, экспорт). Ссылка с токеном — секретная, не давайте её ученикам. Менять оценки и контесты можно в панели группы: /standings/&lt;группа&gt;/panel (логин и пароль задаются в админке группы).</p>
 </section>
 
 <section class="admin-block">
@@ -44,7 +44,7 @@
         <tr>
           <th class="student-col">Группа</th>
           <th>Ссылка для ученика</th>
-          <th>Ссылка для преподавателя (с токеном)</th>
+          <th>Ссылка наблюдателя (с токеном)</th>
         </tr>
       </thead>
       <tbody>
@@ -67,7 +67,7 @@
           <tr>
             <th class="student-col">Группа</th>
             <th>Ссылка для ученика</th>
-            <th>Ссылка для преподавателя (с токеном)</th>
+            <th>Ссылка наблюдателя (с токеном)</th>
           </tr>
         </thead>
         <tbody>

@@ -3,7 +3,7 @@
 {{- end}}
 
 {{define "contestBlockBody"}}
-{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$canManage := .JuryCanManage}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}{{$groupArchived := .GroupArchived}}
+{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}{{$groupArchived := .GroupArchived}}
 {{- with $contest}}
     <div class="contest-block-head">
       <h2>{{.Title}}</h2>
@@ -17,13 +17,9 @@
     {{if .FrozenAt}}
     <p class="empty-hint">Результаты после {{localTimeSec .FrozenAt}} скрыты до разморозки.</p>
     {{end}}
-    {{if and $tokenValid $canManage}}
+    {{if and $tokenValid (index $konduits .ID)}}
     <div class="admin-editor-tools" style="gap:0.4rem;margin:0.3rem 0 0.5rem;">
-      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="up" title="Поднять контест выше">↑</button>
-      <button type="button" class="admin-btn admin-btn--secondary jury-move" data-id="{{.ID}}" data-dir="down" title="Опустить контест ниже">↓</button>
-      {{if index $konduits .ID}}
       <a class="admin-btn admin-btn--secondary" href="/standings/{{$slug}}/jury-konduit?id={{.ID}}">✏️ Заполнить кондуит</a>
-      {{end}}
     </div>
     {{end}}
     {{if $uv}}
@@ -67,7 +63,7 @@
             {{if .Subcontests}}
               {{range .Subcontests}}
                 {{range .Tasks}}
-                <th class="task-col{{if .Hidden}} task-hidden{{end}}"{{if .Hidden}} title="Скрытая задача — видна только по токену{{if .Name}}: {{.Name}}{{end}}"{{else if .Name}} title="{{.Name}}"{{end}}>
+                <th class="task-col{{if .Hidden}} task-hidden{{end}}"{{if .Hidden}} title="Скрытая задача — видна от роли «Наблюдатель»{{if .Name}}: {{.Name}}{{end}}"{{else if .Name}} title="{{.Name}}"{{end}}>
                   {{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}{{if .Hidden}} 🔒{{end}}
                   {{if and $tokenValid .Weight}}<span class="task-weight" title="Типичное время решения задачи ≈ {{printf "%.0f" .Weight}} мин (медиана активного времени решивших во всех группах с этой задачей)">≈{{printf "%.0f" .Weight}}′</span>{{end}}
                 </th>
@@ -128,7 +124,7 @@
   <p>Форма добавления/обновления данных аккаунтов: <a href="{{.Standings.FormLink}}" target="_blank" rel="noopener noreferrer">{{.Standings.FormLink}}</a></p>
   {{end}}
   {{if .UnfrozenView}}
-  <p class="empty-hint">🔓 Просмотр без заморозки (по токену): ученикам замороженные контесты показываются иначе.</p>
+  <p class="empty-hint">🔓 Просмотр без заморозки: ученикам замороженные контесты показываются иначе.</p>
   {{end}}
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/summary{{if .Token}}?token={{.Token}}{{end}}">Сводная таблица</a>
@@ -141,7 +137,7 @@
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/panel/grades">✏️ Выставить оценки</a>
     {{end}}
     {{if and .PanelConfigured (not .InPanel)}}
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/panel" title="Вход по логину и паролю: оценки (жюри) и управление контестами (админ группы)">🔑 Войти в панель</a>
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/panel" title="Вход по логину и паролю: оценки (Жюри) и управление контестами (Админ)">🔑 Войти в панель</a>
     {{end}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/export.xlsx?token={{.Token}}" title="Книга Excel: листы — вкладки сводной, оценки с формулами. Импортируется в Google Таблицы (Файл → Импорт).">⬇ Excel</a>
     {{end}}
@@ -169,7 +165,7 @@
       </div>
       <p class="jury-action-hint">Столбцы и веса, коэффициент дорешки, учёт пропущенных контестов и сами оценки.</p>
     </div>
-    {{if .JuryCanManage}}
+    {{if .CanManageContests}}
     <div class="jury-action">
       <label class="jury-action-label">Контесты группы</label>
       <div class="jury-action-row">
@@ -261,7 +257,7 @@
       <button type="button" class="rows-expand-btn lazy-load-btn">Показать таблицу</button>
     </div>
     {{else}}
-    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "JuryCanManage" $.JuryCanManage "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token "GroupArchived" $.GroupArchived)}}
+    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token "GroupArchived" $.GroupArchived)}}
     {{end}}
   </section>
   {{end}}
@@ -463,15 +459,6 @@
       return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); return p; }); });
     }
-    // Порядок контестов — стрелками прямо у таблиц (роль «админ группы»).
-    document.querySelectorAll(".jury-move").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        setStatus("Перемещение…", false);
-        post("/api/group-panel/contests/move", { id: btn.dataset.id, dir: btn.dataset.dir })
-          .then(function () { location.reload(); })
-          .catch(function (err) { setStatus(err.message, true); });
-      });
-    });
     // Создание кондуита: название + число задач; после создания сразу редактор.
     var konduitBtn = document.getElementById("jury-konduit-create");
     if (konduitBtn) konduitBtn.addEventListener("click", function () {

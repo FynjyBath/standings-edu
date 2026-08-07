@@ -2,12 +2,14 @@ package httpapi
 
 // Доступ к страницам группы. Четыре уровня, каждый включает предыдущий:
 //
-//	RoleGuest    — без токена: публичная страница (заморозка, скрытое вырезано);
-//	RoleObserver — ?token=<group_secret_token>: разморозка, скрытые контесты,
-//	               участники, профили, экспорт в Excel. Панелей нет;
-//	RoleJury     — логин/пароль жюри: + ручные оценки, кондуиты, настройка
-//	               таблицы оценок (столбцы, веса), разметка флагов;
-//	RoleAdmin    — логин/пароль админа группы: + управление контестами группы
+//	RoleGuest    — «Гость», без токена: публичная страница (заморозка, скрытое
+//	               вырезано);
+//	RoleObserver — «Наблюдатель», ?token=<group_secret_token>: разморозка,
+//	               скрытые контесты, участники, профили, экспорт в Excel.
+//	               Ничего не меняет;
+//	RoleJury     — «Жюри», логин/пароль: + ручные оценки, настройка таблицы
+//	               оценок (столбцы, веса), кондуиты, разметка флагов;
+//	RoleAdmin    — «Админ», логин/пароль: + управление контестами группы
 //	               (добавить/убрать/переставить/настроить, inline-контесты).
 //
 // Вход в панель — /standings/<slug>/panel: браузерный Basic Auth (как в главной
@@ -63,13 +65,13 @@ func (r GroupRole) String() string {
 func (r GroupRole) Title() string {
 	switch r {
 	case RoleAdmin:
-		return "админ группы"
+		return "Админ"
 	case RoleJury:
-		return "жюри"
+		return "Жюри"
 	case RoleObserver:
-		return "наблюдатель"
+		return "Наблюдатель"
 	}
-	return "гость"
+	return "Гость"
 }
 
 // panelSecret возвращает секрет подписи role-token'ов. Хранится в
@@ -129,7 +131,7 @@ func (h *Handlers) roleTokenFor(slug string, role GroupRole, cred *domain.GroupP
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// panelRoleByCredentials — роль по логину/паролю (админ старше жюри). Сравнение
+// panelRoleByCredentials — роль по логину/паролю («Админ» старше «Жюри»). Сравнение
 // constant-time, чтобы не подсказывать таймингом.
 func panelRoleByCredentials(gf domain.GroupFile, login, password string) GroupRole {
 	if gf.PanelAccess == nil {

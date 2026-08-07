@@ -14,13 +14,13 @@ import (
 	"standings-edu/internal/source"
 )
 
-// Операции жюри: по role-token'у панели группы (роль «жюри» и выше), строго в
+// Операции жюри: по role-token'у панели группы (роль «Жюри» и выше), строго в
 // рамках своей группы:
 //   - выставить ручные оценки и настроить таблицу оценок (см. group_panel.go);
 //   - создать кондуит и заполнить его (manual_table);
 //   - разметить флаги нечестности.
 //
-// Управление контестами — роль «админ группы», см. group_panel.go.
+// Управление контестами — роль «Админ», см. group_panel.go.
 
 // juryAuthorized — права жюри по role-token'у панели (см. group_access.go).
 // Токена группы (?token=) для операций НЕДОСТАТОЧНО: он даёт только просмотр.
@@ -563,8 +563,8 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, role Gr
 	if len(gf.MemberGroups) > 0 {
 		return // объединённая группа: своих контестов нет
 	}
-	// Управление контестами — только админ группы; жюри видит кондуиты.
-	page.JuryCanManage = role.AtLeast(RoleAdmin)
+	// Управление контестами — только роль «админ»; жюри видит кондуиты.
+	page.CanManageContests = role.AtLeast(RoleAdmin)
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {

@@ -52,13 +52,16 @@
     var ALL_TAB = "Все"; // "Все"
     var allContests = Array.isArray(standings.contests) ? standings.contests : [];
 
-    // Ссылка на таблицу контеста в списке (та же группа, якорь на контест).
+    // Ссылка на отдельную страницу контеста: там только его таблица, поэтому
+    // переход всегда попадает точно (якорь на общую страницу «мазал» — её
+    // высота менялась после прыжка из-за ленивой подгрузки соседних таблиц).
     var listBase = "/standings/" + (standings.group_slug || "");
     var token = root.getAttribute("data-token") || "";
     var tokenQuery = token ? ("?token=" + encodeURIComponent(token)) : "";
     function contestListURL(contestId) {
       if (!contestId) return null;
-      return listBase + tokenQuery + "#contest-" + contestId;
+      return listBase + "/contest?id=" + encodeURIComponent(contestId) +
+        (token ? "&token=" + encodeURIComponent(token) : "");
     }
     // Заголовок контеста в шапке сводной: ссылка «открыть в списке», если id есть.
     function setContestHeader(th, text, contestId, tooltip) {
@@ -72,7 +75,7 @@
       a.className = "summary-contest-link";
       a.href = url;
       a.textContent = text;
-      a.title = tooltip || "Открыть таблицу этого контеста в списке";
+      a.title = tooltip || "Открыть таблицу этого контеста";
       th.appendChild(a);
     }
 

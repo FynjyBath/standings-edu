@@ -80,6 +80,9 @@ type Workbook struct {
 	Sheets []*Sheet
 }
 
+// SetName переименовывает лист (имя проходит ту же чистку, что при создании).
+func (s *Sheet) SetName(name string) { s.Name = sanitizeSheetName(name) }
+
 func (w *Workbook) AddSheet(name string) *Sheet {
 	s := &Sheet{Name: sanitizeSheetName(name), ColWidths: map[int]float64{}}
 	w.Sheets = append(w.Sheets, s)

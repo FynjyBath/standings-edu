@@ -2553,3 +2553,62 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   color: var(--accent-strong);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* Страница одного контеста: крошка группы и «листалка» соседних контестов. */
+.contest-page-group {
+  margin: 0 0 0.2rem;
+  font-size: 0.85rem;
+}
+.contest-page-group a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.contest-page-group a:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.contest-pager {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+.contest-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent 40%);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+.contest-pager-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line) 55%);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface) 92%);
+}
+.contest-pager-link--next {
+  grid-column: 2;
+  text-align: right;
+}
+.contest-pager-dir {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.contest-pager-title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .contest-pager {
+    grid-template-columns: 1fr;
+  }
+  .contest-pager-link--next {
+    grid-column: 1;
+  }
+}

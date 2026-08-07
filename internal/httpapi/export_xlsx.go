@@ -27,7 +27,7 @@ func (h *Handlers) GroupExportXLSX(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.serveGroupExportXLSX(w, slug)
+	h.serveGroupExportXLSX(w, slug, strings.TrimSpace(r.URL.Query().Get("contest")))
 }
 
 // AdminGroupExportXLSX — тот же экспорт из админки (?slug=...).
@@ -37,10 +37,12 @@ func (h *Handlers) AdminGroupExportXLSX(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
-	h.serveGroupExportXLSX(w, slug)
+	h.serveGroupExportXLSX(w, slug, strings.TrimSpace(r.URL.Query().Get("contest")))
 }
 
-func (h *Handlers) serveGroupExportXLSX(w http.ResponseWriter, slug string) {
+// serveGroupExportXLSX отдаёт книгу группы. contestID непустой — выгружается
+// только эта таблица (без листа оценок: они считаются по всей группе).
+func (h *Handlers) serveGroupExportXLSX(w http.ResponseWriter, slug, contestID string) {
 	standings, err := h.loadGroupStandings(slug)
 	if err != nil {
 		http.NotFound(w, nil)
@@ -49,13 +51,36 @@ func (h *Handlers) serveGroupExportXLSX(w http.ResponseWriter, slug string) {
 	// Вид преподавателя: полные версии замороженных таблиц, скрытое видно.
 	standings.SwapInFullRows()
 
+	filename := slug + "-" + time.Now().Format("2006-01-02") + ".xlsx"
 	var gradesCfg *domain.GradesConfig
-	if gf, ok := h.readSourceGroupFile(slug); ok {
-		gradesCfg = gf.Grades
+	manual := map[string]map[string]float64{}
+	if contestID != "" {
+		kept := standings.Contests[:0]
+		for _, c := range standings.Contests {
+			if c.ID == contestID {
+				kept = append(kept, c)
+			}
+		}
+		if len(kept) == 0 {
+			http.NotFound(w, nil)
+			return
+		}
+		// Один контест — одна вкладка: убираем table_name, чтобы не появился
+		// второй (одинаковый) лист темы, а единственный лист называем контестом.
+		standings.Contests = kept
+		standings.Contests[0].TableNames = nil
+		filename = slug + "-" + contestID + "-" + time.Now().Format("2006-01-02") + ".xlsx"
+	} else {
+		if gf, ok := h.readSourceGroupFile(slug); ok {
+			gradesCfg = gf.Grades
+		}
+		manual = h.readManualGrades(slug)
 	}
-	manual := h.readManualGrades(slug)
 
 	wb := buildGroupExportWorkbook(standings, gradesCfg, manual)
+	if contestID != "" && len(wb.Sheets) == 1 {
+		wb.Sheets[0].SetName(contestPageTitle(standings.Contests[0]))
+	}
 	var buf bytes.Buffer
 	if err := wb.Write(&buf); err != nil {
 		h.logger.Printf("ERROR export xlsx slug=%s err=%v", slug, err)
@@ -63,7 +88,6 @@ func (h *Handlers) serveGroupExportXLSX(w http.ResponseWriter, slug string) {
 		return
 	}
 
-	filename := slug + "-" + time.Now().Format("2006-01-02") + ".xlsx"
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	_, _ = w.Write(buf.Bytes())

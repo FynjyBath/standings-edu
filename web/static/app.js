@@ -181,8 +181,39 @@
       });
     }
 
-    // Чипы — только навигация-якори (клик прокручивает к контесту). Активный
-    // контест не подсвечиваем по просьбе: без scroll-spy и без is-current.
+    // Клик по чипу: нативный якорь ненадёжен — если целевой блок ещё не
+    // подгружен (ленивая загрузка) или таблица свернётся после отрисовки,
+    // высота страницы меняется уже после прыжка и попадание «мажет». Поэтому
+    // прокручиваем сами: сначала просим блок загрузиться, ждём появления
+    // таблицы, и только потом scrollIntoView (плюс повтор на следующем кадре).
+    chipsBox.addEventListener("click", function (e) {
+      var chip = e.target.closest ? e.target.closest(".toc-chip") : null;
+      if (!chip) return;
+      var id = chip.getAttribute("data-toc-target");
+      var target = id && document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      history.replaceState(null, "", "#" + id);
+
+      function settle() {
+        target.scrollIntoView({ block: "start" });
+        // Второй заход после перерисовки: свёртка и вставленные строки могли
+        // сдвинуть блок, пока браузер применял первый скролл.
+        requestAnimationFrame(function () { target.scrollIntoView({ block: "start" }); });
+      }
+      if (!target.classList.contains("contest-lazy")) { settle(); return; }
+      // Ленивый блок: жмём его кнопку загрузки и ждём появления таблицы.
+      var btn = target.querySelector(".lazy-load-btn");
+      if (btn) btn.click();
+      var waited = 0;
+      var timer = setInterval(function () {
+        waited += 60;
+        if (target.querySelector("table") || waited > 6000) {
+          clearInterval(timer);
+          settle();
+        }
+      }, 60);
+    });
   }
 
   // ── 4. Свёртка длинных таблиц ────────────────────────────────────────────

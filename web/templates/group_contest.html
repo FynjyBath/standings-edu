@@ -1,0 +1,75 @@
+{{define "content"}}
+{{/* Ссылки собираем заранее: html/template не разрешает склеивать URL из
+     условных кусков прямо в href. */}}
+{{$base := printf "/standings/%s" .GroupSlug}}
+{{$summaryURL := printf "%s/summary" $base}}
+{{$exportURL := printf "%s/export.xlsx?contest=%s" $base .Contest.ID}}
+{{$prevURL := printf "%s/contest?id=%s" $base .PrevID}}
+{{$nextURL := printf "%s/contest?id=%s" $base .NextID}}
+{{if .Token}}
+  {{$summaryURL = printf "%s/summary?token=%s" $base .Token}}
+  {{$exportURL = printf "%s/export.xlsx?token=%s&contest=%s" $base .Token .Contest.ID}}
+{{end}}
+{{if .InPanel}}
+  {{$prevURL = printf "%s/panel/contest?id=%s" $base .PrevID}}
+  {{$nextURL = printf "%s/panel/contest?id=%s" $base .NextID}}
+{{else if .Token}}
+  {{$prevURL = printf "%s/contest?id=%s&token=%s" $base .PrevID .Token}}
+  {{$nextURL = printf "%s/contest?id=%s&token=%s" $base .NextID .Token}}
+{{end}}
+{{$konduitURL := printf "%s/jury-konduit?id=%s" $base .Contest.ID}}
+
+<section class="page-head">
+  <p class="contest-page-group"><a href="{{.BackURL}}">{{.GroupTitle}}</a></p>
+  <h1>{{.Contest.Title}}
+    {{if .Contest.FrozenAt}}<span class="pinned-badge">❄ Заморожено</span>{{end}}
+    {{if and .Contest.StartTime .Contest.EndTime}}
+    <span class="contest-status" data-start="{{timeISO .Contest.StartTime}}" data-end="{{timeISO .Contest.EndTime}}"></span>
+    {{end}}
+  </h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
+    <a class="summary-link-btn" href="{{$summaryURL}}">Сводная</a>
+    {{if .TokenValid}}
+    <a class="summary-link-btn" href="{{$exportURL}}" title="Книга Excel только с этой таблицей.">⬇ Excel</a>
+    {{end}}
+    {{if index .JuryKonduits .Contest.ID}}
+    <a class="summary-link-btn" href="{{$konduitURL}}">✏️ Заполнить кондуит</a>
+    {{end}}
+    {{if .InPanel}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
+  </p>
+  {{if .UnfrozenView}}
+  <p class="empty-hint">🔓 Просмотр без заморозки: ученикам замороженные результаты показываются иначе.</p>
+  {{end}}
+</section>
+
+<section class="contest-block" id="contest-{{.Contest.ID}}">
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#contest-{{.Contest.ID}} table.standings-table > tbody > tr"
+           data-filter-count="#contest-filter-count" data-filter-empty="#contest-filter-empty" />
+    <span class="filter-count" id="contest-filter-count"></span>
+  </div>
+  {{template "contestBlockBody" (dict "Contest" .Contest "TokenValid" .TokenValid "JuryKonduits" .JuryKonduits "GroupSlug" .GroupSlug "Token" .Token "GroupArchived" .GroupArchived)}}
+  <p class="empty-hint" id="contest-filter-empty" hidden>Ничего не найдено.</p>
+</section>
+
+{{if or .PrevID .NextID}}
+<nav class="contest-pager" aria-label="Соседние контесты">
+  {{if .PrevID}}
+  <a class="contest-pager-link contest-pager-link--prev" href="{{$prevURL}}">
+    <span class="contest-pager-dir">← Предыдущий</span>
+    <span class="contest-pager-title">{{.PrevTitle}}</span>
+  </a>
+  {{else}}<span></span>{{end}}
+  {{if .NextID}}
+  <a class="contest-pager-link contest-pager-link--next" href="{{$nextURL}}">
+    <span class="contest-pager-dir">Следующий →</span>
+    <span class="contest-pager-title">{{.NextTitle}}</span>
+  </a>
+  {{end}}
+</nav>
+{{end}}
+
+{{template "contestBlockScripts" (dict "GroupSlug" .GroupSlug)}}
+{{end}}

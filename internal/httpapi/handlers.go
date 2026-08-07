@@ -55,6 +55,27 @@ type Handlers struct {
 	// читается/создаётся в data/credentials/panel_secret.json).
 	panelSecretMu    sync.Mutex
 	panelSecretValue []byte
+	// informaticsBaseURL — base_url из кредов informatics. Все добавляемые
+	// informatics-ссылки сразу приводятся к этому зеркалу (msk ⇄ mccme), чтобы в
+	// данных не смешивались домены. Пусто — приведение выключено.
+	informaticsBaseURL string
+}
+
+// ConfigureInformaticsBaseURL задаёт зеркало informatics, под которое
+// приводятся добавляемые ссылки.
+func (h *Handlers) ConfigureInformaticsBaseURL(baseURL string) {
+	h.informaticsBaseURL = strings.TrimSpace(baseURL)
+}
+
+// rewriteInformatics приводит одну ссылку к настроенному зеркалу informatics.
+func (h *Handlers) rewriteInformatics(rawURL string) string {
+	return domain.RewriteInformaticsHost(rawURL, h.informaticsBaseURL)
+}
+
+// rewriteInformaticsText приводит все informatics-ссылки внутри текста (JSON
+// провайдера, сырой файл) к настроенному зеркалу.
+func (h *Handlers) rewriteInformaticsText(text string) string {
+	return domain.RewriteInformaticsHostsInText(text, h.informaticsBaseURL)
 }
 
 // SerializeDataWrite оборачивает мутирующий data-файлы админ-хендлер общим

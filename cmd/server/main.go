@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"standings-edu/internal/httpapi"
+	"standings-edu/internal/source"
 	"standings-edu/internal/storage"
 	"standings-edu/internal/studentintake"
 	"standings-edu/internal/web"
@@ -29,6 +30,7 @@ func main() {
 		intakePath       = flag.String("intake-file", "", "path to intake json file (default: <data>/student_intake.json)")
 		adminCreds       = flag.String("admin-creds-file", "./data/credentials/admin_credentials.json", "path to admin credentials JSON with login/password")
 		intakeCreds      = flag.String("intake-creds-file", "./data/credentials/intake_credentials.json", "path to optional intake token JSON ({\"token\":\"...\"}) protecting POST /api/rpc")
+		informaticsCreds = flag.String("informatics-creds-file", "./data/credentials/informatics_credentials.json", "path to informatics credentials JSON; its base_url задаёт зеркало, под которое приводятся добавляемые informatics-ссылки")
 		templatesDir     = flag.String("templates", "./web/templates", "path to templates")
 		staticDir        = flag.String("static", "./web/static", "path to static files")
 		generateInterval = flag.Duration("generate-interval", 5*time.Minute, "expected auto-generation period (e.g. 5m, 30m, 1h); shows the next-update countdown in the footer. 0 = не показывать")
@@ -87,6 +89,16 @@ func main() {
 	}
 	handlers.ConfigureSourceDir(*dataDir)
 	handlers.ConfigureIntakeToken(intakeToken)
+	// Зеркало informatics: все добавляемые ссылки сразу приводятся к base_url
+	// из кредов. Файла нет — ссылки сохраняются как введены.
+	if creds, err := source.LoadInformaticsCredentials(*informaticsCreds); err == nil {
+		if base := strings.TrimSpace(creds.BaseURL); base != "" {
+			handlers.ConfigureInformaticsBaseURL(base)
+			logger.Printf("informatics base_url=%s: добавляемые ссылки приводятся к этому зеркалу", base)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		logger.Printf("WARN read informatics credentials %s: %v", *informaticsCreds, err)
+	}
 	handlers.ConfigureGenerateInterval(*generateInterval)
 	if intakeToken == "" {
 		logger.Printf("WARN intake token is not configured (%s); POST /api/rpc принимает анкеты без токена", *intakeCreds)

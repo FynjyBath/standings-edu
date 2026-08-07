@@ -623,6 +623,8 @@ func (h *Handlers) AdminFileSave(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Ссылки informatics в сыром JSON приводим к настроенному зеркалу.
+	req.Content = h.rewriteInformaticsText(req.Content)
 	if err := validateJSONSyntax(req.Content); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"ok":    false,

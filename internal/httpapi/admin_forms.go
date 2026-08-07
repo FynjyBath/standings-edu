@@ -1311,7 +1311,7 @@ func (h *Handlers) AdminGroupContestInlineSave(w http.ResponseWriter, r *http.Re
 // жюри). updateOverride!=nil задаёт entry-поле update; иначе — прежнее значение
 // при редактировании, true у нового. Возвращает (id, httpStatus, errMsg==""=ок).
 func (h *Handlers) saveInlineContest(slug string, req adminContestSaveRequest, updateOverride *bool) (string, int, string) {
-	contest, err := buildContestFromRequest(req)
+	contest, err := buildContestFromRequest(req, h.informaticsBaseURL)
 	if err != nil {
 		return "", http.StatusBadRequest, err.Error()
 	}
@@ -1534,7 +1534,10 @@ type contestSubcontestReq struct {
 
 // buildContestFromRequest собирает domain.Contest из данных формы (общий код для
 // глобальных контестов и inline-контестов группы). Возвращает ошибку валидации.
-func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error) {
+// informaticsBase — зеркало informatics из кредов: ссылки на задачи, материалы и
+// адреса внутри provider_config сразу приводятся к нему, чтобы в данных не
+// смешивались msk и mccme. Пусто — ссылки сохраняются как введены.
+func buildContestFromRequest(req adminContestSaveRequest, informaticsBase string) (domain.Contest, error) {
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		return domain.Contest{}, errors.New("id обязателен")
@@ -1561,7 +1564,10 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 
 	materials := make([]domain.ContestMaterial, 0, len(req.Materials))
 	for _, m := range req.Materials {
-		materials = append(materials, domain.ContestMaterial{Title: m.Title, URL: m.URL})
+		materials = append(materials, domain.ContestMaterial{
+			Title: m.Title,
+			URL:   domain.RewriteInformaticsHost(m.URL, informaticsBase),
+		})
 	}
 	contest.Materials = domain.NormalizeContestMaterials(materials)
 
@@ -1576,7 +1582,7 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 			if !json.Valid([]byte(cfg)) {
 				return domain.Contest{}, errors.New("provider_config: невалидный JSON")
 			}
-			contest.ProviderConfig = json.RawMessage(cfg)
+			contest.ProviderConfig = json.RawMessage(domain.RewriteInformaticsHostsInText(cfg, informaticsBase))
 		}
 		contest.Subcontests = []domain.Subcontest{}
 		return contest, nil
@@ -1587,7 +1593,7 @@ func buildContestFromRequest(req adminContestSaveRequest) (domain.Contest, error
 		tasks := make([]string, 0, len(sub.Tasks))
 		for _, task := range sub.Tasks {
 			if t := strings.TrimSpace(task); t != "" {
-				tasks = append(tasks, t)
+				tasks = append(tasks, domain.RewriteInformaticsHost(t, informaticsBase))
 			}
 		}
 		subcontests = append(subcontests, domain.Subcontest{Title: strings.TrimSpace(sub.Title), Tasks: tasks})
@@ -1618,7 +1624,7 @@ func (h *Handlers) AdminContestSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contest, err := buildContestFromRequest(req)
+	contest, err := buildContestFromRequest(req, h.informaticsBaseURL)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return

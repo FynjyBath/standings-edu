@@ -130,6 +130,10 @@ func (h *Handlers) executeImportAction(r *http.Request) AdminActionResult {
 		return newAdminResult("import", false, -1, started, "", []string{"не удалось прочитать файл: " + err.Error()})
 	}
 
+	// Ссылки informatics из чужого бандла приводим к нашему зеркалу сразу —
+	// проще всего по всему тексту: покрывает и задачи, и материалы, и конфиги.
+	body = []byte(h.rewriteInformaticsText(string(body)))
+
 	var bundle migrate.Bundle
 	if err := json.Unmarshal(body, &bundle); err != nil {
 		return newAdminResult("import", false, -1, started, "", []string{"некорректный JSON бандла: " + err.Error()})

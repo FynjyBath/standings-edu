@@ -131,3 +131,31 @@ func TestNormalizeTaskURLEjudge(t *testing.T) {
 		t.Fatal("different ejudge hosts must not collide")
 	}
 }
+
+// Приведение informatics-ссылок к зеркалу: хост и схема из base_url, чужие
+// сайты и пустой base_url не трогаются.
+func TestRewriteInformaticsToMirror(t *testing.T) {
+	const mccme = "https://informatics.mccme.ru"
+	cases := []struct{ in, base, want string }{
+		{"https://informatics.msk.ru/mod/statements/view.php?chapterid=1", mccme, "https://informatics.mccme.ru/mod/statements/view.php?chapterid=1"},
+		{"http://www.informatics.msk.ru/course/view.php?id=7", mccme, "https://informatics.mccme.ru/course/view.php?id=7"},
+		{"https://informatics.mccme.ru/x", "https://informatics.msk.ru", "https://informatics.msk.ru/x"},
+		{"https://acmp.ru/?main=task&id_task=1", mccme, "https://acmp.ru/?main=task&id_task=1"},
+		{"https://informatics.msk.ru/x", "", "https://informatics.msk.ru/x"},
+	}
+	for _, c := range cases {
+		if got := RewriteInformaticsHost(c.in, c.base); got != c.want {
+			t.Errorf("RewriteInformaticsHost(%q, %q) = %q, want %q", c.in, c.base, got, c.want)
+		}
+	}
+
+	// Текстовый вариант — для JSON провайдера, бандлов и сырых файлов.
+	text := `{"a":"https://informatics.msk.ru/p?x=1","b":"http://WWW.informatics.MCCME.ru/q","c":"https://acmp.ru/"}`
+	want := `{"a":"https://informatics.mccme.ru/p?x=1","b":"https://informatics.mccme.ru/q","c":"https://acmp.ru/"}`
+	if got := RewriteInformaticsHostsInText(text, mccme); got != want {
+		t.Errorf("RewriteInformaticsHostsInText:\n got %s\nwant %s", got, want)
+	}
+	if got := RewriteInformaticsHostsInText(text, ""); got != text {
+		t.Error("без base_url текст должен остаться прежним")
+	}
+}

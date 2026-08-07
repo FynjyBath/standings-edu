@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -26,9 +27,10 @@ func isInformaticsHost(host string) bool {
 	return false
 }
 
-// RewriteInformaticsHost меняет хост informatics-URL на хост из baseURL (обычно
-// base_url кредов), чтобы любые вставленные ссылки (msk/mccme) в итоге вели на
-// настроенное зеркало. Не-informatics ссылки, пустой/битый baseURL не трогает.
+// RewriteInformaticsHost приводит informatics-URL к зеркалу из baseURL (обычно
+// base_url кредов): подменяет хост и схему, чтобы любые вставленные ссылки
+// (msk/mccme, www, http) вели на настроенный адрес. Не-informatics ссылки,
+// пустой/битый baseURL не трогает.
 func RewriteInformaticsHost(rawURL, baseURL string) string {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
@@ -43,7 +45,31 @@ func RewriteInformaticsHost(rawURL, baseURL string) string {
 		return rawURL
 	}
 	u.Host = base.Host
+	if base.Scheme != "" {
+		u.Scheme = base.Scheme
+	}
 	return u.String()
+}
+
+// informaticsURLRe — ссылка на informatics в произвольном тексте (JSON, поля
+// формы): схема + любой из хостов зеркала. Всё после хоста не трогаем.
+var informaticsURLRe = regexp.MustCompile(`(?i)\bhttps?://(?:www\.)?informatics\.(?:msk\.ru|mccme\.ru)`)
+
+// RewriteInformaticsHostsInText переписывает хост всех informatics-ссылок в
+// произвольном тексте на хост из baseURL. Нужно там, где ссылки лежат не
+// отдельным полем, а внутри JSON (provider_config, сырые файлы, бандл импорта).
+// Пустой/битый baseURL или отсутствие informatics-ссылок — текст как есть.
+func RewriteInformaticsHostsInText(text, baseURL string) string {
+	base, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || base.Host == "" {
+		return text
+	}
+	scheme := base.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	want := scheme + "://" + base.Host
+	return informaticsURLRe.ReplaceAllLiteralString(text, want)
 }
 
 func NormalizeTaskURL(raw string) string {

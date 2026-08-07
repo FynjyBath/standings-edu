@@ -922,6 +922,11 @@ func (s GeneratedGroupStandings) CloneForServe() GeneratedGroupStandings {
 		if c.Tasks != nil {
 			cc.Tasks = append([]GeneratedTask(nil), c.Tasks...)
 		}
+		// Материалы тоже копируем: сервер правит в них ссылки (режим судьи
+		// ejudge), а кэшированное значение загрузчика должно остаться чистым.
+		if c.Materials != nil {
+			cc.Materials = append([]ContestMaterial(nil), c.Materials...)
+		}
 		if c.Subcontests != nil {
 			cc.Subcontests = make([]GeneratedSubcontest, len(c.Subcontests))
 			for j, sub := range c.Subcontests {

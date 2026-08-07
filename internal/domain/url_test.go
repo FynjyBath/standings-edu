@@ -159,3 +159,22 @@ func TestRewriteInformaticsToMirror(t *testing.T) {
 		t.Error("без base_url текст должен остаться прежним")
 	}
 }
+
+// Судейские ссылки ejudge: клиентская форма превращается в new-judge по контесту.
+func TestEjudgeJudgeURL(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://ej.kod-u.ru/new-client?contest_id=1", "https://ej.kod-u.ru/new-judge?contest_id=1"},
+		{"https://ej.kod-u.ru/new-client?contest_id=25408&prob_id=7", "https://ej.kod-u.ru/new-judge?contest_id=25408"},
+		{"https://ej.kod-u.ru/cgi-bin/new-client?contest_id=9", "https://ej.kod-u.ru/cgi-bin/new-judge?contest_id=9"},
+		{"http://host:8080/new-client?contest_id=3&SID=abc", "http://host:8080/new-judge?contest_id=3"},
+		// Не ejudge / без contest_id — как есть.
+		{"https://acmp.ru/?main=task&id_task=1", "https://acmp.ru/?main=task&id_task=1"},
+		{"https://ej.kod-u.ru/new-client", "https://ej.kod-u.ru/new-client"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := EjudgeJudgeURL(c.in); got != c.want {
+			t.Errorf("EjudgeJudgeURL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

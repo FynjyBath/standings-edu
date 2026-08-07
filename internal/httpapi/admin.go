@@ -206,6 +206,8 @@ func (h *Handlers) fillStudentProfilePage(page *AdminStudentProfilePageData, id 
 		profile.CourseStats = courses
 	}
 	applyFlagReviews(h.loadFlagReviewIndex(), id, profile.CourseStats)
+	// Профиль открыт только персоналу — ejudge в режиме судьи.
+	domain.SwapEjudgeLinksInCourseStats(profile.CourseStats)
 	for i := range profile.CourseStats {
 		if profile.CourseStats[i].Global != nil {
 			page.HasGlobalCourse = true

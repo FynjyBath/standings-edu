@@ -449,6 +449,10 @@ func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug 
 
 	elevated := role.AtLeast(RoleObserver)
 	unfrozen := h.applyFreezeViewForRole(&standings, slug, elevated)
+	if elevated {
+		// Преподавателю задачи ejudge открываются в режиме судьи.
+		domain.SwapEjudgeLinksToJudge(&standings)
+	}
 	page := GroupPageData{
 		PageTitle:       standings.GroupTitle,
 		Standings:       standings,
@@ -602,6 +606,7 @@ func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request
 
 	studentIDs := h.resolveGroupStudentIDs(slug)
 	reviews := h.loadFlagReviewIndex()
+	// Страница только для преподавателей — ejudge открываем в режиме судьи.
 	rows := make([]ParticipantRow, 0, len(studentIDs))
 	for _, id := range studentIDs {
 		row := ParticipantRow{StudentID: id, PublicName: id}
@@ -614,6 +619,7 @@ func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request
 			row.Accounts = profile.Accounts
 			// Темп именно этого курса (группы) — основной контент страницы.
 			applyFlagReviews(reviews, id, profile.CourseStats)
+			domain.SwapEjudgeLinksInCourseStats(profile.CourseStats)
 			for i := range profile.CourseStats {
 				if profile.CourseStats[i].GroupSlug == slug {
 					cs := profile.CourseStats[i]
@@ -918,7 +924,9 @@ func (h *Handlers) GroupSummaryData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	h.applyFreezeView(&standings, slug, r)
+	if h.applyFreezeView(&standings, slug, r) {
+		domain.SwapEjudgeLinksToJudge(&standings)
+	}
 
 	plain, err := json.Marshal(standings)
 	if err != nil {

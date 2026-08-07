@@ -261,6 +261,35 @@ func isEjudgeNewClientPath(path string) bool {
 	return path == "/new-client" || strings.HasSuffix(path, "/new-client")
 }
 
+// EjudgeJudgeURL превращает ссылку ejudge из клиентской (new-client) в
+// судейскую (new-judge): преподавателю задача открывается в режиме судьи —
+// видно условие, посылки всех участников и разбор. Судейский вход адресуется
+// контестом (…/new-judge?contest_id=N), номер задачи в нём не используется.
+// Не-ejudge ссылки и ссылки без contest_id возвращаются как есть.
+func EjudgeJudgeURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	u, err := url.Parse(rawURL)
+	if err != nil || !isEjudgeNewClientPath(u.Path) {
+		return rawURL
+	}
+	contestID, err := strconv.Atoi(strings.TrimSpace(u.Query().Get("contest_id")))
+	if err != nil || contestID <= 0 {
+		return rawURL
+	}
+	host := u.Hostname()
+	if host == "" {
+		return rawURL
+	}
+	scheme := u.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	// Путь может быть с префиксом (…/cgi-bin/new-client) — меняем только имя.
+	path := strings.TrimRight(u.Path, "/")
+	judgePath := path[:len(path)-len("new-client")] + "new-judge"
+	return fmt.Sprintf("%s://%s%s?contest_id=%d", scheme, u.Host, judgePath, contestID)
+}
+
 // EjudgeTaskURL — разобранная ссылка ejudge new-client.
 type EjudgeTaskURL struct {
 	Host      string
@@ -307,4 +336,46 @@ func splitPathSegments(path string) []string {
 		out = append(out, part)
 	}
 	return out
+}
+
+// SwapEjudgeLinksToJudge переводит все видимые ejudge-ссылки таблиц группы в
+// судейский режим (new-judge). Применяется только к видам для преподавателей
+// (по токену и в панели): ученикам ссылки остаются клиентскими. Сопоставление
+// задач с посылками идёт по normalized_url и не затрагивается.
+func SwapEjudgeLinksToJudge(standings *GeneratedGroupStandings) {
+	if standings == nil {
+		return
+	}
+	for i := range standings.Contests {
+		c := &standings.Contests[i]
+		for j := range c.Tasks {
+			c.Tasks[j].URL = EjudgeJudgeURL(c.Tasks[j].URL)
+		}
+		for j := range c.Subcontests {
+			for k := range c.Subcontests[j].Tasks {
+				c.Subcontests[j].Tasks[k].URL = EjudgeJudgeURL(c.Subcontests[j].Tasks[k].URL)
+			}
+		}
+		for j := range c.Materials {
+			c.Materials[j].URL = EjudgeJudgeURL(c.Materials[j].URL)
+		}
+	}
+}
+
+// SwapEjudgeLinksInCourseStats — то же для ссылок в сигналах темпа курса
+// (застревания, брошенные задачи) в профиле ученика и у участников.
+func SwapEjudgeLinksInCourseStats(stats []StudentCourseStats) {
+	swap := func(sigs []CourseTaskSignal) {
+		for i := range sigs {
+			sigs[i].URL = EjudgeJudgeURL(sigs[i].URL)
+		}
+	}
+	for i := range stats {
+		swap(stats[i].Stuck)
+		swap(stats[i].Abandoned)
+		if stats[i].Global != nil {
+			swap(stats[i].Global.Stuck)
+			swap(stats[i].Global.Abandoned)
+		}
+	}
 }

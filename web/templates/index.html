@@ -7,19 +7,15 @@
             <span class="dir-slug">{{.Slug}}</span>
           </td>
           <td>
+            {{if .Links}}
+            {{range .Links}}
             <span class="dir-links">
-              <a class="summary-link-btn" href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">Открыть&nbsp;↗</a>
-              <button type="button" class="dir-copy" data-url="{{.StudentURL}}" title="Скопировать ссылку для ученика">⧉ Копировать</button>
+              <a class="summary-link-btn" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}&nbsp;↗</a>
+              <button type="button" class="dir-copy" data-url="{{.URL}}" title="Скопировать секретную ссылку доступа «{{.Title}}»">⧉ Копировать</button>
             </span>
-          </td>
-          <td>
-            {{if .TeacherURL}}
-            <span class="dir-links">
-              <a class="summary-link-btn" href="{{.TeacherURL}}" target="_blank" rel="noopener noreferrer">Открыть&nbsp;↗</a>
-              <button type="button" class="dir-copy" data-url="{{.TeacherURL}}" title="Скопировать ссылку наблюдателя (секретная)">⧉ Копировать</button>
-            </span>
+            {{end}}
             {{else}}
-            <span class="dir-slug">токена нет</span>
+            <span class="dir-slug">ссылок с токеном нет</span>
             {{end}}
           </td>
         </tr>
@@ -29,7 +25,8 @@
 {{if or .Directory .ArchivedGroups}}
 <section class="page-head">
   <h1>Все группы</h1>
-  <p class="empty-hint">Каталог для преподавателей: ссылка для ученика и ссылка наблюдателя с токеном (просмотр без заморозки, скрытые контесты, статистика участников, экспорт). Ссылка с токеном — секретная, не давайте её ученикам. Менять оценки и контесты можно в панели группы: /standings/&lt;группа&gt;/panel (логин и пароль задаются в админке группы).</p>
+  <p class="empty-hint">Каталог для преподавателей: по каждой группе — её ссылки с токеном (что именно даёт ссылка, написано на кнопке: наблюдатель, жюри и т.д.). Ссылки секретные, ученикам их давать не нужно — им подойдёт адрес группы без токена. Доступы со входом по логину и паролю открываются на /standings/&lt;группа&gt;/panel.
+  {{if .SignedIn}}<a class="summary-link-btn" href="/standings/signout?back=/standings">Выйти</a>{{end}}</p>
 </section>
 
 <section class="admin-block">
@@ -43,8 +40,7 @@
       <thead>
         <tr>
           <th class="student-col">Группа</th>
-          <th>Ссылка для ученика</th>
-          <th>Ссылка наблюдателя (с токеном)</th>
+          <th>Ссылки с токеном</th>
         </tr>
       </thead>
       <tbody>
@@ -66,8 +62,7 @@
         <thead>
           <tr>
             <th class="student-col">Группа</th>
-            <th>Ссылка для ученика</th>
-            <th>Ссылка наблюдателя (с токеном)</th>
+            <th>Ссылки с токеном</th>
           </tr>
         </thead>
         <tbody>

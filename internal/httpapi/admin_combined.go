@@ -14,7 +14,7 @@ type AdminCombinedGroup struct {
 	Slug    string
 	Title   string
 	Members []AdminCombinedMember
-	Token   string // group_secret_token (для ссылки жюри), пусто — токена нет
+	Token   string // токен первого доступа-ссылки (для ссылки преподавателю)
 }
 
 type AdminCombinedMember struct {
@@ -99,7 +99,7 @@ func (h *Handlers) AdminCombinedManagePage(w http.ResponseWriter, r *http.Reques
 		Footer:       h.buildFooterInfo(),
 		Slug:         slug,
 		Title:        title,
-		Token:        strings.TrimSpace(gf.GroupSecretToken),
+		Token:        h.anyGroupToken(slug),
 		Members:      members,
 		Contests:     contests,
 		NotGenerated: len(contests) == 0,
@@ -281,9 +281,7 @@ func (h *Handlers) listCombinedGroups() (combined []AdminCombinedGroup, selectab
 			continue
 		}
 		item := AdminCombinedGroup{Slug: link.Slug, Title: link.Title}
-		if gf, ok, _ := h.readGroupFile(link.Slug); ok {
-			item.Token = strings.TrimSpace(gf.GroupSecretToken)
-		}
+		item.Token = h.anyGroupToken(link.Slug)
 		for _, member := range link.Members {
 			title, ok := titleBySlug[member]
 			item.Members = append(item.Members, AdminCombinedMember{Slug: member, Title: title, Missing: !ok})

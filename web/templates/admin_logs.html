@@ -1,0 +1,48 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Журнал действий</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+  </p>
+  <p class="empty-hint">Входы по логину и паролю и все изменения — от доступов групп и от админки. Чтение не пишется. Файл: <code>{{.Path}}</code> (по строке JSON на событие, при переполнении уезжает в <code>.1</code>). Здесь — последние записи, свежие сверху.</p>
+</section>
+
+<section class="admin-block">
+  {{if .Entries}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр: доступ, группа, действие…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#audit-table > tbody > tr" data-filter-count="#audit-count" data-filter-empty="#audit-empty" />
+    <span class="filter-count" id="audit-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="standings-table data-table" id="audit-table">
+      <thead>
+        <tr>
+          <th>Когда</th>
+          <th>Кто</th>
+          <th>Группа</th>
+          <th>Действие</th>
+          <th>Подробности</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Entries}}
+        <tr{{if not .OK}} class="audit-row--fail"{{end}}>
+          <td>{{localTimeSec .At}}</td>
+          <td class="student-name">{{.Actor}}{{if eq .Kind "admin"}} <span class="dir-tag">админка</span>{{end}}</td>
+          <td>{{if .Group}}<a href="/standings/admin/group?slug={{.Group}}">{{.Group}}</a>{{else}}—{{end}}</td>
+          <td><code>{{.Action}}</code></td>
+          <td>{{.Detail}}{{if .Error}} <span class="audit-error">{{.Error}}</span>{{end}}</td>
+          <td class="dir-slug">{{.IP}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="audit-empty" hidden>Ничего не найдено.</p>
+  {{else}}
+  <p class="empty-hint">Журнал пуст: ни входов, ни изменений ещё не было (либо каталог данных не настроен).</p>
+  {{end}}
+</section>
+{{end}}

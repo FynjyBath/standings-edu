@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -307,15 +305,12 @@ type AdminGroupManagePageData struct {
 	// форме»): [{id, name}], где name — полное ФИО (для матчинга по имени).
 	MembersJSON template.JS
 	HasGrades   bool
-	SecretToken string // group_secret_token — просмотр размороженных таблиц
+	// Accesses — блок «Доступы к группе» (общий редактор, см. access_admin.go).
+	Accesses AccessEditorData
 	// ShowTaskLinks — показывать ли ссылки на задачи ученикам (по умолчанию да).
 	ShowTaskLinks bool
 	// Archived — группа в архиве (update=false).
 	Archived bool
-	// PanelJuryLogin/PanelAdminLogin — логины учёток панели группы (пароли не
-	// показываем). Пусто — роль не настроена.
-	PanelJuryLogin  string
-	PanelAdminLogin string
 }
 
 type AdminGroupMember struct {
@@ -635,18 +630,12 @@ func (h *Handlers) buildGroupManageData(slug string) (AdminGroupManagePageData, 
 		InlineJSON:      template.JS(inlineBlob),
 		MembersJSON:     template.JS(membersBlob),
 		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,
-		SecretToken:     strings.TrimSpace(groupFile.GroupSecretToken),
 		ShowTaskLinks:   groupFile.TaskLinksShown(),
 		Archived:        groupFile.Update != nil && !*groupFile.Update,
 	}
-	if groupFile.PanelAccess != nil {
-		if c := groupFile.PanelAccess.Jury; c.Valid() {
-			page.PanelJuryLogin = strings.TrimSpace(c.Login)
-		}
-		if c := groupFile.PanelAccess.Admin; c.Valid() {
-			page.PanelAdminLogin = strings.TrimSpace(c.Login)
-		}
-	}
+	// Легаси-поля показываем как обычные доступы: первое же сохранение
+	// перенесёт их в accesses (см. AdminGroupAccessesSave).
+	page.Accesses = h.buildAccessEditor(false, slug, "/api/admin/group/accesses/save", groupFile.EffectiveAccesses())
 	return page, true, nil
 }
 
@@ -687,50 +676,6 @@ func (h *Handlers) AdminGroupMemberRemove(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// AdminGroupTokenSet генерирует или удаляет group_secret_token группы —
-// секрет для просмотра размороженных таблиц (?token=… на страницах группы).
-// Действует сразу, без регенерации: проверка идёт при отдаче.
-func (h *Handlers) AdminGroupTokenSet(w http.ResponseWriter, r *http.Request) {
-	if h.admin == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
-		return
-	}
-	var req struct {
-		Slug  string `json:"slug"`
-		Clear bool   `json:"clear"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	if !domain.IsValidSlug(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
-		return
-	}
-	groupFile, ok, err := h.readGroupFile(slug)
-	if err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
-	}
-
-	token := ""
-	if !req.Clear {
-		raw := make([]byte, 16)
-		if _, err := rand.Read(raw); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
-		}
-		token = hex.EncodeToString(raw)
-	}
-	groupFile.GroupSecretToken = token
-	if err := h.writeGroupFile(slug, groupFile); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": token})
 }
 
 // AdminGroupSetShortName сохраняет короткое название группы (пусто — убрать).
@@ -802,51 +747,6 @@ func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "short_name": groupFile.ShortName})
-}
-
-// AdminDirectoryTokenSet генерирует/убирает секретный токен каталога групп
-// (/standings?token=…). Хранится в data/credentials/directory_credentials.json,
-// читается на каждый запрос — смена действует сразу.
-func (h *Handlers) AdminDirectoryTokenSet(w http.ResponseWriter, r *http.Request) {
-	if h.admin == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
-		return
-	}
-	var req struct {
-		Clear bool `json:"clear"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	path := h.directoryTokenPath()
-	if path == "" {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "data dir is not configured"})
-		return
-	}
-	if req.Clear {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": ""})
-		return
-	}
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	token := hex.EncodeToString(raw)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	if err := fileutil.WriteJSON(path, map[string]string{"token": token}, 0o600); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": token})
 }
 
 // AdminGroupSetShowTaskLinks переключает флаг show_task_links группы (показывать
@@ -1121,7 +1021,6 @@ func (h *Handlers) AdminGroupContestSetOptions(w http.ResponseWriter, r *http.Re
 // строка / null у переопределяемых полей — «как у контеста».
 type adminGroupContestOptionsRequest struct {
 	Slug             string `json:"slug"`
-	RoleToken        string `json:"role_token"`
 	ID               string `json:"id"`
 	Update           bool   `json:"update"`
 	TableName        string `json:"table_name"`

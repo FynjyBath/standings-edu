@@ -68,9 +68,8 @@ type AdminPageData struct {
 	SelectableGroups []AdminGroupLink
 	LastResult       *AdminActionResult
 	DefaultPath      string
-	// DirectoryToken — текущий токен каталога групп (/standings?token=…); пусто —
-	// каталог выключен.
-	DirectoryToken string
+	// Accesses — блок глобальных доступов (тот же редактор, что у группы).
+	Accesses AccessEditorData
 	// HasArchivedGroups — есть ли хоть одна архивная (обычная) группа: секцию
 	// «Архивные группы» показываем только тогда.
 	HasArchivedGroups bool
@@ -113,15 +112,18 @@ type AdminGroupGradesPageData struct {
 	ConfigJSON template.JS
 	TableNames []string
 	// APIBase — префикс эндпоинтов сохранения: "/api/admin" в админке,
-	// "/api/group-panel" в панели группы. RoleToken — подпись роли для панели
-	// (пусто в админке). BackURL/BackLabel — ссылка «назад».
+	// "/api/group-panel" при входе доступом группы. RoleTitle — подпись доступа
+	// в шапке (пусто в админке). BackURL/BackLabel — ссылка «назад».
 	APIBase   string
-	RoleToken string
 	RoleTitle string
 	BackURL   string
 	BackLabel string
-	// GroupToken — токен группы для ссылки на её страницу из панели.
+	// GroupToken — токен доступа для ссылок на страницы группы.
 	GroupToken string
+	// CanEditConfig/CanEditGrades — какие блоки страницы доступны (в админке —
+	// оба, у доступа группы — по правам grades.config / grades.manual).
+	CanEditConfig bool
+	CanEditGrades bool
 }
 
 type AdminStudentProfilePageData struct {
@@ -138,10 +140,8 @@ type AdminStudentProfilePageData struct {
 	TokenView bool
 	// Token — токен группы для ссылок со страницы (пуст в админ-режиме).
 	Token string
-	// RoleToken — подпись роли жюри: только с ней доступна разметка флагов при
-	// просмотре по ссылке группы (наблюдатель профиль видит, но не размечает).
-	RoleToken string
-	// CanReviewFlags — можно размечать флаги нечестности (админка или панель жюри).
+	// CanReviewFlags — можно размечать флаги нечестности (админка или право
+	// flags.review у доступа группы).
 	CanReviewFlags bool
 	// HasGlobalCourse — хотя бы у одного курса есть глобальный вариант темпа
 	// (когорта шире группы): показываем тумблер «эта группа / все группы».
@@ -338,7 +338,7 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		SelectableGroups: selectableGroups,
 		LastResult:       h.lastAdminResult(),
 		DefaultPath:      defaultPath,
-		DirectoryToken:   h.readDirectoryToken(),
+		Accesses:         h.buildAccessEditor(true, "", "/api/admin/global-accesses/save", h.loadGlobalAccesses()),
 	}
 	for _, g := range groupLinks {
 		if g.Archived && !g.IsCombined {
@@ -1117,6 +1117,7 @@ func (h *Handlers) AdminGroupGradesPage(w http.ResponseWriter, r *http.Request) 
 	page.APIBase = "/api/admin"
 	page.BackURL = "/standings/admin/group?slug=" + slug
 	page.BackLabel = "Управление группой"
+	page.CanEditConfig, page.CanEditGrades = true, true
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group_grades.html", page); err != nil {
 		h.logger.Printf("ERROR render admin group grades slug=%s err=%v", slug, err)
 	}
@@ -1341,12 +1342,10 @@ type adminGradesConfigColumn struct {
 }
 
 type adminGradesConfigSaveRequest struct {
-	Slug string `json:"slug"`
-	// RoleToken — подпись роли жюри при сохранении из панели группы.
-	RoleToken string                    `json:"role_token"`
-	Title     string                    `json:"title"`
-	Round     *int                      `json:"round"`
-	Columns   []adminGradesConfigColumn `json:"columns"`
+	Slug    string                    `json:"slug"`
+	Title   string                    `json:"title"`
+	Round   *int                      `json:"round"`
+	Columns []adminGradesConfigColumn `json:"columns"`
 }
 
 // AdminGroupGradesConfigSave сохраняет конфигурацию столбцов оценок (grades в

@@ -27,14 +27,12 @@ type GroupContestPageData struct {
 	GroupSlug  string
 	GroupTitle string
 	Contest    domain.GeneratedContestStandings
-	// TokenValid/Token — доступ не ниже наблюдателя (полные таблицы, скрытое) и
-	// токен для ссылок; JuryKonduits — контест является кондуитом (роль жюри).
+	// Access — права доступа; TokenValid — доступ что-то даёт сверх публичного;
+	// Token — токен для ссылок; JuryKonduits — контест является кондуитом.
+	Access       *GroupAccess
 	TokenValid   bool
 	Token        string
 	JuryKonduits map[string]bool
-	// InPanel/RoleTitle — страница открыта из панели группы.
-	InPanel   bool
-	RoleTitle string
 	// GroupArchived — группа в архиве: под таблицей показываем «обновлено».
 	GroupArchived bool
 	// UnfrozenView — показана полная версия замороженной таблицы.
@@ -51,24 +49,10 @@ type GroupContestPageData struct {
 // по токену наблюдателя).
 func (h *Handlers) GroupContestPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	role := h.groupRole(slug, token, "")
-	h.renderContestPage(w, r, slug, role, token, false)
+	h.renderContestPage(w, r, slug, h.resolveAccess(slug, r))
 }
 
-// GroupPanelContestPage — та же страница из панели: вход по логину и паролю,
-// ссылки ведут обратно в панель.
-func (h *Handlers) GroupPanelContestPage(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("group_name")
-	role, _, ok := h.authorizePanelRequest(w, r, slug)
-	if !ok {
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	h.renderContestPage(w, r, slug, role, h.groupTokenOf(slug), true)
-}
-
-func (h *Handlers) renderContestPage(w http.ResponseWriter, r *http.Request, slug string, role GroupRole, token string, inPanel bool) {
+func (h *Handlers) renderContestPage(w http.ResponseWriter, r *http.Request, slug string, acc *GroupAccess) {
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
 		http.NotFound(w, r)
@@ -85,11 +69,7 @@ func (h *Handlers) renderContestPage(w http.ResponseWriter, r *http.Request, slu
 		return
 	}
 
-	elevated := role.AtLeast(RoleObserver)
-	unfrozen := h.applyFreezeViewForRole(&standings, slug, elevated)
-	if elevated {
-		domain.SwapEjudgeLinksToJudge(&standings)
-	}
+	unfrozen := h.applyAccessView(&standings, slug, acc)
 
 	idx := -1
 	for i := range standings.Contests {
@@ -115,13 +95,10 @@ func (h *Handlers) renderContestPage(w http.ResponseWriter, r *http.Request, slu
 		GroupSlug:    slug,
 		GroupTitle:   standings.GroupTitle,
 		Contest:      contest,
-		TokenValid:   elevated,
+		Access:       acc,
+		TokenValid:   acc.Elevated(),
 		UnfrozenView: unfrozen,
-		InPanel:      inPanel,
-		RoleTitle:    role.Title(),
-	}
-	if elevated {
-		page.Token = token
+		Token:        acc.Token,
 	}
 	if idx > 0 {
 		prev := standings.Contests[idx-1]
@@ -134,19 +111,14 @@ func (h *Handlers) renderContestPage(w http.ResponseWriter, r *http.Request, slu
 	if gf, ok := h.readSourceGroupFile(slug); ok {
 		page.GroupArchived = gf.Archived()
 	}
-	// Кнопка «заполнить кондуит» — только роли жюри и выше.
-	if role.AtLeast(RoleJury) {
+	// Кнопка «заполнить кондуит» — при праве на заполнение.
+	if acc.Has(domain.PermKonduitFill) {
 		var extras GroupPageData
-		h.juryStandingsExtras(slug, &extras, role)
+		h.juryStandingsExtras(slug, &extras, acc)
 		page.JuryKonduits = extras.JuryKonduits
 	}
-	if inPanel {
-		page.BackURL = "/standings/" + slug + "/panel"
-		page.BackLabel = "← В панель группы"
-	} else {
-		page.BackURL = "/standings/" + slug + h.tokenQuery(token)
-		page.BackLabel = "← Таблицы группы"
-	}
+	page.BackURL = "/standings/" + slug + h.tokenQuery(acc.Token)
+	page.BackLabel = "← Таблицы группы"
 
 	if err := h.renderer.Render(w, http.StatusOK, "group_contest.html", page); err != nil {
 		h.logger.Printf("ERROR render contest page slug=%s id=%s err=%v", slug, id, err)

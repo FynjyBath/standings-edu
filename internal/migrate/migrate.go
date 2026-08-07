@@ -843,8 +843,9 @@ func maybeStripToken(raw []byte, include bool) []byte {
 	if include {
 		return raw
 	}
-	// Учётки панели группы — такой же секрет, как токен: из бандла вырезаем.
-	return stripKey(stripKey(raw, "group_secret_token"), "panel_access")
+	// Доступы группы (токены и пароли) — секрет: из бандла вырезаем целиком,
+	// вместе со старыми полями, из которых они выросли.
+	return stripKey(stripKey(stripKey(raw, "accesses"), "group_secret_token"), "panel_access")
 }
 
 // stripKey удаляет ключ верхнего уровня из JSON-объекта, сохраняя остальные поля.

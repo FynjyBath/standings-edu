@@ -16,12 +16,17 @@
     {{if .Standings.Grades}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/grades{{if .Token}}?token={{.Token}}{{end}}">{{if .Standings.Grades.Title}}{{.Standings.Grades.Title}}{{else}}Оценки{{end}}</a>
     {{end}}
-    {{if .TokenValid}}
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/participants?token={{.Token}}">Статистика участников</a>
-    {{if and .CanGrade .JuryHasGrades}}
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/panel/grades">✏️ Выставить оценки</a>
+    {{if .Access.CanViewParticipants}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/participants{{if .Token}}?token={{.Token}}{{end}}">Статистика участников</a>
     {{end}}
-    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/export.xlsx?token={{.Token}}" title="Книга Excel: листы — вкладки сводной, оценки с формулами. Импортируется в Google Таблицы (Файл → Импорт).">⬇ Excel</a>
+    {{if and .Access.CanEditGrades .JuryHasGrades}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/manage/grades{{if .Token}}?token={{.Token}}{{end}}">✏️ Выставить оценки</a>
+    {{end}}
+    {{if .Access.CanExport}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/export.xlsx{{if .Token}}?token={{.Token}}{{end}}" title="Книга Excel: листы — вкладки сводной, оценки с формулами. Импортируется в Google Таблицы (Файл → Импорт).">⬇ Excel</a>
+    {{end}}
+    {{if .Access.IsSignedIn}}
+    <a class="summary-link-btn" href="/standings/signout?back=/standings/{{.Standings.GroupSlug}}">Выйти{{if .Access.Title}} ({{.Access.Title}}){{end}}</a>
     {{end}}
   </p>
   {{if .TokenValid}}
@@ -33,29 +38,32 @@
   {{end}}
 </section>
 
-{{if .InPanel}}
+{{if .Access.HasPanel}}
 <section class="jury-panel">
   <div class="jury-panel-head">
-    <h2><span class="jury-panel-icon" aria-hidden="true">🛠</span> Панель группы <span class="panel-role-badge">{{.RoleTitle}}</span></h2>
+    <h2><span class="jury-panel-icon" aria-hidden="true">🛠</span> Панель группы <span class="panel-role-badge">{{.Access.Title}}</span></h2>
     <span id="jury-status" class="admin-editor-status"></span>
   </div>
   <div class="jury-actions">
+    {{if .Access.CanEditGrades}}
     <div class="jury-action">
       <label class="jury-action-label">Оценки группы</label>
       <div class="jury-action-row">
-        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/panel/grades">✏️ Настроить и выставить</a>
+        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/manage/grades{{if .Token}}?token={{.Token}}{{end}}">✏️ Настроить и выставить</a>
       </div>
       <p class="jury-action-hint">Столбцы и веса, коэффициент дорешки, учёт пропущенных контестов и сами оценки.</p>
     </div>
+    {{end}}
     {{if .CanManageContests}}
     <div class="jury-action">
       <label class="jury-action-label">Контесты группы</label>
       <div class="jury-action-row">
-        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/panel/contests">🗂 Управление контестами</a>
+        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/manage/contests{{if .Token}}?token={{.Token}}{{end}}">🗂 Управление контестами</a>
       </div>
-      <p class="jury-action-hint">Добавить, переставить, настроить и убрать; свои (inline) контесты — полной формой.</p>
+      <p class="jury-action-hint">Добавить, настроить и убрать; свои (inline) контесты — полной формой.</p>
     </div>
     {{end}}
+    {{if .Access.CanCreateKonduit}}
     <div class="jury-action">
       <label class="jury-action-label" for="jury-konduit-title">Создать кондуит</label>
       <div class="jury-action-row">
@@ -65,12 +73,13 @@
       </div>
       <p class="jury-action-hint">Таблица ручного ввода оценок — редактор откроется сразу.</p>
     </div>
+    {{end}}
   </div>
   {{if .JuryNewKonduits}}
   <div class="jury-konduits">
     <span class="jury-konduits-label">Новые кондуиты (заполнять можно уже сейчас):</span>
     {{range .JuryNewKonduits}}
-    <a class="summary-link-btn" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}">✏️ {{.Title}}</a>
+    <a class="summary-link-btn" href="/standings/{{$.Standings.GroupSlug}}/jury-konduit?id={{.ID}}{{if $.Token}}&token={{$.Token}}{{end}}">✏️ {{.Title}}</a>
     {{end}}
   </div>
   {{end}}
@@ -222,22 +231,25 @@
   })();
 </script>
 
-{{if .InPanel}}
+{{if .Access.HasPanel}}
 <script>
   (function () {
     var slug = {{.Standings.GroupSlug}};
-    var roleToken = {{.RoleToken}};
+    var accessToken = {{.Token}};
     var status = document.getElementById("jury-status");
     function setStatus(m, err) {
       if (!status) return;
       status.textContent = m;
       status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
     }
-    // Операции панели подтверждаются role-token'ом, выданным при входе.
+    // Права запроса определяются токеном в адресе или кукой сессии.
+    function withToken(url) {
+      if (!accessToken) return url;
+      return url + (url.indexOf("?") < 0 ? "?" : "&") + "token=" + encodeURIComponent(accessToken);
+    }
     function post(url, body) {
       body.slug = slug;
-      body.role_token = roleToken;
-      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      return fetch(withToken(url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); return p; }); });
     }
     // Создание кондуита: название + число задач; после создания сразу редактор.
@@ -250,7 +262,7 @@
       setStatus("Создание…", false);
       post("/api/jury/group/konduit/create", { title: title, task_count: count })
         .then(function (p) {
-          location.href = "/standings/" + encodeURIComponent(slug) + "/jury-konduit?id=" + encodeURIComponent(p.id);
+          location.href = withToken("/standings/" + encodeURIComponent(slug) + "/jury-konduit?id=" + encodeURIComponent(p.id));
         })
         .catch(function (err) { setStatus(err.message, true); });
     });

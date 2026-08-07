@@ -3,12 +3,13 @@
   <h1>Оценки группы: {{.GroupTitle}}</h1>
   <p class="summary-links">
     <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
-    {{if not .RoleToken}}<a class="summary-link-btn" href="/standings/admin">← В админку</a>{{end}}
+    {{if not .APIBase}}<a class="summary-link-btn" href="/standings/admin">← В админку</a>{{end}}
     <a class="summary-link-btn" href="/standings/{{.GroupSlug}}/grades{{if .GroupToken}}?token={{.GroupToken}}{{end}}" target="_blank" rel="noopener noreferrer">Страница оценок ↗</a>
     {{if .RoleTitle}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
   </p>
 </section>
 
+{{if .CanEditConfig}}
 <section class="admin-block">
   <h2>Настройка столбцов оценок</h2>
   <p class="empty-hint">Итог — взвешенное среднее столбцов (0–10). Столбец «из таблицы» считается автоматически из контестов вкладки; «ручной» — оценки ставите вручную ниже. Веса относительные.</p>
@@ -30,7 +31,9 @@
 <datalist id="gc-tablenames">
   {{range .TableNames}}<option value="{{.}}"></option>{{end}}
 </datalist>
+{{end}}
 
+{{if .CanEditGrades}}
 <section class="admin-block">
   <h2>Ручные оценки</h2>
   <p class="empty-hint">Оценки 0–10. Пустая ячейка — оценки нет (в среднее не идёт). Изменения появятся после ближайшей генерации.</p>
@@ -76,17 +79,23 @@
   <p class="empty-hint">В этой группе нет ручных столбцов — добавьте столбец типа «ручной» выше.</p>
 {{end}}
 </section>
+{{end}}
 
 <script id="gc-config" type="application/json">{{.ConfigJSON}}</script>
 <script>
   (function () {
     var slug = {{.GroupSlug}};
-    // Админка сохраняет через /api/admin (Basic Auth), панель группы — через
-    // /api/group-panel с role-token'ом роли «жюри».
+    // Админка сохраняет через /api/admin (Basic Auth), доступ группы — через
+    // /api/group-panel (права по токену в адресе или куке сессии).
     var API_BASE = {{if .APIBase}}{{.APIBase}}{{else}}"/api/admin"{{end}};
-    var ROLE_TOKEN = {{.RoleToken}};
-    function withAuth(body) { if (ROLE_TOKEN) body.role_token = ROLE_TOKEN; return body; }
+    var ACCESS_TOKEN = {{.GroupToken}};
+    function apiURL(path) {
+      var url = API_BASE + path;
+      if (API_BASE !== "/api/admin" && ACCESS_TOKEN) url += (url.indexOf("?") < 0 ? "?" : "&") + "token=" + encodeURIComponent(ACCESS_TOKEN);
+      return url;
+    }
 
+    {{if .CanEditConfig}}
     // ---- Конструктор столбцов оценок ----
     var box = document.getElementById("gc-columns");
     var status = document.getElementById("gc-status");
@@ -210,7 +219,7 @@
         columns: collectColumns()
       };
       setStatus("Сохранение…", false);
-      fetch(API_BASE + "/group-grades/config-save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withAuth(body)) })
+      fetch(apiURL("/group-grades/config-save"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
         .then(function () { location.reload(); })
         .catch(function (err) { setStatus(err.message, true); });
@@ -224,6 +233,9 @@
       (cfg.columns || []).forEach(addColumn);
     } catch (e) {}
 
+    {{end}}
+
+    {{if .CanEditGrades}}
     // ---- Ручные оценки ----
     var saveBtn = document.getElementById("grades-save");
     var gStatus = document.getElementById("grades-status");
@@ -241,12 +253,13 @@
         });
         saveBtn.disabled = true;
         setGStatus("Сохранение…", false);
-        fetch(API_BASE + "/group-grades/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withAuth({ slug: slug, grades: grades })) })
+        fetch(apiURL("/group-grades/save"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug: slug, grades: grades }) })
           .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); setGStatus("Сохранено. Изменения появятся после генерации.", false); }); })
           .catch(function (err) { setGStatus(err.message, true); })
           .finally(function () { saveBtn.disabled = false; });
       });
     }
+    {{end}}
   })();
 </script>
 {{end}}

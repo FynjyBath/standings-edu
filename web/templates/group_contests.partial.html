@@ -132,13 +132,14 @@
     // Участники группы — для сетки кондуита в форме контеста.
     try { ContestForm.setStudents(JSON.parse(document.getElementById("group-members-data").textContent || "[]")); } catch (e) {}
 
-    // post(path, body): к пути дописывается apiBase, в тело — slug и (в
-    // панели) role-token, которым сервер проверяет роль админа группы.
+    // post(path, body): к пути дописывается apiBase, в тело — slug. Права
+    // определяются токеном доступа в адресе (CFG.token) или кукой сессии.
     function post(path, body) {
       body = body || {};
       body.slug = slug;
-      if (CFG.auth) { Object.keys(CFG.auth).forEach(function (k) { body[k] = CFG.auth[k]; }); }
-      return fetch((CFG.apiBase || "") + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      var url = (CFG.apiBase || "") + path;
+      if (CFG.token) url += (url.indexOf("?") < 0 ? "?" : "&") + "token=" + encodeURIComponent(CFG.token);
+      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); });
     }
 

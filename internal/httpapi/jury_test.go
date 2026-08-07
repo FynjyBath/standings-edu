@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,10 +36,14 @@ func juryTestSetup(t *testing.T) (*Handlers, string) {
 		`[{"id":"global1","title":"Глобальный","score_system":"edu","subcontests":[]},
 		  {"id":"gkond","title":"Общий кондуит","score_system":"edu","source_type":"provider",
 		   "provider":"manual_table","provider_config":{"table":"","task_count":2},"subcontests":[]}]`)
-	mustWrite(filepath.Join(dataDir, "groups", "g1", "group.json"),
-		`{"title":"Группа","group_secret_token":"tok","student_ids":["s1"],
-		  "panel_access":{"jury":{"login":"j","password":"jp"},"admin":{"login":"a","password":"ap"}},
-		  "grades":{"columns":[{"id":"activity","title":"Активность","weight":1,"type":"manual"}]}}`)
+	mustWrite(filepath.Join(dataDir, "groups", "g1", "group.json"), testGroupJSON(t, map[string]any{
+		"title":       "Группа",
+		"student_ids": []string{"s1"},
+		"grades": map[string]any{"columns": []map[string]any{
+			{"id": "activity", "title": "Активность", "weight": 1, "type": "manual"},
+		}},
+		"accesses": testAccesses(),
+	}))
 	mustWrite(filepath.Join(dataDir, "groups", "g1", "contests.json"),
 		`[{"id":"kond","title":"Кондуит","score_system":"edu","source_type":"provider",
 		   "provider":"manual_table","provider_config":{"table":"ФИО\t1\nИванов Иван\t1\n","task_count":1},
@@ -47,16 +52,40 @@ func juryTestSetup(t *testing.T) (*Handlers, string) {
 	return h, dataDir
 }
 
-// juryRoleToken/adminRoleToken — подписи ролей панели тестовой группы.
-func juryRoleToken(h *Handlers) string {
-	return h.roleTokenFor("g1", RoleJury, &domain.GroupPanelCredential{Login: "j", Password: "jp"})
+// Токены доступов тестовых групп (см. testAccesses).
+const (
+	tokObserver = "tok"
+	tokJury     = "jtok"
+	tokAdmin    = "atok"
+)
+
+// testAccesses — набор доступов тестовой группы: три ссылки (наблюдатель, жюри,
+// админ) и две учётки с теми же правами (для проверки входа по паролю).
+func testAccesses() []domain.AccessEntry {
+	return []domain.AccessEntry{
+		{ID: "obs", Title: "Наблюдатель", Auth: domain.AccessAuthToken, Token: tokObserver, Perms: domain.ObserverPerms()},
+		{ID: "jury", Title: "Жюри", Auth: domain.AccessAuthToken, Token: tokJury, Perms: domain.JuryPerms()},
+		{ID: "adm", Title: "Админ", Auth: domain.AccessAuthToken, Token: tokAdmin, Perms: domain.AdminPerms()},
+		{ID: "jury-pw", Title: "Жюри (пароль)", Auth: domain.AccessAuthPassword, Login: "j", Password: "jp", Perms: domain.JuryPerms()},
+		{ID: "adm-pw", Title: "Админ (пароль)", Auth: domain.AccessAuthPassword, Login: "a", Password: "ap", Perms: domain.AdminPerms()},
+	}
 }
 
-func adminRoleToken(h *Handlers) string {
-	return h.roleTokenFor("g1", RoleAdmin, &domain.GroupPanelCredential{Login: "a", Password: "ap"})
+// testGroupJSON — group.json из полей (чтобы доступы собирать типами домена).
+func testGroupJSON(t *testing.T, fields map[string]any) string {
+	t.Helper()
+	blob, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(blob)
 }
 
-// panelGet — запрос к странице панели с Basic Auth роли.
+// juryRoleToken/adminRoleToken — токены доступов «жюри» и «админ» группы g1.
+func juryRoleToken(*Handlers) string  { return tokJury }
+func adminRoleToken(*Handlers) string { return tokAdmin }
+
+// panelGet — запрос к странице с Basic Auth (вход по логину и паролю).
 func panelGet(t *testing.T, handler http.HandlerFunc, target, slug, login, password string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, target, nil)
@@ -69,10 +98,15 @@ func panelGet(t *testing.T, handler http.HandlerFunc, target, slug, login, passw
 	return rec
 }
 
-func juryPost(t *testing.T, handler http.HandlerFunc, body map[string]any) (int, map[string]any) {
+// juryPost — POST к API группы; права подтверждаются токеном доступа в адресе.
+func juryPost(t *testing.T, handler http.HandlerFunc, token string, body map[string]any) (int, map[string]any) {
 	t.Helper()
 	blob, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(blob))
+	target := "/x"
+	if token != "" {
+		target += "?token=" + url.QueryEscape(token)
+	}
+	req := httptest.NewRequest(http.MethodPost, target, bytes.NewReader(blob))
 	rec := httptest.NewRecorder()
 	handler(rec, req)
 	var resp map[string]any
@@ -92,8 +126,8 @@ func TestJuryRejectsBadToken(t *testing.T) {
 		"konduit": h.JuryKonduitSave,
 	}
 	for name, fn := range cases {
-		code, _ := juryPost(t, fn, map[string]any{
-			"slug": "g1", "role_token": "WRONG", "id": "kond", "dir": "up",
+		code, _ := juryPost(t, fn, "WRONG", map[string]any{
+			"slug": "g1", "id": "kond", "dir": "up",
 			"table": "x\t1\n", "task_count": 1,
 			"grades": map[string]map[string]float64{"activity": {"s1": 5}},
 		})
@@ -107,8 +141,8 @@ func TestJuryRejectsBadToken(t *testing.T) {
 	}
 	// Токена группы для операций теперь НЕДОСТАТОЧНО — только просмотр.
 	for name, fn := range cases {
-		code, _ := juryPost(t, fn, map[string]any{
-			"slug": "g1", "role_token": "tok", "id": "kond", "dir": "up",
+		code, _ := juryPost(t, fn, "tok", map[string]any{
+			"slug": "g1", "id": "kond", "dir": "up",
 			"table": "x\t1\n", "task_count": 1,
 			"grades": map[string]map[string]float64{"activity": {"s1": 5}},
 		})
@@ -117,10 +151,10 @@ func TestJuryRejectsBadToken(t *testing.T) {
 		}
 	}
 	// Страницы панели без логина — 401 (браузер спросит пароль).
-	if rec := panelGet(t, h.GroupPanelGradesPage, "/standings/g1/panel/grades", "g1", "", ""); rec.Code != http.StatusUnauthorized {
+	if rec := panelGet(t, h.GroupManageGradesPage, "/standings/g1/manage/grades", "g1", "", ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("panel grades без логина: code=%d want 401", rec.Code)
 	}
-	if rec := panelGet(t, h.GroupPanelGradesPage, "/standings/g1/panel/grades", "g1", "j", "WRONG"); rec.Code != http.StatusUnauthorized {
+	if rec := panelGet(t, h.GroupManageGradesPage, "/standings/g1/manage/grades", "g1", "j", "WRONG"); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("panel grades с чужим паролем: code=%d want 401", rec.Code)
 	}
 }
@@ -129,7 +163,7 @@ func TestJuryRejectsBadToken(t *testing.T) {
 func TestJuryContestAddAndMove(t *testing.T) {
 	h, dataDir := juryTestSetup(t)
 
-	code, resp := juryPost(t, h.PanelContestAddRef, map[string]any{"slug": "g1", "role_token": adminRoleToken(h), "id": "global1"})
+	code, resp := juryPost(t, h.PanelContestAddRef, adminRoleToken(h), map[string]any{"slug": "g1", "id": "global1"})
 	if code != http.StatusOK || resp["ok"] != true {
 		t.Fatalf("add-ref: %d %v", code, resp)
 	}
@@ -141,15 +175,15 @@ func TestJuryContestAddAndMove(t *testing.T) {
 	}
 
 	// Дубликат — ошибка.
-	if code, _ := juryPost(t, h.PanelContestAddRef, map[string]any{"slug": "g1", "role_token": adminRoleToken(h), "id": "global1"}); code == http.StatusOK {
+	if code, _ := juryPost(t, h.PanelContestAddRef, adminRoleToken(h), map[string]any{"slug": "g1", "id": "global1"}); code == http.StatusOK {
 		t.Fatal("duplicate add must fail")
 	}
 	// Несуществующий глобальный — ошибка.
-	if code, _ := juryPost(t, h.PanelContestAddRef, map[string]any{"slug": "g1", "role_token": adminRoleToken(h), "id": "nope"}); code == http.StatusOK {
+	if code, _ := juryPost(t, h.PanelContestAddRef, adminRoleToken(h), map[string]any{"slug": "g1", "id": "nope"}); code == http.StatusOK {
 		t.Fatal("unknown global must fail")
 	}
 
-	code, resp = juryPost(t, h.PanelContestMove, map[string]any{"slug": "g1", "role_token": adminRoleToken(h), "id": "global1", "dir": "down"})
+	code, resp = juryPost(t, h.PanelContestMove, adminRoleToken(h), map[string]any{"slug": "g1", "id": "global1", "dir": "down"})
 	if code != http.StatusOK || resp["ok"] != true {
 		t.Fatalf("move: %d %v", code, resp)
 	}
@@ -166,8 +200,8 @@ func TestJuryContestAddAndMove(t *testing.T) {
 func TestJuryKonduitSave(t *testing.T) {
 	h, dataDir := juryTestSetup(t)
 
-	code, resp := juryPost(t, h.JuryKonduitSave, map[string]any{
-		"slug": "g1", "role_token": juryRoleToken(h), "id": "kond",
+	code, resp := juryPost(t, h.JuryKonduitSave, juryRoleToken(h), map[string]any{
+		"slug": "g1", "id": "kond",
 		"table": "ФИО\t1\t2\nИванов Иван\t1\t+\n", "task_count": 2,
 	})
 	if code != http.StatusOK || resp["ok"] != true {
@@ -200,8 +234,8 @@ func TestJuryKonduitSave(t *testing.T) {
 	}
 
 	// Ссылка на контест без глобального manual_table-определения — отказ.
-	if code, _ := juryPost(t, h.JuryKonduitSave, map[string]any{
-		"slug": "g1", "role_token": juryRoleToken(h), "id": "other", "table": "x\t1\n", "task_count": 1,
+	if code, _ := juryPost(t, h.JuryKonduitSave, juryRoleToken(h), map[string]any{
+		"slug": "g1", "id": "other", "table": "x\t1\n", "task_count": 1,
 	}); code == http.StatusOK {
 		t.Fatal("ref to non-manual contest must be rejected")
 	}
@@ -225,13 +259,18 @@ func TestJuryKonduitSharedAcrossGroups(t *testing.T) {
 		`[{"id":"s1","full_name":"Иванов Иван","public_name":"Иванов И."},
 		  {"id":"s2","full_name":"Петров Пётр","public_name":"Петров П."}]`)
 	mustWrite(filepath.Join(dataDir, "groups", "g1", "contests.json"), `[{"id":"gkond","update":true}]`)
-	mustWrite(filepath.Join(dataDir, "groups", "g2", "group.json"),
-		`{"title":"Группа 2","group_secret_token":"tok2","student_ids":["s2"],"panel_access":{"jury":{"login":"j2","password":"jp2"}}}`)
+	mustWrite(filepath.Join(dataDir, "groups", "g2", "group.json"), testGroupJSON(t, map[string]any{
+		"title": "Группа 2", "student_ids": []string{"s2"},
+		"accesses": []domain.AccessEntry{
+			{ID: "jury2", Title: "Жюри 2", Auth: domain.AccessAuthToken, Token: "jtok2", Perms: domain.JuryPerms()},
+			{ID: "jury2-pw", Title: "Жюри 2 (пароль)", Auth: domain.AccessAuthPassword, Login: "j2", Password: "jp2", Perms: domain.JuryPerms()},
+		},
+	}))
 	mustWrite(filepath.Join(dataDir, "groups", "g2", "contests.json"), `[{"id":"gkond","update":true}]`)
 
 	// Жюри группы 1 заполняет своего ученика.
-	code, resp := juryPost(t, h.JuryKonduitSave, map[string]any{
-		"slug": "g1", "role_token": juryRoleToken(h), "id": "gkond",
+	code, resp := juryPost(t, h.JuryKonduitSave, juryRoleToken(h), map[string]any{
+		"slug": "g1", "id": "gkond",
 		"table": "ФИО\t1\t2\nИванов Иван\t1\t\n", "task_count": 2,
 	})
 	if code != http.StatusOK || resp["ok"] != true {
@@ -262,8 +301,8 @@ func TestJuryKonduitSharedAcrossGroups(t *testing.T) {
 
 	// Жюри группы 2 сохраняет ТОЛЬКО своего Петрова — строка Иванова из
 	// группы 1 в общем конфиге не теряется (merge).
-	code, resp = juryPost(t, h.JuryKonduitSave, map[string]any{
-		"slug": "g2", "role_token": h.roleTokenFor("g2", RoleJury, &domain.GroupPanelCredential{Login: "j2", Password: "jp2"}), "id": "gkond",
+	code, resp = juryPost(t, h.JuryKonduitSave, "jtok2", map[string]any{
+		"slug": "g2", "id": "gkond",
 		"table": "ФИО\t1\t2\nПетров Пётр\t\t+\n", "task_count": 2,
 	})
 	if code != http.StatusOK || resp["ok"] != true {
@@ -276,8 +315,13 @@ func TestJuryKonduitSharedAcrossGroups(t *testing.T) {
 
 	// Ученик в двух группах: если Иванова добавить и в группу 2, его строка
 	// с уже проставленными оценками видна в редакторе группы 2.
-	mustWrite(filepath.Join(dataDir, "groups", "g2", "group.json"),
-		`{"title":"Группа 2","group_secret_token":"tok2","student_ids":["s1","s2"],"panel_access":{"jury":{"login":"j2","password":"jp2"}}}`)
+	mustWrite(filepath.Join(dataDir, "groups", "g2", "group.json"), testGroupJSON(t, map[string]any{
+		"title": "Группа 2", "student_ids": []string{"s1", "s2"},
+		"accesses": []domain.AccessEntry{
+			{ID: "jury2", Title: "Жюри 2", Auth: domain.AccessAuthToken, Token: "jtok2", Perms: domain.JuryPerms()},
+			{ID: "jury2-pw", Title: "Жюри 2 (пароль)", Auth: domain.AccessAuthPassword, Login: "j2", Password: "jp2", Perms: domain.JuryPerms()},
+		},
+	}))
 	rec = panelGet(t, h.JuryKonduitPage, "/standings/g2/jury-konduit?id=gkond", "g2", "j2", "jp2")
 	if !bytes.Contains(rec.Body.Bytes(), []byte("Иванов Иван")) {
 		t.Fatal("shared student's existing row must appear in g2 editor")
@@ -296,17 +340,17 @@ func TestJuryKonduitCreate(t *testing.T) {
 	h, dataDir := juryTestSetup(t)
 
 	// Валидация.
-	if code, _ := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "role_token": juryRoleToken(h), "title": "  ", "task_count": 5}); code == http.StatusOK {
+	if code, _ := juryPost(t, h.JuryKonduitCreate, juryRoleToken(h), map[string]any{"slug": "g1", "title": "  ", "task_count": 5}); code == http.StatusOK {
 		t.Fatal("empty title must fail")
 	}
-	if code, _ := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "role_token": juryRoleToken(h), "title": "X", "task_count": 0}); code == http.StatusOK {
+	if code, _ := juryPost(t, h.JuryKonduitCreate, juryRoleToken(h), map[string]any{"slug": "g1", "title": "X", "task_count": 0}); code == http.StatusOK {
 		t.Fatal("zero tasks must fail")
 	}
-	if code, _ := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "token": "BAD", "title": "X", "task_count": 5}); code != http.StatusForbidden {
+	if code, _ := juryPost(t, h.JuryKonduitCreate, "", map[string]any{"slug": "g1", "token": "BAD", "title": "X", "task_count": 5}); code != http.StatusForbidden {
 		t.Fatal("bad token must be rejected")
 	}
 
-	code, resp := juryPost(t, h.JuryKonduitCreate, map[string]any{"slug": "g1", "role_token": juryRoleToken(h), "title": "Дз №3", "task_count": 5})
+	code, resp := juryPost(t, h.JuryKonduitCreate, juryRoleToken(h), map[string]any{"slug": "g1", "title": "Дз №3", "task_count": 5})
 	if code != http.StatusOK || resp["ok"] != true {
 		t.Fatalf("create: %d %v", code, resp)
 	}
@@ -342,9 +386,8 @@ func TestJuryKonduitCreate(t *testing.T) {
 // Ручные оценки по токену: пишутся только известные столбцы и ученики группы.
 func TestJuryGradesSave(t *testing.T) {
 	h, dataDir := juryTestSetup(t)
-	code, resp := juryPost(t, h.PanelGradesSave, map[string]any{
-		"slug": "g1", "role_token": juryRoleToken(h),
-		"grades": map[string]map[string]float64{
+	code, resp := juryPost(t, h.PanelGradesSave, juryRoleToken(h), map[string]any{
+		"slug": "g1", "grades": map[string]map[string]float64{
 			"activity": {"s1": 8.5, "stranger": 3},
 			"unknown":  {"s1": 1},
 		},
@@ -387,10 +430,12 @@ func TestJuryKonduitPage(t *testing.T) {
 // но окно (начало/конец) обязательно у контестов-наборов задач.
 func TestPanelContestInlineSave(t *testing.T) {
 	h, dataDir := juryTestSetup(t)
-	save := func(body map[string]any) (int, map[string]any) { return juryPost(t, h.PanelContestInlineSave, body) }
+	save := func(body map[string]any) (int, map[string]any) {
+		return juryPost(t, h.PanelContestInlineSave, tokAdmin, body)
+	}
 
 	base := map[string]any{
-		"slug": "g1", "role_token": adminRoleToken(h), "id": "olymp1", "title": "Олимпиада",
+		"slug": "g1", "id": "olymp1", "title": "Олимпиада",
 		"score_system": "ioi", "table_name": "Соревнования",
 		"subcontests": []map[string]any{{"title": "Задачи", "tasks": []string{"https://codeforces.com/gym/105519"}}},
 		"start_time":  "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z",
@@ -409,23 +454,23 @@ func TestPanelContestInlineSave(t *testing.T) {
 	}
 
 	// Без окна — 400 (в админке это разрешено, в панели нет).
-	noTime := map[string]any{"slug": "g1", "role_token": adminRoleToken(h), "id": "x",
+	noTime := map[string]any{"slug": "g1", "id": "x",
 		"subcontests": []map[string]any{{"title": "З", "tasks": []string{"https://acmp.ru/?main=task&id_task=1"}}}}
 	if code, _ := save(noTime); code != http.StatusBadRequest {
 		t.Errorf("без окна ожидался 400, got %d", code)
 	}
 	// provider-контест окно не использует — сохраняется без него.
-	prov := map[string]any{"slug": "g1", "role_token": adminRoleToken(h), "id": "kond2",
+	prov := map[string]any{"slug": "g1", "id": "kond2",
 		"title": "Кондуит 2", "source_type": "provider", "provider": "manual_table",
 		"provider_config": `{"task_count":3}`}
 	if code, resp := save(prov); code != http.StatusOK {
 		t.Errorf("provider без окна должен сохраняться: %d %v", code, resp)
 	}
-	// Роль жюри управлять контестами не может.
-	juryTry := map[string]any{"slug": "g1", "role_token": juryRoleToken(h), "id": "y",
+	// Без права «свои контесты» создать inline-контест нельзя.
+	juryTry := map[string]any{"slug": "g1", "id": "y",
 		"subcontests": []map[string]any{{"title": "З", "tasks": []string{"https://acmp.ru/?main=task&id_task=2"}}},
 		"start_time":  "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z"}
-	if code, _ := save(juryTry); code != http.StatusForbidden {
-		t.Errorf("жюри не должно управлять контестами, got %d", code)
+	if code, _ := juryPost(t, h.PanelContestInlineSave, tokJury, juryTry); code != http.StatusForbidden {
+		t.Errorf("жюри не должно создавать контесты, got %d", code)
 	}
 }

@@ -19,11 +19,10 @@ import (
 	"standings-edu/internal/xlsx"
 )
 
-// GroupExportXLSX отдаёт экспорт группы по токену преподавателя.
+// GroupExportXLSX отдаёт экспорт группы доступу с правом «выгрузка в Excel».
 func (h *Handlers) GroupExportXLSX(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	if !domain.IsValidSlug(slug) || !h.groupTokenValid(slug, token) {
+	if !domain.IsValidSlug(slug) || !h.resolveAccess(slug, r).Has(domain.PermViewExport) {
 		http.NotFound(w, r)
 		return
 	}

@@ -2,108 +2,139 @@ package httpapi
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"standings-edu/internal/domain"
 )
 
-// Матрица ролей: токен группы даёт только просмотр, операции требуют учёток
-// панели, а управление контестами — роли «админ группы».
-func TestGroupRoleMatrix(t *testing.T) {
+// accessGet — GET с токеном доступа в адресе.
+func accessGet(t *testing.T, handler http.HandlerFunc, target, slug string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req.SetPathValue("group_name", slug)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	return rec
+}
+
+// sessionCookie — кука сессии из ответа (nil — не выдана).
+func sessionCookie(rec *httptest.ResponseRecorder) *http.Cookie {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == accessCookieName {
+			return c
+		}
+	}
+	return nil
+}
+
+// Матрица прав: наблюдатель ничего не меняет, жюри правит оценки, но не
+// контесты, админ группы — и контесты тоже.
+func TestAccessPermMatrix(t *testing.T) {
 	h, _ := juryTestSetup(t)
 
-	jury := juryRoleToken(h)
-	admin := adminRoleToken(h)
-	if jury == "" || admin == "" || jury == admin {
-		t.Fatalf("role-token'ы ролей должны быть непустыми и различаться: jury=%q admin=%q", jury, admin)
+	gradesConfig := map[string]any{
+		"slug": "g1", "round": 1,
+		"columns": []map[string]any{{"id": "zachet", "title": "Зачёт", "weight": 1, "type": "manual"}},
 	}
-
-	// Резолв роли: токен группы — наблюдатель, подписи — жюри/админ.
 	cases := []struct {
-		name       string
-		token      string
-		roleToken  string
-		wantAtMost GroupRole
+		name    string
+		token   string
+		handler http.HandlerFunc
+		body    map[string]any
+		want    int
 	}{
-		{"без ничего", "", "", RoleGuest},
-		{"токен группы", "tok", "", RoleObserver},
-		{"чужой токен", "WRONG", "", RoleGuest},
-		{"подпись жюри", "", jury, RoleJury},
-		{"подпись админа", "", admin, RoleAdmin},
-		{"подделка подписи", "", "deadbeef", RoleGuest},
+		{"наблюдатель: контесты", tokObserver, h.PanelContestAddRef, map[string]any{"slug": "g1", "id": "global1"}, http.StatusForbidden},
+		{"наблюдатель: оценки", tokObserver, h.PanelGradesConfigSave, gradesConfig, http.StatusForbidden},
+		{"жюри: контесты", tokJury, h.PanelContestAddRef, map[string]any{"slug": "g1", "id": "global1"}, http.StatusForbidden},
+		{"жюри: оценки", tokJury, h.PanelGradesConfigSave, gradesConfig, http.StatusOK},
+		{"админ: контесты", tokAdmin, h.PanelContestAddRef, map[string]any{"slug": "g1", "id": "global1"}, http.StatusOK},
+		{"чужой токен", "WRONG", h.PanelGradesConfigSave, gradesConfig, http.StatusForbidden},
+		{"без токена", "", h.PanelGradesConfigSave, gradesConfig, http.StatusForbidden},
 	}
 	for _, c := range cases {
-		if got := h.groupRole("g1", c.token, c.roleToken); got != c.wantAtMost {
-			t.Errorf("%s: роль=%v, ожидалась %v", c.name, got, c.wantAtMost)
+		if code, _ := juryPost(t, c.handler, c.token, c.body); code != c.want {
+			t.Errorf("%s: code=%d, ожидался %d", c.name, code, c.want)
 		}
 	}
 
-	// Подпись одной группы не подходит к другой.
-	if got := h.groupRole("g2", "", admin); got != RoleGuest {
-		t.Errorf("подпись группы g1 не должна работать в g2: %v", got)
-	}
-
-	// Роль жюри не может управлять контестами, админ — может.
-	for _, c := range []struct {
-		name      string
-		roleToken string
-		want      int
-	}{
-		{"жюри", jury, http.StatusForbidden},
-		{"админ", admin, http.StatusOK},
-	} {
-		code, _ := juryPost(t, h.PanelContestAddRef, map[string]any{
-			"slug": "g1", "role_token": c.roleToken, "id": "global1",
-		})
-		if code != c.want {
-			t.Errorf("add-ref под ролью %s: code=%d, ожидался %d", c.name, code, c.want)
-		}
-	}
-
-	// Оценки и их настройка — от роли жюри; наблюдателю недоступны.
-	for _, fn := range []http.HandlerFunc{h.PanelGradesSave, h.PanelGradesConfigSave} {
-		if code, _ := juryPost(t, fn, map[string]any{"slug": "g1", "role_token": "tok"}); code != http.StatusForbidden {
-			t.Errorf("оценки по токену группы должны быть закрыты, code=%d", code)
-		}
-	}
-	code, _ := juryPost(t, h.PanelGradesConfigSave, map[string]any{
-		"slug": "g1", "role_token": jury, "round": 1,
-		"columns": []map[string]any{{"id": "zachet", "title": "Зачёт", "weight": 1, "type": "manual"}},
-	})
-	if code != http.StatusOK {
-		t.Errorf("жюри должно настраивать таблицу оценок, code=%d", code)
+	// Токен одной группы не действует в другой.
+	if code, _ := juryPost(t, h.PanelContestAddRef, tokAdmin, map[string]any{"slug": "g2", "id": "global1"}); code != http.StatusForbidden {
+		t.Errorf("токен g1 не должен работать в g2: code=%d", code)
 	}
 }
 
-// Смена пароля обесценивает выданные раньше role-token'ы.
-func TestRoleTokenRotatesOnPasswordChange(t *testing.T) {
+// Выключенный доступ не даёт ничего — ни просмотра, ни операций.
+func TestAccessDisabledEntry(t *testing.T) {
 	h, _ := juryTestSetup(t)
-	old := adminRoleToken(h)
-	if h.groupRole("g1", "", old) != RoleAdmin {
-		t.Fatal("исходная подпись должна работать")
-	}
 
 	gf, ok, err := h.readGroupFile("g1")
 	if err != nil || !ok {
 		t.Fatal("group not found")
 	}
-	gf.PanelAccess.Admin = &domain.GroupPanelCredential{Login: "a", Password: "new-pass"}
+	off := false
+	for i := range gf.Accesses {
+		if gf.Accesses[i].ID == "adm" {
+			gf.Accesses[i].Enabled = &off
+		}
+	}
 	if err := h.writeGroupFile("g1", gf); err != nil {
 		t.Fatal(err)
 	}
-	if got := h.groupRole("g1", "", old); got != RoleGuest {
-		t.Fatalf("после смены пароля старая подпись должна перестать работать: %v", got)
+	if code, _ := juryPost(t, h.PanelContestAddRef, tokAdmin, map[string]any{"slug": "g1", "id": "global1"}); code != http.StatusForbidden {
+		t.Errorf("выключенный доступ: code=%d, ожидался 403", code)
 	}
-	if code, _ := juryPost(t, h.PanelContestAddRef, map[string]any{
-		"slug": "g1", "role_token": old, "id": "global1",
-	}); code != http.StatusForbidden {
-		t.Errorf("операция со старой подписью: code=%d, ожидался 403", code)
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1?token="+tokAdmin, nil)
+	if acc := h.resolveAccess("g1", req); acc.Elevated() {
+		t.Error("выключенный доступ не должен давать прав на просмотр")
 	}
 }
 
-// Вход в панель: без учёток — 401 с челленджем, с верными — роль и подпись.
-func TestPanelLogin(t *testing.T) {
+// Права нескольких подтверждённых доступов объединяются: глобальный доступ на
+// все группы действует и там, где у группы своих прав нет.
+func TestAccessUnionWithGlobal(t *testing.T) {
+	h, _ := juryTestSetup(t)
+
+	if err := h.saveGlobalAccesses([]domain.AccessEntry{{
+		ID: "curator", Title: "Куратор", Auth: domain.AccessAuthToken, Token: "gtok",
+		Scope: domain.AccessScopeAll,
+		Perms: []domain.Perm{domain.PermViewDirectory, domain.PermContestsManage},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Глобальный токен сам по себе даёт управление контестами в любой группе.
+	if code, _ := juryPost(t, h.PanelContestAddRef, "gtok", map[string]any{"slug": "g1", "id": "global1"}); code != http.StatusOK {
+		t.Errorf("глобальный доступ должен работать в группе: code=%d", code)
+	}
+	// А у локального жюри своих контестных прав по-прежнему нет.
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1?token="+tokJury, nil)
+	acc := h.resolveAccess("g1", req)
+	if !acc.Has(domain.PermGradesManual) || acc.Has(domain.PermContestsManage) {
+		t.Fatalf("жюри без глобального: %v", acc.Perms.Sorted())
+	}
+}
+
+// Область действия глобального доступа: только перечисленные группы.
+func TestGlobalAccessScopeGroups(t *testing.T) {
+	h, _ := juryTestSetup(t)
+	if err := h.saveGlobalAccesses([]domain.AccessEntry{{
+		ID: "one", Title: "Только g2", Auth: domain.AccessAuthToken, Token: "gtok",
+		Scope: domain.AccessScopeGroups, Groups: []string{"g2"},
+		Perms: []domain.Perm{domain.PermContestsManage},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := juryPost(t, h.PanelContestAddRef, "gtok", map[string]any{"slug": "g1", "id": "global1"}); code != http.StatusForbidden {
+		t.Errorf("доступ вне области не должен работать: code=%d", code)
+	}
+}
+
+// Вход по логину и паролю: без учётки — 401 с челленджем, после входа выдаётся
+// кука сессии, по ней права работают уже без пароля, а «Выйти» её гасит.
+func TestAccessSignInSession(t *testing.T) {
 	h, _ := juryTestSetup(t)
 
 	rec := panelGet(t, h.GroupPanelPage, "/standings/g1/panel", "g1", "", "")
@@ -120,33 +151,84 @@ func TestPanelLogin(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(body, "Панель группы") {
 		t.Fatalf("жюри должно видеть панель: code=%d", rec.Code)
 	}
-	if strings.Contains(body, "/panel/contests") {
+	if strings.Contains(body, "/manage/contests") {
 		t.Error("жюри не должно видеть ссылку на управление контестами")
 	}
 	if rec.Header().Get("Cache-Control") != "no-store" {
-		t.Error("страницы панели не должны кэшироваться")
+		t.Error("страницы под доступом не должны кэшироваться")
+	}
+
+	// Кука сессии выдана — по ней права работают без Basic Auth.
+	session := sessionCookie(rec)
+	if session == nil || session.Value == "" {
+		t.Fatal("после входа должна выдаваться кука сессии")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1", nil)
+	req.AddCookie(session)
+	acc := h.resolveAccess("g1", req)
+	if !acc.Has(domain.PermGradesManual) || !acc.SignedIn {
+		t.Fatalf("сессия должна давать права жюри: %v", acc.Perms.Sorted())
 	}
 
 	// Админ группы: появляется управление контестами.
 	rec = panelGet(t, h.GroupPanelPage, "/standings/g1/panel", "g1", "a", "ap")
-	if !strings.Contains(rec.Body.String(), "/panel/contests") {
+	if !strings.Contains(rec.Body.String(), "/manage/contests") {
 		t.Error("админ группы должен видеть управление контестами")
 	}
 
 	// Страница управления контестами: жюри — 403, админ — 200.
-	if rec := panelGet(t, h.GroupPanelContestsPage, "/standings/g1/panel/contests", "g1", "j", "jp"); rec.Code != http.StatusForbidden {
+	if rec := panelGet(t, h.GroupManageContestsPage, "/standings/g1/manage/contests", "g1", "j", "jp"); rec.Code != http.StatusForbidden {
 		t.Errorf("контесты для жюри: code=%d, ожидался 403", rec.Code)
 	}
-	if rec := panelGet(t, h.GroupPanelContestsPage, "/standings/g1/panel/contests", "g1", "a", "ap"); rec.Code != http.StatusOK {
+	if rec := panelGet(t, h.GroupManageContestsPage, "/standings/g1/manage/contests", "g1", "a", "ap"); rec.Code != http.StatusOK {
 		t.Errorf("контесты для админа: code=%d, ожидался 200", rec.Code)
+	}
+
+	// Выход: кука гасится.
+	out := httptest.NewRecorder()
+	h.AccessSignOut(out, httptest.NewRequest(http.MethodGet, "/standings/signout?back=/standings/g1", nil))
+	if out.Code != http.StatusSeeOther {
+		t.Fatalf("выход должен редиректить: code=%d", out.Code)
+	}
+	if c := sessionCookie(out); c == nil || c.MaxAge >= 0 {
+		t.Error("кука сессии должна гаситься при выходе")
 	}
 }
 
-// Наблюдатель (только токен) видит полные таблицы, но без панельных блоков.
+// Смена пароля обесценивает выданные раньше сессии.
+func TestSessionDiesOnPasswordChange(t *testing.T) {
+	h, _ := juryTestSetup(t)
+
+	session := sessionCookie(panelGet(t, h.GroupPanelPage, "/standings/g1/panel", "g1", "a", "ap"))
+	if session == nil {
+		t.Fatal("сессия не выдана")
+	}
+
+	gf, ok, err := h.readGroupFile("g1")
+	if err != nil || !ok {
+		t.Fatal("group not found")
+	}
+	for i := range gf.Accesses {
+		if gf.Accesses[i].ID == "adm-pw" {
+			gf.Accesses[i].Password = "new-pass"
+		}
+	}
+	if err := h.writeGroupFile("g1", gf); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1", nil)
+	req.AddCookie(session)
+	if acc := h.resolveAccess("g1", req); acc.Elevated() {
+		t.Fatalf("после смены пароля старая сессия должна перестать работать: %v", acc.Perms.Sorted())
+	}
+}
+
+// Токен наблюдателя: полные таблицы видны, но панели и приглашений в неё нет.
 func TestObserverSeesNoPanel(t *testing.T) {
 	h, _ := juryTestSetup(t)
 
-	rec := panelGet(t, h.GroupStandingsPage, "/standings/g1?token=tok", "g1", "", "")
+	rec := accessGet(t, h.GroupStandingsPage, "/standings/g1?token="+tokObserver, "g1")
 	body := rec.Body.String()
 	if rec.Code != http.StatusOK {
 		t.Fatalf("страница по токену: code=%d", rec.Code)
@@ -154,8 +236,35 @@ func TestObserverSeesNoPanel(t *testing.T) {
 	if strings.Contains(body, "Панель группы") {
 		t.Error("наблюдатель не должен видеть панель")
 	}
-	// И никаких приглашений в панель: вход туда — по прямой ссылке от админа.
+	// И никаких приглашений войти: вход — по прямой ссылке от админа.
 	if strings.Contains(body, "/panel") {
-		t.Error("на странице по токену не должно быть ссылок на панель")
+		t.Error("на странице по токену не должно быть ссылок на вход")
+	}
+	// Зато есть то, что даёт просмотр: участники и выгрузка.
+	if !strings.Contains(body, "/participants") || !strings.Contains(body, "export.xlsx") {
+		t.Error("наблюдателю должны быть доступны участники и экспорт")
+	}
+}
+
+// Легаси-поля (group_secret_token, panel_access) продолжают работать, пока у
+// группы нет списка accesses.
+func TestLegacyAccessFallback(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "old", "group.json"),
+		`{"title":"Старая","student_ids":[],"group_secret_token":"legacy-tok",
+		  "panel_access":{"admin":{"login":"a","password":"ap"}}}`)
+
+	req := httptest.NewRequest(http.MethodGet, "/standings/old?token=legacy-tok", nil)
+	acc := h.resolveAccess("old", req)
+	if !acc.Has(domain.PermViewUnfrozen) || acc.Has(domain.PermContestsManage) {
+		t.Fatalf("старый токен группы = наблюдатель: %v", acc.Perms.Sorted())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/standings/old", nil)
+	req.SetBasicAuth("a", "ap")
+	acc = h.resolveAccess("old", req)
+	if !acc.Has(domain.PermContestsManage) {
+		t.Fatalf("старая учётка админа должна давать управление контестами: %v", acc.Perms.Sorted())
 	}
 }

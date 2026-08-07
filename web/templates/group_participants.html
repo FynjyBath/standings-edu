@@ -2,7 +2,7 @@
 <section class="page-head">
   <h1>{{.GroupTitle}} — участники</h1>
   <p class="summary-links">
-    <a class="summary-link-btn" href="{{if .PanelView}}/standings/{{.GroupSlug}}/panel{{else}}/standings/{{.GroupSlug}}?token={{.Token}}{{end}}">← К таблицам</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .Token}}?token={{.Token}}{{end}}">← К таблицам</a>
   </p>
   <p class="empty-hint">Темп группы по участникам (просмотр по токену). Клик по заголовку — сортировка; по умолчанию — по скорости.</p>
   {{template "tempoLegend"}}
@@ -34,7 +34,7 @@
         {{range .Rows}}
         <tr data-filter-text="{{.PublicName}}"
             {{if .Course}}data-progress="{{.Course.Progress}}" data-speed="{{if .Course.LowData}}-1{{else}}{{.Course.Speed}}{{end}}" data-recent="{{.Course.SpeedRecent}}" data-hours="{{.Course.ActiveHours}}" data-weekly="{{.Course.WeeklyHours}}"{{else}}data-progress="-1" data-speed="-1" data-recent="-1" data-hours="-1" data-weekly="-1"{{end}}>
-          <td class="student-name"><a href="{{if $.PanelView}}/standings/{{$.GroupSlug}}/panel/student?id={{.StudentID}}{{else}}/standings/{{$.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}{{end}}">{{.PublicName}}</a></td>
+          <td class="student-name"><a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}{{if $.Token}}&token={{$.Token}}{{end}}">{{.PublicName}}</a></td>
           {{if .Course}}
           <td class="progress-cell">
             <div class="course-progress course-progress--mini" title="Решено {{.Course.SolvedCount}} из {{.Course.TotalCount}}">

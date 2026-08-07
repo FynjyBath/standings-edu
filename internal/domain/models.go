@@ -290,15 +290,48 @@ type GroupFile struct {
 	// ученикам. nil/absent или true — показывать (как раньше); false — на
 	// публичной странице ссылок на задачи нет (по токену жюри видны всегда).
 	ShowTaskLinks *bool `json:"show_task_links,omitempty"`
-	// PanelAccess — учётки панели группы (вход на /standings/<slug>/panel):
-	// жюри (оценки, кондуиты) и админ группы (+ управление контестами). nil —
-	// панели у группы нет, доступен только просмотр по токену.
+	// PanelAccess — легаси-учётки панели (жюри/админ). Читаются как виртуальные
+	// доступы; при первом редактировании доступов заменяются на Accesses.
 	PanelAccess *GroupPanelAccess `json:"panel_access,omitempty"`
+	// Accesses — доступы группы: набор прав + способ входа у каждой записи.
+	// Пусто — работают легаси-поля выше (group_secret_token, panel_access).
+	Accesses []AccessEntry `json:"accesses,omitempty"`
 }
 
-// GroupPanelAccess — пары логин/пароль для ролей панели группы. Пароли хранятся
-// как есть (см. admin_credentials.json): файл группы секретный, из бандла
-// экспорта учётки вырезаются вместе с group_secret_token.
+// EffectiveAccesses — доступы группы: собственные, а если их нет — виртуальные,
+// собранные из легаси-полей (розданные ссылки и пароли продолжают работать до
+// первого сохранения доступов из админки).
+func (g GroupFile) EffectiveAccesses() []AccessEntry {
+	if len(g.Accesses) > 0 {
+		return g.Accesses
+	}
+	out := make([]AccessEntry, 0, 3)
+	if token := strings.TrimSpace(g.GroupSecretToken); token != "" {
+		out = append(out, AccessEntry{
+			ID: "legacy-token", Title: "Ссылка наблюдателя", Auth: AccessAuthToken,
+			Token: token, Perms: ObserverPerms(), Legacy: true,
+		})
+	}
+	if g.PanelAccess != nil {
+		if c := g.PanelAccess.Jury; c.Valid() {
+			out = append(out, AccessEntry{
+				ID: "legacy-jury", Title: "Жюри", Auth: AccessAuthPassword,
+				Login: c.Login, Password: c.Password, Perms: JuryPerms(), Legacy: true,
+			})
+		}
+		if c := g.PanelAccess.Admin; c.Valid() {
+			out = append(out, AccessEntry{
+				ID: "legacy-admin", Title: "Админ", Auth: AccessAuthPassword,
+				Login: c.Login, Password: c.Password, Perms: AdminPerms(), Legacy: true,
+			})
+		}
+	}
+	return out
+}
+
+// GroupPanelAccess — СТАРЫЕ пары логин/пароль ролей панели. Новые группы
+// хранят доступы в accesses; эти поля читаются, пока их не перенесли
+// (см. EffectiveAccesses), и из бандла экспорта вырезаются.
 type GroupPanelAccess struct {
 	Jury  *GroupPanelCredential `json:"jury,omitempty"`
 	Admin *GroupPanelCredential `json:"admin,omitempty"`
@@ -312,11 +345,6 @@ type GroupPanelCredential struct {
 // Valid — учётка заполнена (обе части непустые).
 func (c *GroupPanelCredential) Valid() bool {
 	return c != nil && strings.TrimSpace(c.Login) != "" && c.Password != ""
-}
-
-// PanelConfigured — у группы есть хотя бы одна учётка панели.
-func (g GroupFile) PanelConfigured() bool {
-	return g.PanelAccess != nil && (g.PanelAccess.Jury.Valid() || g.PanelAccess.Admin.Valid())
 }
 
 // TaskLinksShown — показывать ли ссылки на задачи (по умолчанию да).

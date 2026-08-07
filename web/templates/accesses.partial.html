@@ -1,0 +1,302 @@
+{{define "accessEditor"}}
+{{/* Редактор доступов: карточки со способом входа, пресетом и галочками прав.
+     Разметку строит JS по данным ниже; сохраняется список целиком. */}}
+<section class="admin-block">
+  <h2>{{if .Global}}Глобальные доступы{{else}}Доступы к группе{{end}}</h2>
+  <p class="empty-hint">
+    {{if .Global}}
+    Действуют на все группы или на выбранные. Право «Каталог групп» открывает список групп на <a href="/standings" target="_blank" rel="noopener noreferrer">/standings</a> со ссылками на них.
+    {{else}}
+    Каждый доступ — это ссылка с токеном или пара логин-пароль плюс набор прав. Вход по паролю: <code>/standings/{{.Slug}}/panel</code> (браузер спросит учётку и запомнит её на 12 часов).
+    {{end}}
+    Пароли и токены хранятся в открытом виде, поэтому не переиспользуйте важные пароли. Из бандла экспорта доступы вырезаются.
+  </p>
+
+  <div id="acc-list" class="access-list"></div>
+  <div class="admin-editor-tools">
+    <button type="button" id="acc-add" class="admin-btn">＋ Добавить доступ</button>
+    <button type="button" id="acc-save" class="admin-btn">Сохранить доступы</button>
+    <span id="acc-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<script id="acc-data" type="application/json">{{.AccessesJSON}}</script>
+<script id="acc-catalog" type="application/json">{{.CatalogJSON}}</script>
+<script id="acc-presets" type="application/json">{{.PresetsJSON}}</script>
+<script id="acc-groups" type="application/json">{{.GroupsJSON}}</script>
+<script>
+  (function () {
+    var GLOBAL = {{.Global}};
+    var SLUG = {{.Slug}};
+    var SAVE_URL = {{.SaveURL}};
+    function readJSON(id, fallback) {
+      try { return JSON.parse(document.getElementById(id).textContent || "") || fallback; } catch (e) { return fallback; }
+    }
+    var accesses = readJSON("acc-data", []);
+    var catalog = readJSON("acc-catalog", []);
+    var presets = readJSON("acc-presets", []);
+    var groups = readJSON("acc-groups", []);
+
+    var box = document.getElementById("acc-list");
+    var status = document.getElementById("acc-status");
+    function setStatus(m, err) {
+      status.textContent = m;
+      status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+
+    function el(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    }
+    function randomToken() {
+      var bytes = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(bytes);
+      return [].map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    }
+
+    // Набор прав пресета ("" — свой набор).
+    function presetPerms(id) {
+      for (var i = 0; i < presets.length; i++) if (presets[i].ID === id) return presets[i].Perms || [];
+      return null;
+    }
+    // id пресета, точно совпадающего с набором (иначе "").
+    function presetFor(perms) {
+      for (var i = 0; i < presets.length; i++) {
+        var want = presets[i].Perms || [];
+        if (want.length !== perms.length) continue;
+        var same = want.every(function (p) { return perms.indexOf(p) >= 0; });
+        if (same) return presets[i].ID;
+      }
+      return "";
+    }
+
+    function render() {
+      box.textContent = "";
+      if (!accesses.length) {
+        box.appendChild(el("p", "empty-hint", "Доступов нет: страница группы открыта только в публичном виде."));
+      }
+      accesses.forEach(function (entry, idx) { box.appendChild(card(entry, idx)); });
+    }
+
+    function card(entry, idx) {
+      var wrap = el("div", "access-card" + (entry.enabled === false ? " access-card--off" : ""));
+
+      // ── Шапка: название, выключатель, удаление ──
+      var head = el("div", "access-card-head");
+      var title = el("input", "access-title");
+      title.type = "text"; title.placeholder = "Название доступа (например: Жюри — Иванов)";
+      title.value = entry.title || "";
+      title.addEventListener("input", function () { entry.title = title.value; });
+      head.appendChild(title);
+
+      var onLabel = el("label", "access-toggle");
+      var on = el("input");
+      on.type = "checkbox"; on.checked = entry.enabled !== false;
+      on.addEventListener("change", function () {
+        entry.enabled = on.checked;
+        wrap.className = "access-card" + (on.checked ? "" : " access-card--off");
+      });
+      onLabel.appendChild(on);
+      onLabel.appendChild(el("span", null, "включён"));
+      head.appendChild(onLabel);
+
+      var del = el("button", "admin-btn admin-btn--secondary", "Убрать");
+      del.type = "button";
+      del.addEventListener("click", function () {
+        if (!window.confirm("Убрать доступ «" + (entry.title || "без названия") + "»? Ссылка и учётка перестанут работать.")) return;
+        accesses.splice(idx, 1);
+        render();
+      });
+      head.appendChild(del);
+      wrap.appendChild(head);
+
+      // ── Способ входа ──
+      var authRow = el("div", "access-row");
+      var authSel = el("select");
+      [["token", "Ссылка с токеном"], ["password", "Логин и пароль"]].forEach(function (opt) {
+        var o = el("option", null, opt[1]);
+        o.value = opt[0];
+        if ((entry.auth || "token") === opt[0]) o.selected = true;
+        authSel.appendChild(o);
+      });
+      authSel.addEventListener("change", function () {
+        entry.auth = authSel.value;
+        if (entry.auth === "token" && !entry.token) entry.token = randomToken();
+        render();
+      });
+      authRow.appendChild(el("label", "access-label", "Вход"));
+      authRow.appendChild(authSel);
+
+      if ((entry.auth || "token") === "token") {
+        var tok = el("input", "access-token");
+        tok.type = "text"; tok.value = entry.token || ""; tok.placeholder = "токен";
+        tok.addEventListener("input", function () { entry.token = tok.value.trim(); linkOut(); });
+        authRow.appendChild(tok);
+        var gen = el("button", "admin-btn admin-btn--secondary", "Новый токен");
+        gen.type = "button";
+        gen.addEventListener("click", function () {
+          entry.token = randomToken();
+          tok.value = entry.token;
+          linkOut();
+        });
+        authRow.appendChild(gen);
+      } else {
+        var login = el("input");
+        login.type = "text"; login.placeholder = "логин"; login.value = entry.login || "";
+        login.style.maxWidth = "10rem";
+        login.autocomplete = "off";
+        login.addEventListener("input", function () { entry.login = login.value.trim(); });
+        var pass = el("input");
+        pass.type = "text"; pass.placeholder = "пароль"; pass.value = entry.password || "";
+        pass.style.maxWidth = "12rem";
+        pass.autocomplete = "off";
+        pass.addEventListener("input", function () { entry.password = pass.value; });
+        authRow.appendChild(login);
+        authRow.appendChild(pass);
+      }
+      wrap.appendChild(authRow);
+
+      // Готовая ссылка — то, что реально отдают преподавателю.
+      var link = el("p", "access-link");
+      function linkOut() {
+        if ((entry.auth || "token") !== "token" || !entry.token) { link.textContent = ""; return; }
+        var base = location.origin + (GLOBAL ? "/standings" : "/standings/" + SLUG);
+        link.textContent = base + "?token=" + entry.token;
+      }
+      linkOut();
+      wrap.appendChild(link);
+
+      // ── Пресет ──
+      var presetRow = el("div", "access-row");
+      presetRow.appendChild(el("label", "access-label", "Набор прав"));
+      var presetSel = el("select");
+      var own = el("option", null, "Свой набор");
+      own.value = "";
+      presetSel.appendChild(own);
+      presets.forEach(function (p) {
+        if (p.GlobalOnly && !GLOBAL) return;
+        var o = el("option", null, p.Title);
+        o.value = p.ID;
+        presetSel.appendChild(o);
+      });
+      presetSel.value = presetFor(entry.perms || []);
+      presetSel.addEventListener("change", function () {
+        var perms = presetPerms(presetSel.value);
+        if (perms) { entry.perms = perms.slice(); render(); }
+      });
+      presetRow.appendChild(presetSel);
+      var hint = el("span", "grade-weight", "");
+      presets.forEach(function (p) { if (p.ID === presetSel.value) hint.textContent = p.Hint; });
+      presetRow.appendChild(hint);
+      wrap.appendChild(presetRow);
+
+      // ── Права ──
+      var permsBox = el("div", "access-perms");
+      catalog.forEach(function (group) {
+        var visible = (group.Perms || []).filter(function (info) { return GLOBAL || !info.GlobalOnly; });
+        if (!visible.length) return;
+        var col = el("div", "access-perm-group");
+        col.appendChild(el("div", "access-perm-title", group.Title));
+        visible.forEach(function (info) {
+          var lab = el("label", "access-perm");
+          var cb = el("input");
+          cb.type = "checkbox";
+          cb.checked = (entry.perms || []).indexOf(info.Perm) >= 0;
+          cb.addEventListener("change", function () {
+            var perms = (entry.perms || []).slice();
+            var at = perms.indexOf(info.Perm);
+            if (cb.checked && at < 0) perms.push(info.Perm);
+            if (!cb.checked && at >= 0) perms.splice(at, 1);
+            entry.perms = perms;
+            presetSel.value = presetFor(perms);
+            hint.textContent = "";
+          });
+          lab.appendChild(cb);
+          lab.appendChild(el("span", null, info.Title));
+          lab.title = info.Hint || "";
+          col.appendChild(lab);
+        });
+        permsBox.appendChild(col);
+      });
+      wrap.appendChild(permsBox);
+
+      // ── Область действия (только у глобальных) ──
+      if (GLOBAL) {
+        var scopeRow = el("div", "access-row");
+        scopeRow.appendChild(el("label", "access-label", "Область"));
+        var scopeSel = el("select");
+        [["all", "Все группы"], ["groups", "Выбранные группы"]].forEach(function (opt) {
+          var o = el("option", null, opt[1]);
+          o.value = opt[0];
+          if ((entry.scope || "all") === opt[0]) o.selected = true;
+          scopeSel.appendChild(o);
+        });
+        scopeSel.addEventListener("change", function () { entry.scope = scopeSel.value; render(); });
+        scopeRow.appendChild(scopeSel);
+        wrap.appendChild(scopeRow);
+
+        if ((entry.scope || "all") === "groups") {
+          var list = el("div", "access-groups");
+          groups.forEach(function (g) {
+            var lab = el("label", "access-perm");
+            var cb = el("input");
+            cb.type = "checkbox";
+            cb.checked = (entry.groups || []).indexOf(g.slug) >= 0;
+            cb.addEventListener("change", function () {
+              var sel = (entry.groups || []).slice();
+              var at = sel.indexOf(g.slug);
+              if (cb.checked && at < 0) sel.push(g.slug);
+              if (!cb.checked && at >= 0) sel.splice(at, 1);
+              entry.groups = sel;
+            });
+            lab.appendChild(cb);
+            lab.appendChild(el("span", null, g.title));
+            list.appendChild(lab);
+          });
+          if (!groups.length) list.appendChild(el("span", "grade-weight", "Групп пока нет."));
+          wrap.appendChild(list);
+        }
+      }
+      return wrap;
+    }
+
+    document.getElementById("acc-add").addEventListener("click", function () {
+      accesses.push({
+        title: "", enabled: true, auth: "token", token: randomToken(),
+        perms: (presetPerms("observer") || []).slice(),
+        scope: GLOBAL ? "all" : undefined, groups: []
+      });
+      render();
+    });
+
+    document.getElementById("acc-save").addEventListener("click", function () {
+      setStatus("Сохранение…", false);
+      var payload = accesses.map(function (e) {
+        return {
+          id: e.id || "", title: e.title || "", enabled: e.enabled !== false,
+          auth: e.auth || "token", token: e.token || "", login: e.login || "", password: e.password || "",
+          scope: GLOBAL ? (e.scope || "all") : "", groups: e.groups || [], perms: e.perms || []
+        };
+      });
+      fetch(SAVE_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: SLUG, accesses: payload })
+      })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); return p; }); })
+        .then(function (p) {
+          accesses = (p.accesses || []).map(function (e) {
+            e.enabled = e.enabled !== false;
+            return e;
+          });
+          render();
+          setStatus("Сохранено", false);
+        })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    render();
+  })();
+</script>
+{{end}}

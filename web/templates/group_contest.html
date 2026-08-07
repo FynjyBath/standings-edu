@@ -10,14 +10,12 @@
   {{$summaryURL = printf "%s/summary?token=%s" $base .Token}}
   {{$exportURL = printf "%s/export.xlsx?token=%s&contest=%s" $base .Token .Contest.ID}}
 {{end}}
-{{if .InPanel}}
-  {{$prevURL = printf "%s/panel/contest?id=%s" $base .PrevID}}
-  {{$nextURL = printf "%s/panel/contest?id=%s" $base .NextID}}
-{{else if .Token}}
+{{if .Token}}
   {{$prevURL = printf "%s/contest?id=%s&token=%s" $base .PrevID .Token}}
   {{$nextURL = printf "%s/contest?id=%s&token=%s" $base .NextID .Token}}
 {{end}}
 {{$konduitURL := printf "%s/jury-konduit?id=%s" $base .Contest.ID}}
+{{if .Token}}{{$konduitURL = printf "%s/jury-konduit?id=%s&token=%s" $base .Contest.ID .Token}}{{end}}
 
 <section class="page-head">
   <p class="contest-page-group"><a href="{{.BackURL}}">{{.GroupTitle}}</a></p>
@@ -30,13 +28,13 @@
   <p class="summary-links">
     <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
     <a class="summary-link-btn" href="{{$summaryURL}}">Сводная</a>
-    {{if .TokenValid}}
+    {{if .Access.CanExport}}
     <a class="summary-link-btn" href="{{$exportURL}}" title="Книга Excel только с этой таблицей.">⬇ Excel</a>
     {{end}}
     {{if index .JuryKonduits .Contest.ID}}
     <a class="summary-link-btn" href="{{$konduitURL}}">✏️ Заполнить кондуит</a>
     {{end}}
-    {{if .InPanel}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
+    {{if .Access.Title}}<span class="panel-role-badge">🛠 {{.Access.Title}}</span>{{end}}
   </p>
   {{if .UnfrozenView}}
   <p class="empty-hint">🔓 Просмотр без заморозки: ученикам замороженные результаты показываются иначе.</p>

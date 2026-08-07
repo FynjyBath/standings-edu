@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -94,8 +92,9 @@ func (h *Handlers) ConfigureIntakeToken(token string) {
 	h.intakeToken = token
 }
 
-// directoryTokenPath — файл с секретным токеном каталога групп. Управляется из
-// админки, читается на каждый запрос (смена действует сразу).
+// directoryTokenPath — СТАРЫЙ файл с токеном каталога групп. Новые каталоги
+// живут в глобальных доступах; этот токен читается, пока их не сохранили
+// (см. loadGlobalAccesses).
 func (h *Handlers) directoryTokenPath() string {
 	if h.dataDir == "" {
 		return ""
@@ -103,7 +102,7 @@ func (h *Handlers) directoryTokenPath() string {
 	return filepath.Join(h.dataDir, "credentials", "directory_credentials.json")
 }
 
-// readDirectoryToken читает текущий токен каталога (пусто — каталог выключен).
+// readDirectoryToken читает старый токен каталога (пусто — его нет).
 func (h *Handlers) readDirectoryToken() string {
 	path := h.directoryTokenPath()
 	if path == "" {
@@ -235,26 +234,27 @@ func (h *Handlers) mergeCombinedMembers(slug string, gf domain.GroupFile, visiti
 // group_secret_token (?token=…) — полную (просмотр жюри), иначе — публичную
 // замороженную, вырезая полные варианты из ответа. Также по тому же токену
 // показываются скрытые (Hidden) контесты и скрытые задачи-колонки, а без него —
-// вырезаются. Возвращает true при токенном просмотре.
-func (h *Handlers) applyFreezeView(standings *domain.GeneratedGroupStandings, slug string, r *http.Request) bool {
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	return h.applyFreezeViewForRole(standings, slug, h.groupRole(slug, token, "").AtLeast(RoleObserver))
-}
-
-// applyFreezeViewForRole — то же по уже вычисленной роли: elevated (наблюдатель
-// и выше) видит полные версии замороженных таблиц и скрытые контесты.
-func (h *Handlers) applyFreezeViewForRole(standings *domain.GeneratedGroupStandings, slug string, elevated bool) bool {
-	if elevated {
+// applyAccessView оставляет в таблицах то, что положено доступу: разморозку,
+// скрытые контесты и ссылки на задачи — каждое по своему праву. Возвращает
+// true, если показана полная (размороженная) версия.
+func (h *Handlers) applyAccessView(standings *domain.GeneratedGroupStandings, slug string, acc *GroupAccess) bool {
+	unfrozen := acc.Has(domain.PermViewUnfrozen)
+	if unfrozen {
 		standings.SwapInFullRows()
-		return true
+	} else {
+		standings.StripFullRows()
 	}
-	standings.StripFullRows()
-	standings.StripHiddenContests()
-	standings.StripHiddenTasks()
-	if !h.groupShowsTaskLinks(slug) {
+	if !acc.Has(domain.PermViewHidden) {
+		standings.StripHiddenContests()
+		standings.StripHiddenTasks()
+	}
+	if !acc.Has(domain.PermViewTaskLinks) && !h.groupShowsTaskLinks(slug) {
 		standings.StripTaskLinks()
 	}
-	return false
+	if acc.Has(domain.PermViewJudgeLinks) {
+		domain.SwapEjudgeLinksToJudge(standings)
+	}
+	return unfrozen
 }
 
 // groupShowsTaskLinks читает флаг show_task_links из group.json (по умолчанию —
@@ -265,27 +265,6 @@ func (h *Handlers) groupShowsTaskLinks(slug string) bool {
 		return true
 	}
 	return gf.TaskLinksShown()
-}
-
-// groupTokenValid сверяет токен с group_secret_token из groups/<slug>/group.json.
-func (h *Handlers) groupTokenValid(slug, token string) bool {
-	if h.dataDir == "" || !domain.IsValidSlug(slug) {
-		return false
-	}
-	var groupFile domain.GroupFile
-	path := filepath.Join(h.dataDir, "groups", slug, "group.json")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	if err := json.Unmarshal(body, &groupFile); err != nil {
-		return false
-	}
-	expected := strings.TrimSpace(groupFile.GroupSecretToken)
-	if expected == "" {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 
 // hideUpcomingContestTaskURLs убирает ссылки и названия задач у контестов, которые
@@ -391,38 +370,34 @@ func (h *Handlers) APIGroupStandings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	h.applyFreezeView(&standings, slug, r)
+	h.applyAccessView(&standings, slug, h.resolveAccess(slug, r))
 	writeJSON(w, http.StatusOK, standings)
 }
 
 func (h *Handlers) GroupStandingsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	role := h.groupRole(slug, token, "")
-	h.renderGroupPage(w, r, slug, role, token, "")
+	h.renderGroupPage(w, r, slug, h.resolveAccess(slug, r))
 }
 
-// GroupPanelPage — страница группы для жюри/роли «Админ»: вход по логину и
-// паролю панели (Basic Auth), роль определяется совпавшей парой учёток. Токен
-// группы подставляется сервером, чтобы ссылки внутри страницы работали.
+// GroupPanelPage — дверь входа по логину и паролю: спрашивает учётку, ставит
+// сессию и показывает страницу группы с правами вошедшего.
 func (h *Handlers) GroupPanelPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	role, roleToken, ok := h.authorizePanelRequest(w, r, slug)
+	acc, ok := h.signInToGroup(w, r, slug)
 	if !ok {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	h.renderGroupPage(w, r, slug, role, h.groupTokenOf(slug), roleToken)
+	h.renderGroupPage(w, r, slug, acc)
 }
 
-// renderGroupPage рендерит страницу группы под заданную роль. Публичный вид
-// (RoleGuest) отдаётся из кэша готового HTML; вид по токену и панели — всегда
-// свежий рендер.
-func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug string, role GroupRole, token, roleToken string) {
-	// Публичный вид (без токена) отдаём из кэша готового HTML, если входы не
+// renderGroupPage рендерит страницу группы под права доступа. Публичный вид
+// (прав нет) отдаётся из кэша готового HTML; всё остальное — свежий рендер.
+func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug string, acc *GroupAccess) {
+	// Публичный вид (никаких прав) отдаём из кэша готового HTML, если входы не
 	// менялись; серверное время в HTML подставляется актуальное.
 	cacheVersion := ""
-	if role == RoleGuest {
+	if !acc.Elevated() {
 		if v, ok := h.groupPageVersion(slug); ok {
 			cacheVersion = v
 			if html, hit := h.cachedGroupPage(slug, v); hit {
@@ -447,31 +422,22 @@ func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug 
 		return
 	}
 
-	elevated := role.AtLeast(RoleObserver)
-	unfrozen := h.applyFreezeViewForRole(&standings, slug, elevated)
-	if elevated {
-		// Преподавателю задачи ejudge открываются в режиме судьи.
-		domain.SwapEjudgeLinksToJudge(&standings)
-	}
+	unfrozen := h.applyAccessView(&standings, slug, acc)
 	page := GroupPageData{
 		PageTitle:       standings.GroupTitle,
 		Standings:       standings,
 		Footer:          h.buildFooterInfo(),
 		UnfrozenView:    unfrozen,
-		TokenValid:      elevated,
-		Role:            role.String(),
-		RoleTitle:       role.Title(),
-		RoleToken:       roleToken,
-		InPanel:         roleToken != "",
-		CanGrade:        role.AtLeast(RoleJury),
+		Access:          acc,
+		TokenValid:      acc.Elevated(),
 		CombinedMembers: h.combinedMemberTitles(slug),
 	}
 	if gf, ok := h.readSourceGroupFile(slug); ok {
 		page.GroupArchived = gf.Archived()
 	}
-	if elevated {
-		page.Token = token
-		h.juryStandingsExtras(slug, &page, role)
+	if acc.Elevated() {
+		page.Token = acc.Token
+		h.juryStandingsExtras(slug, &page, acc)
 	}
 
 	if cacheVersion != "" {
@@ -523,7 +489,7 @@ func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	h.applyFreezeView(&standings, slug, r)
+	h.applyAccessView(&standings, slug, h.resolveAccess(slug, r))
 
 	for i := range standings.Contests {
 		if standings.Contests[i].ID != contestID {
@@ -569,29 +535,23 @@ func (h *Handlers) combinedMemberTitles(slug string) []string {
 	return titles
 }
 
-// GroupParticipantsPage — статистика участников группы по токену (наблюдатель).
+// GroupParticipantsPage — статистика участников группы (право view.participants).
 func (h *Handlers) GroupParticipantsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	if !domain.IsValidSlug(slug) || !h.groupTokenValid(slug, token) {
+	if !domain.IsValidSlug(slug) {
 		http.NotFound(w, r)
 		return
 	}
-	h.renderParticipantsPage(w, r, slug, token, false)
-}
-
-// GroupPanelParticipantsPage — те же участники, но из панели: ссылки на профили
-// ведут в панель (там доступна разметка флагов).
-func (h *Handlers) GroupPanelParticipantsPage(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("group_name")
-	if _, _, ok := h.authorizePanelRequest(w, r, slug); !ok {
+	acc := h.resolveAccess(slug, r)
+	if !acc.Has(domain.PermViewParticipants) {
+		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	h.renderParticipantsPage(w, r, slug, h.groupTokenOf(slug), true)
+	h.renderParticipantsPage(w, r, slug, acc)
 }
 
-func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request, slug, token string, panelView bool) {
+func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request, slug string, acc *GroupAccess) {
 	gf, ok := h.readSourceGroupFile(slug)
 	if !ok {
 		http.NotFound(w, r)
@@ -655,8 +615,8 @@ func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request
 		Footer:     h.buildFooterInfo(),
 		GroupSlug:  slug,
 		GroupTitle: title,
-		Token:      token,
-		PanelView:  panelView,
+		Token:      acc.Token,
+		LinkQuery:  acc.LinkQuery(),
 		Rows:       rows,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_participants.html", page); err != nil {
@@ -677,45 +637,17 @@ func participantSortKey(r ParticipantRow) int {
 	}
 }
 
-// GroupStudentProfilePage — профиль участника по токену группы (только член группы,
-// в позициях показывается только эта группа).
+// GroupStudentProfilePage — профиль участника группы (право view.participants;
+// разметка флагов нечестности — при праве flags.review).
 func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
-	if !domain.IsValidSlug(slug) || !h.groupTokenValid(slug, token) || !domain.IsValidSlug(id) {
+	if !domain.IsValidSlug(slug) || !domain.IsValidSlug(id) {
 		http.NotFound(w, r)
 		return
 	}
-	if !h.groupContainsStudent(slug, id) {
-		http.NotFound(w, r)
-		return
-	}
-
-	page := AdminStudentProfilePageData{
-		Footer:    h.buildFooterInfo(),
-		StudentID: id,
-		BackURL:   "/standings/" + slug + "/participants?token=" + url.QueryEscape(token),
-		BackLabel: "← Участники",
-		TokenView: true,
-		Token:     token,
-	}
-	h.fillStudentProfilePage(&page, id, &slug)
-	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
-		h.logger.Printf("ERROR render group student profile slug=%s id=%s err=%v", slug, id, err)
-	}
-}
-
-// GroupPanelStudentPage — профиль участника из панели: то же, что по токену, но
-// с разметкой флагов нечестности (роль «Жюри» и выше).
-func (h *Handlers) GroupPanelStudentPage(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("group_name")
-	id := strings.TrimSpace(r.URL.Query().Get("id"))
-	role, roleToken, ok := h.authorizePanelRequest(w, r, slug)
-	if !ok {
-		return
-	}
-	if !role.AtLeast(RoleJury) || !domain.IsValidSlug(id) || !h.groupContainsStudent(slug, id) {
+	acc := h.resolveAccess(slug, r)
+	if !acc.Has(domain.PermViewParticipants) || !h.groupContainsStudent(slug, id) {
 		http.NotFound(w, r)
 		return
 	}
@@ -723,16 +655,15 @@ func (h *Handlers) GroupPanelStudentPage(w http.ResponseWriter, r *http.Request)
 	page := AdminStudentProfilePageData{
 		Footer:         h.buildFooterInfo(),
 		StudentID:      id,
-		BackURL:        "/standings/" + slug + "/panel/participants",
+		BackURL:        "/standings/" + slug + "/participants" + acc.LinkQuery(),
 		BackLabel:      "← Участники",
 		TokenView:      true,
-		Token:          h.groupTokenOf(slug),
-		RoleToken:      roleToken,
-		CanReviewFlags: true,
+		Token:          acc.Token,
+		CanReviewFlags: acc.Has(domain.PermFlagsReview),
 	}
 	h.fillStudentProfilePage(&page, id, &slug)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
-		h.logger.Printf("ERROR render panel student slug=%s id=%s err=%v", slug, id, err)
+		h.logger.Printf("ERROR render group student profile slug=%s id=%s err=%v", slug, id, err)
 	}
 }
 
@@ -810,7 +741,8 @@ func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	unfrozen := h.applyFreezeView(&standings, slug, r)
+	acc := h.resolveAccess(slug, r)
+	unfrozen := h.applyAccessView(&standings, slug, acc)
 	if standings.Grades == nil {
 		http.NotFound(w, r)
 		return
@@ -828,9 +760,7 @@ func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
 		Grades:       *standings.Grades,
 		UnfrozenView: unfrozen,
 	}
-	if unfrozen {
-		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
-	}
+	page.Token = acc.Token
 	if err := h.renderer.Render(w, http.StatusOK, "group_grades.html", page); err != nil {
 		h.logger.Printf("ERROR render grades slug=%s err=%v", slug, err)
 	}
@@ -865,7 +795,8 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	unfrozen := h.applyFreezeView(&standings, slug, r)
+	acc := h.resolveAccess(slug, r)
+	unfrozen := h.applyAccessView(&standings, slug, acc)
 
 	modeTitle := "summary-edu"
 	if mode == "olymp" {
@@ -884,9 +815,7 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		Footer:       h.buildFooterInfo(),
 		UnfrozenView: unfrozen,
 	}
-	if unfrozen {
-		page.Token = strings.TrimSpace(r.URL.Query().Get("token"))
-	}
+	page.Token = acc.Token
 	if err := h.renderer.Render(w, http.StatusOK, "group_summary.html", page); err != nil {
 		h.logger.Printf("ERROR render group summary slug=%s mode=%s err=%v", slug, mode, err)
 	}
@@ -899,12 +828,11 @@ func (h *Handlers) GroupSummaryData(w http.ResponseWriter, r *http.Request) {
 
 	// Ответ большой (мегабайты у больших групп) и меняется только с генерацией:
 	// кэшируем готовые байты (компактный JSON + gzip) по отпечатку файлов —
-	// как HTML-кэш страницы группы. Вид зависит от токена (разморозка/скрытое),
-	// поэтому ключей два на группу.
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	unfrozen := token != "" && h.groupTokenValid(slug, token)
+	// как HTML-кэш страницы группы. Вид зависит от прав доступа, поэтому в
+	// ключе — их отпечаток.
+	acc := h.resolveAccess(slug, r)
 	version, cacheable := h.groupPageVersion(slug)
-	cacheKey := slug + "|" + strconv.FormatBool(unfrozen)
+	cacheKey := slug + "|" + acc.ViewKey()
 	if cacheable {
 		if e, ok := h.cachedSummaryData(cacheKey, version); ok {
 			writeSummaryData(w, r, e)
@@ -922,9 +850,7 @@ func (h *Handlers) GroupSummaryData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if h.applyFreezeView(&standings, slug, r) {
-		domain.SwapEjudgeLinksToJudge(&standings)
-	}
+	h.applyAccessView(&standings, slug, acc)
 
 	plain, err := json.Marshal(standings)
 	if err != nil {
@@ -948,13 +874,15 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 		PageTitle: "Standings",
 		Footer:    h.buildFooterInfo(),
 	}
-	// Каталог групп — по директорному токену (?token=…). Неверный/пустой токен —
-	// обычный экран, факт существования каталога не раскрываем.
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	if dirToken := h.readDirectoryToken(); dirToken != "" && token != "" &&
-		subtle.ConstantTimeCompare([]byte(token), []byte(dirToken)) == 1 {
-		// Активные и архивные группы — в каталоге разными списками (архив свёрнут).
-		for _, g := range h.buildDirectory() {
+	// Каталог групп — по глобальному доступу с правом «каталог» (ссылка с
+	// токеном или вход по паролю). Без права — обычный экран, факт
+	// существования каталога не раскрываем.
+	acc := h.resolveGlobalAccess(r)
+	if acc.Has(domain.PermViewDirectory) {
+		w.Header().Set("Cache-Control", "no-store")
+		page.SignedIn = acc.SignedIn
+		// Активные и архивные группы — разными списками (архив свёрнут).
+		for _, g := range h.buildDirectory(h.directoryScope(acc)) {
 			if g.Archived {
 				page.ArchivedGroups = append(page.ArchivedGroups, g)
 			} else {
@@ -967,22 +895,32 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// buildDirectory собирает список всех настроенных групп (data/groups/*) со
-// ссылками для ученика и преподавателя (с токеном группы, если он задан).
-func (h *Handlers) buildDirectory() []DirectoryGroup {
-	if h.dataDir == "" {
-		return []DirectoryGroup{}
-	}
-	entries, err := os.ReadDir(filepath.Join(h.dataDir, "groups"))
-	if err != nil {
-		return []DirectoryGroup{}
-	}
-	out := make([]DirectoryGroup, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir() || !domain.IsValidSlug(e.Name()) {
+// directoryScope — слаги групп, которые видно в каталоге этому доступу.
+func (h *Handlers) directoryScope(acc *GroupAccess) []string {
+	seen := make(map[string]struct{})
+	for i := range acc.Entries {
+		entry := acc.Entries[i]
+		if !entry.PermSet().Has(domain.PermViewDirectory) {
 			continue
 		}
-		slug := e.Name()
+		for _, slug := range h.accessGroupsFor(&entry) {
+			seen[slug] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for slug := range seen {
+		out = append(out, slug)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// buildDirectory собирает каталог по списку слагов: для каждой группы — её
+// ссылки с токеном (по одной на каждый включённый токен-доступ). Ссылок нет —
+// группа показывается без них (значит, доступ туда только по паролю).
+func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
+	out := make([]DirectoryGroup, 0, len(slugs))
+	for _, slug := range slugs {
 		gf, ok := h.readSourceGroupFile(slug)
 		if !ok {
 			continue
@@ -992,14 +930,23 @@ func (h *Handlers) buildDirectory() []DirectoryGroup {
 			title = slug
 		}
 		item := DirectoryGroup{
-			Slug:       slug,
-			Title:      title,
-			StudentURL: "/standings/" + slug,
-			Combined:   len(gf.MemberGroups) > 0,
-			Archived:   gf.Archived(),
+			Slug:     slug,
+			Title:    title,
+			Combined: len(gf.MemberGroups) > 0,
+			Archived: gf.Archived(),
 		}
-		if tok := strings.TrimSpace(gf.GroupSecretToken); tok != "" {
-			item.TeacherURL = "/standings/" + slug + "?token=" + url.QueryEscape(tok)
+		for _, e := range gf.EffectiveAccesses() {
+			if !e.IsEnabled() || !e.UsesToken() {
+				continue
+			}
+			linkTitle := strings.TrimSpace(e.Title)
+			if linkTitle == "" {
+				linkTitle = "Доступ"
+			}
+			item.Links = append(item.Links, DirectoryLink{
+				Title: linkTitle,
+				URL:   "/standings/" + slug + "?token=" + url.QueryEscape(strings.TrimSpace(e.Token)),
+			})
 		}
 		out = append(out, item)
 	}
@@ -1065,21 +1012,27 @@ type FooterInfo struct {
 type IndexPageData struct {
 	PageTitle string
 	Footer    FooterInfo
-	// Directory — активные группы каталога (по директорному токену). nil — обычный
-	// экран. ArchivedGroups — группы в архиве (показываются свёрнутым блоком).
+	// Directory — активные группы каталога (по праву «каталог групп»). nil —
+	// обычный экран. ArchivedGroups — группы в архиве (свёрнутым блоком).
 	Directory      []DirectoryGroup
 	ArchivedGroups []DirectoryGroup
+	// SignedIn — вход по логину и паролю: показываем кнопку «Выйти».
+	SignedIn bool
 }
 
-// DirectoryGroup — одна строка каталога групп: ссылка для ученика и (если есть
-// токен группы) ссылка для преподавателя с токеном.
+// DirectoryLink — одна ссылка с токеном в каталоге (название доступа + адрес).
+type DirectoryLink struct {
+	Title string
+	URL   string
+}
+
 type DirectoryGroup struct {
-	Slug       string
-	Title      string
-	StudentURL string
-	TeacherURL string // пусто — у группы нет токена жюри
-	Combined   bool
-	Archived   bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
+	Slug  string
+	Title string
+	// Links — ссылки с токеном (по доступу на ссылку); пусто — вход только по паролю.
+	Links    []DirectoryLink
+	Combined bool
+	Archived bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
 }
 
 type GroupPageData struct {
@@ -1090,19 +1043,12 @@ type GroupPageData struct {
 	// замороженных таблиц. Token протаскивается в ссылки страницы.
 	UnfrozenView bool
 	Token        string
-	// TokenValid — доступ не ниже наблюдателя: полные (размороженные) таблицы,
-	// скрытые контесты, статистика участников, экспорт.
+	// TokenValid — доступ что-то даёт сверх публичного вида (влияет на показ
+	// ссылок на профили, весов задач и т.п.).
 	TokenValid bool
-	// Role/RoleTitle — роль запроса («observer»/«jury»/«admin») и её название
-	// для шапки страницы. RoleToken — подпись роли для API панели (пусто вне
-	// панели). InPanel — страница открыта из панели (по логину и паролю).
-	Role      string
-	RoleTitle string
-	RoleToken string
-	InPanel   bool
-	// CanGrade — роль не ниже жюри: ручные оценки, кондуиты, настройка таблицы
-	// оценок, разметка флагов.
-	CanGrade bool
+	// Access — резолв доступа: права, подписи доступов, признак сессии.
+	// Шаблоны спрашивают у него конкретные права через Can*.
+	Access *GroupAccess
 	// CombinedMembers — названия групп-участниц, если это объединённая группа
 	// (для подписи на странице). Пусто — обычная группа.
 	CombinedMembers []string
@@ -1143,9 +1089,8 @@ type GroupParticipantsPageData struct {
 	GroupSlug  string
 	GroupTitle string
 	Token      string
-	// PanelView — открыто из панели: ссылки на профили ведут в панель, где
-	// доступна разметка флагов.
-	PanelView bool
+	// LinkQuery — «?token=…» для ссылок внутри страницы (пусто — вошли сессией).
+	LinkQuery string
 	Rows      []ParticipantRow
 }
 

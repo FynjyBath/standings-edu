@@ -1,8 +1,8 @@
 package httpapi
 
-// Панель группы: страницы и API для ролей «Жюри» и «Админ».
-// Вход — /standings/<slug>/panel (Basic Auth по учёткам из group.json), дальше
-// каждая операция подтверждается role-token'ом (см. group_access.go).
+// Страницы и API управления группой для её доступов (см. access_resolve.go).
+// Каждая операция требует своего права; кто пришёл — определяется токеном в
+// адресе или кукой сессии, выданной входом по логину и паролю.
 //
 // Логика операций не дублируется: панель зовёт те же внутренние helpers, что и
 // админка (addGroupContestRef, moveGroupContestEntry, saveInlineContest…), а
@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"standings-edu/internal/domain"
@@ -20,23 +21,22 @@ import (
 // GroupPanelContestsPageData — страница управления контестами в панели.
 type GroupPanelContestsPageData struct {
 	AdminGroupManagePageData
-	// RoleToken/RoleTitle — подпись роли для API и подпись в шапке.
-	RoleToken string
+	// RoleTitle — подпись доступа в шапке страницы.
 	RoleTitle string
 	// GroupToken — токен группы для ссылок «страница группы» из панели.
 	GroupToken string
 }
 
-// GroupPanelContestsPage — управление контестами группы (роль «Админ»):
-// та же таблица и та же форма контеста, что в админке.
-func (h *Handlers) GroupPanelContestsPage(w http.ResponseWriter, r *http.Request) {
+// GroupManageContestsPage — управление контестами группы (право
+// contests.manage): та же таблица и та же форма контеста, что в админке.
+func (h *Handlers) GroupManageContestsPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	role, roleToken, ok := h.authorizePanelRequest(w, r, slug)
+	acc, ok := h.signInToGroup(w, r, slug)
 	if !ok {
 		return
 	}
-	if !role.AtLeast(RoleAdmin) {
-		http.Error(w, "нужны права роли «Админ»", http.StatusForbidden)
+	if !acc.Has(domain.PermContestsManage) {
+		http.Error(w, "нет права управлять контестами", http.StatusForbidden)
 		return
 	}
 	base, found, err := h.buildGroupManageData(slug)
@@ -50,29 +50,31 @@ func (h *Handlers) GroupPanelContestsPage(w http.ResponseWriter, r *http.Request
 		return
 	}
 	base.PageTitle = "Контесты: " + base.GroupTitle
+	// Редактор доступов — только в админке: тут его не рисуют, а секреты в
+	// данных страницы держать незачем.
+	base.Accesses = AccessEditorData{}
 	w.Header().Set("Cache-Control", "no-store")
 	page := GroupPanelContestsPageData{
 		AdminGroupManagePageData: base,
-		RoleToken:                roleToken,
-		RoleTitle:                role.Title(),
-		GroupToken:               h.groupTokenOf(slug),
+		RoleTitle:                acc.Title(),
+		GroupToken:               acc.Token,
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "group_panel_contests.html", page); err != nil {
 		h.logger.Printf("ERROR render panel contests slug=%s: %v", slug, err)
 	}
 }
 
-// GroupPanelGradesPage — редактор оценок группы (роль «Жюри»): настройка
-// столбцов (веса, метрика, нормировка, коэффициенты) и сетка ручных оценок.
-// Тот же шаблон, что в админке.
-func (h *Handlers) GroupPanelGradesPage(w http.ResponseWriter, r *http.Request) {
+// GroupManageGradesPage — редактор оценок группы: настройка столбцов (веса,
+// метрика, нормировка, коэффициенты) и сетка ручных оценок. Тот же шаблон, что
+// в админке; блоки показываются по правам.
+func (h *Handlers) GroupManageGradesPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
-	role, roleToken, ok := h.authorizePanelRequest(w, r, slug)
+	acc, ok := h.signInToGroup(w, r, slug)
 	if !ok {
 		return
 	}
-	if !role.AtLeast(RoleJury) {
-		http.Error(w, "нужны права роли «Жюри»", http.StatusForbidden)
+	if !acc.HasAny(domain.PermGradesManual, domain.PermGradesConfig) {
+		http.Error(w, "нет права на оценки", http.StatusForbidden)
 		return
 	}
 	page, found, err := h.buildGroupGradesData(slug)
@@ -85,26 +87,26 @@ func (h *Handlers) GroupPanelGradesPage(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
-	page.RoleToken = roleToken
-	page.RoleTitle = role.Title()
-	page.GroupToken = h.groupTokenOf(slug)
+	page.RoleTitle = acc.Title()
+	page.GroupToken = acc.Token
 	page.APIBase = "/api/group-panel"
-	page.BackURL = "/standings/" + slug + "/panel"
-	page.BackLabel = "← В панель группы"
+	page.CanEditConfig = acc.Has(domain.PermGradesConfig)
+	page.CanEditGrades = acc.Has(domain.PermGradesManual)
+	page.BackURL = "/standings/" + slug + h.tokenQuery(acc.Token)
+	page.BackLabel = "← Таблицы группы"
 	w.Header().Set("Cache-Control", "no-store")
 	if err := h.renderer.Render(w, http.StatusOK, "admin_group_grades.html", page); err != nil {
 		h.logger.Printf("ERROR render panel grades slug=%s: %v", slug, err)
 	}
 }
 
-// ── API панели ───────────────────────────────────────────────────────────────
+// ── API управления группой ───────────────────────────────────────────────────
 // Пути зеркалят админские (/api/admin/group/... → /api/group-panel/...), тела
-// запросов те же плюс role_token.
+// запросов те же; права проверяются по доступу запроса.
 
-// panelContestRequest — общая часть тел запросов панели по контестам.
+// panelContestRequest — общая часть тел запросов по контестам группы.
 type panelContestRequest struct {
-	Slug      string `json:"slug"`
-	RoleToken string `json:"role_token"`
+	Slug string `json:"slug"`
 }
 
 // PanelContestAddRef — добавить в группу ссылку на глобальный контест.
@@ -118,10 +120,13 @@ func (h *Handlers) PanelContestAddRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleAdmin) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsManage)
+	if !allowed {
 		return
 	}
-	if status, msg := h.addGroupContestRef(slug, strings.TrimSpace(req.ID)); msg != "" {
+	status, msg := h.addGroupContestRef(slug, strings.TrimSpace(req.ID))
+	h.auditAccessResult(r, acc, slug, "contests.add-ref", "id="+strings.TrimSpace(req.ID), msg)
+	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
 	}
@@ -140,7 +145,8 @@ func (h *Handlers) PanelContestMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleAdmin) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsManage)
+	if !allowed {
 		return
 	}
 	entries, err := h.loadGroupContestEntries(slug)
@@ -148,7 +154,9 @@ func (h *Handlers) PanelContestMove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if status, msg := h.moveGroupContestEntry(slug, strings.TrimSpace(req.ID), strings.TrimSpace(req.Dir), entries); msg != "" {
+	status, msg := h.moveGroupContestEntry(slug, strings.TrimSpace(req.ID), strings.TrimSpace(req.Dir), entries)
+	h.auditAccessResult(r, acc, slug, "contests.move", "id="+strings.TrimSpace(req.ID)+" "+strings.TrimSpace(req.Dir), msg)
+	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
 	}
@@ -166,10 +174,13 @@ func (h *Handlers) PanelContestRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleAdmin) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsManage)
+	if !allowed {
 		return
 	}
-	if status, msg := h.removeGroupContestEntry(slug, strings.TrimSpace(req.ID)); msg != "" {
+	status, msg := h.removeGroupContestEntry(slug, strings.TrimSpace(req.ID))
+	h.auditAccessResult(r, acc, slug, "contests.remove", "id="+strings.TrimSpace(req.ID), msg)
+	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
 	}
@@ -184,10 +195,13 @@ func (h *Handlers) PanelContestSetOptions(w http.ResponseWriter, r *http.Request
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleAdmin) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsManage)
+	if !allowed {
 		return
 	}
-	if status, msg := h.setGroupContestOptions(slug, req); msg != "" {
+	status, msg := h.setGroupContestOptions(slug, req)
+	h.auditAccessResult(r, acc, slug, "contests.set-options", "id="+strings.TrimSpace(req.ID), msg)
+	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
 	}
@@ -200,15 +214,15 @@ func (h *Handlers) PanelContestSetOptions(w http.ResponseWriter, r *http.Request
 func (h *Handlers) PanelContestInlineSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		adminContestSaveRequest
-		Slug      string `json:"slug"`
-		RoleToken string `json:"role_token"`
+		Slug string `json:"slug"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleAdmin) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsInline)
+	if !allowed {
 		return
 	}
 	// Окно обязательно у контестов-наборов задач; provider-контесты его не
@@ -220,6 +234,7 @@ func (h *Handlers) PanelContestInlineSave(w http.ResponseWriter, r *http.Request
 		}
 	}
 	id, status, msg := h.saveInlineContest(slug, req.adminContestSaveRequest, nil)
+	h.auditAccessResult(r, acc, slug, "contests.inline-save", "id="+strings.TrimSpace(req.ID), msg)
 	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
@@ -230,19 +245,21 @@ func (h *Handlers) PanelContestInlineSave(w http.ResponseWriter, r *http.Request
 // PanelGradesSave — ручные оценки группы (роль «Жюри»).
 func (h *Handlers) PanelGradesSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Slug      string                        `json:"slug"`
-		RoleToken string                        `json:"role_token"`
-		Grades    map[string]map[string]float64 `json:"grades"`
+		Slug   string                        `json:"slug"`
+		Grades map[string]map[string]float64 `json:"grades"`
 	}
 	if err := decodeAdminJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleJury) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermGradesManual)
+	if !allowed {
 		return
 	}
-	if status, msg := h.saveManualGrades(slug, req.Grades); msg != "" {
+	status, msg := h.saveManualGrades(slug, req.Grades)
+	h.auditAccessResult(r, acc, slug, "grades.manual.save", "учеников "+strconv.Itoa(len(req.Grades)), msg)
+	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
 	}
@@ -258,10 +275,13 @@ func (h *Handlers) PanelGradesConfigSave(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.requirePanelRole(w, slug, req.RoleToken, RoleJury) {
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermGradesConfig)
+	if !allowed {
 		return
 	}
-	if status, msg := h.saveGradesConfig(slug, req); msg != "" {
+	status, msg := h.saveGradesConfig(slug, req)
+	h.auditAccessResult(r, acc, slug, "grades.config.save", "столбцов "+strconv.Itoa(len(req.Columns)), msg)
+	if msg != "" {
 		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
 	}
@@ -275,73 +295,6 @@ func (h *Handlers) panelGroupFile(slug string) (domain.GroupFile, bool) {
 		return domain.GroupFile{}, false
 	}
 	return gf, ok
-}
-
-// AdminGroupPanelAccessSet — задать/убрать учётку панели группы (из админки).
-// role: "jury" | "admin"; clear=true — убрать. При задании учётки у группы
-// автоматически появляется токен (без него ссылки внутри панели не собрать).
-func (h *Handlers) AdminGroupPanelAccessSet(w http.ResponseWriter, r *http.Request) {
-	if h.admin == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
-		return
-	}
-	var req struct {
-		Slug     string `json:"slug"`
-		Role     string `json:"role"`
-		Login    string `json:"login"`
-		Password string `json:"password"`
-		Clear    bool   `json:"clear"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	role := strings.ToLower(strings.TrimSpace(req.Role))
-	if !domain.IsValidSlug(slug) || (role != "jury" && role != "admin") {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
-		return
-	}
-	gf, ok, err := h.readGroupFile(slug)
-	if err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
-	}
-
-	var cred *domain.GroupPanelCredential
-	if !req.Clear {
-		login := strings.TrimSpace(req.Login)
-		if login == "" || req.Password == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "укажите логин и пароль"})
-			return
-		}
-		cred = &domain.GroupPanelCredential{Login: login, Password: req.Password}
-	}
-	if gf.PanelAccess == nil {
-		gf.PanelAccess = &domain.GroupPanelAccess{}
-	}
-	if role == "admin" {
-		gf.PanelAccess.Admin = cred
-	} else {
-		gf.PanelAccess.Jury = cred
-	}
-	if gf.PanelAccess.Jury == nil && gf.PanelAccess.Admin == nil {
-		gf.PanelAccess = nil
-	}
-	// Панель ведёт на страницы группы по токену — заводим его, если не было.
-	if gf.PanelConfigured() && strings.TrimSpace(gf.GroupSecretToken) == "" {
-		token, err := randomHexToken()
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
-		}
-		gf.GroupSecretToken = token
-	}
-	if err := h.writeGroupFile(slug, gf); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // randomHexToken — 16 случайных байт в hex (как токен группы).

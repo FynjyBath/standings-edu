@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"standings-edu/internal/domain"
@@ -22,21 +23,11 @@ import (
 //
 // Управление контестами — роль «Админ», см. group_panel.go.
 
-// juryAuthorized — права жюри по role-token'у панели (см. group_access.go).
-// Токена группы (?token=) для операций НЕДОСТАТОЧНО: он даёт только просмотр.
-func (h *Handlers) juryAuthorized(slug, roleToken string) bool {
-	return h.admin != nil && h.groupRole(slug, "", roleToken).AtLeast(RoleJury)
-}
-
 // juryCanManageContests — у объединённой группы нет своих контестов (они
 // собираются из групп-участниц), добавлять/двигать нечего.
 func (h *Handlers) juryCanManageContests(slug string) bool {
 	gf, ok, err := h.readGroupFile(slug)
 	return err == nil && ok && len(gf.MemberGroups) == 0
-}
-
-func juryDeny(w http.ResponseWriter) {
-	writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "неверный токен группы"})
 }
 
 // JuryKonduitCreate создаёт новый кондуит группы (жюри, по токену): только
@@ -46,7 +37,6 @@ func juryDeny(w http.ResponseWriter) {
 func (h *Handlers) JuryKonduitCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Slug      string `json:"slug"`
-		RoleToken string `json:"role_token"`
 		Title     string `json:"title"`
 		TaskCount int    `json:"task_count"`
 	}
@@ -56,8 +46,8 @@ func (h *Handlers) JuryKonduitCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.TrimSpace(req.Slug)
 	title := strings.TrimSpace(req.Title)
-	if !h.juryAuthorized(slug, req.RoleToken) {
-		juryDeny(w)
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermKonduitCreate)
+	if !allowed {
 		return
 	}
 	if title == "" {
@@ -111,6 +101,7 @@ func (h *Handlers) JuryKonduitCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	h.auditAccess(r, acc, slug, "konduit.create", "«"+title+"», задач "+strconv.Itoa(req.TaskCount)+", id="+id)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
@@ -203,7 +194,6 @@ func (h *Handlers) globalManualTableContest(id string) (domain.Contest, bool) {
 func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Slug      string `json:"slug"`
-		RoleToken string `json:"role_token"`
 		ID        string `json:"id"`
 		Table     string `json:"table"`
 		TaskCount int    `json:"task_count"`
@@ -214,10 +204,11 @@ func (h *Handlers) JuryKonduitSave(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.TrimSpace(req.Slug)
 	id := strings.TrimSpace(req.ID)
-	if !h.juryAuthorized(slug, req.RoleToken) {
-		juryDeny(w)
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermKonduitFill)
+	if !allowed {
 		return
 	}
+	h.auditAccess(r, acc, slug, "konduit.save", "id="+id)
 	if id == "" || len(req.Table) > maxJuryKonduitTableBytes || req.TaskCount < 1 || req.TaskCount > 200 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
 		return
@@ -428,8 +419,8 @@ type JuryKonduitPageData struct {
 	Footer     FooterInfo
 	GroupSlug  string
 	GroupTitle string
-	// RoleToken — подпись роли жюри для сохранения кондуита из панели.
-	RoleToken    string
+	// Token — токен доступа для API-запросов со страницы (пусто — вошли сессией).
+	Token        string
 	ContestID    string
 	ContestTitle string
 	Labels       []string
@@ -451,11 +442,11 @@ type JuryKonduitRow struct {
 func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("group_name")
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
-	role, roleToken, authorized := h.authorizePanelRequest(w, r, slug)
-	if !authorized {
+	acc, ok := h.signInToGroup(w, r, slug)
+	if !ok {
 		return
 	}
-	if !role.AtLeast(RoleJury) || id == "" {
+	if !acc.Has(domain.PermKonduitFill) || id == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -534,7 +525,7 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 		Footer:       h.buildFooterInfo(),
 		GroupSlug:    slug,
 		GroupTitle:   title,
-		RoleToken:    roleToken,
+		Token:        acc.Token,
 		ContestID:    id,
 		ContestTitle: contestTitle,
 		Labels:       labels,
@@ -550,9 +541,10 @@ func (h *Handlers) JuryKonduitPage(w http.ResponseWriter, r *http.Request) {
 // juryStandingsExtras заполняет данные жюри-панели страницы группы (по
 // валидному токену): глобальные контесты для добавления, кондуиты для
 // заполнения, наличие ручных оценок.
-func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, role GroupRole) {
-	if h.admin == nil || !role.AtLeast(RoleJury) {
-		return // наблюдателю панельные блоки не нужны
+func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, acc *GroupAccess) {
+	if h.admin == nil || !acc.HasAny(domain.PermGradesManual, domain.PermGradesConfig,
+		domain.PermKonduitFill, domain.PermKonduitCreate, domain.PermContestsManage) {
+		return // только просмотр — панельные блоки не нужны
 	}
 	gf, ok, err := h.readGroupFile(slug)
 	if err != nil || !ok {
@@ -563,8 +555,7 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, role Gr
 	if len(gf.MemberGroups) > 0 {
 		return // объединённая группа: своих контестов нет
 	}
-	// Управление контестами — только роль «админ»; жюри видит кондуиты.
-	page.CanManageContests = role.AtLeast(RoleAdmin)
+	page.CanManageContests = acc.Has(domain.PermContestsManage)
 
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {

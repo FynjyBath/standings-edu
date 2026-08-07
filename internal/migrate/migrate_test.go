@@ -91,7 +91,9 @@ func makeSource(t *testing.T) string {
 	 {"id":"c3","title":"Не используется","score_system":"edu"}
 	]`)
 	write(t, filepath.Join(dir, "groups", "grp", "group.json"),
-		`{"title":"Группа","student_ids":["ivanov","petrov"],"group_secret_token":"secret123","panel_access":{"jury":{"login":"j","password":"jp"}}}`)
+		`{"title":"Группа","student_ids":["ivanov","petrov"],"group_secret_token":"secret123",
+		  "panel_access":{"jury":{"login":"j","password":"jp"}},
+		  "accesses":[{"id":"a","title":"Жюри","auth":"password","login":"j2","password":"jp2","perms":["grades.manual"]}]}`)
 	write(t, filepath.Join(dir, "groups", "grp", "contests.json"),
 		`[{"id":"c1","update":true}]`)
 	write(t, filepath.Join(dir, "groups", "combo", "group.json"),
@@ -351,6 +353,10 @@ func TestExportStripToken(t *testing.T) {
 		// Учётки панели группы — такой же секрет, как токен.
 		if strings.Contains(string(g.Group), "panel_access") {
 			t.Fatal("учётки панели должны быть вырезаны при includeTokens=false")
+		}
+		// Доступы группы (токены и пароли) — тем более.
+		if strings.Contains(string(g.Group), "accesses") || strings.Contains(string(g.Group), "jp2") {
+			t.Fatalf("доступы должны быть вырезаны при includeTokens=false: %s", g.Group)
 		}
 	}
 }

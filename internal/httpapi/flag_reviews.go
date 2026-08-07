@@ -163,10 +163,8 @@ func (h *Handlers) findFlagSnapshot(studentID, groupSlug, flagKey string) *domai
 }
 
 type flagReviewRequest struct {
-	// Slug/RoleToken — только для жюри-эндпоинта: подпись роли из панели группы
-	// (группа роли должна совпадать с группой флага).
+	// Slug — группа, в рамках которой размечается флаг (для доступа группы).
 	Slug      string `json:"slug"`
-	RoleToken string `json:"role_token"`
 	StudentID string `json:"student_id"`
 	GroupSlug string `json:"group_slug"`
 	FlagKey   string `json:"flag_key"`
@@ -214,6 +212,7 @@ func (h *Handlers) AdminFlagReviewSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
+	h.auditAdmin(r, "flags.review", req.GroupSlug, "ученик "+req.StudentID+", отметка «"+req.Resolution+"»")
 	h.handleFlagReviewSet(w, req)
 }
 
@@ -226,13 +225,14 @@ func (h *Handlers) JuryFlagReviewSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.TrimSpace(req.Slug)
-	if !h.juryAuthorized(slug, req.RoleToken) {
-		juryDeny(w)
+	acc, allowed := h.requirePerm(w, r, slug, domain.PermFlagsReview)
+	if !allowed {
 		return
 	}
 	if req.GroupSlug != slug || !h.groupContainsStudent(slug, req.StudentID) {
 		writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "нет доступа к этому участнику"})
 		return
 	}
+	h.auditAccess(r, acc, slug, "flags.review", "ученик "+req.StudentID+", отметка «"+req.Resolution+"»")
 	h.handleFlagReviewSet(w, req)
 }

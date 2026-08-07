@@ -476,6 +476,10 @@ button.summary-link-btn {
   gap: 0.45rem;
   flex-wrap: wrap;
 }
+/* Ссылок у группы может быть несколько (по доступу на строку). */
+.dir-links + .dir-links {
+  margin-top: 0.3rem;
+}
 
 .dir-copy {
   display: inline-flex;
@@ -2527,31 +2531,97 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   vertical-align: middle;
 }
 
-.panel-access-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: 0.7rem;
-  margin-top: 0.6rem;
+/* Журнал действий: неудачные попытки — с красной подсветкой. */
+.audit-row--fail > td {
+  background: color-mix(in srgb, var(--attempt-bg) 55%, transparent 45%);
 }
-.panel-access-card {
+.audit-error {
+  color: var(--attempt-text);
+  font-size: 0.8rem;
+}
+
+/* Редактор доступов (админка группы и глобальная): карточка на доступ. */
+.access-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.6rem 0;
+}
+.access-card {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.7rem;
   background: color-mix(in srgb, var(--surface) 60%, transparent 40%);
+  display: grid;
+  gap: 0.5rem;
 }
-.panel-access-head {
-  font-weight: 700;
-  margin-bottom: 0.45rem;
+.access-card--off {
+  opacity: 0.55;
+}
+.access-card-head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-.panel-access-on {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--accent-strong);
+.access-title {
+  flex: 1 1 16rem;
+  font-weight: 700;
+}
+.access-toggle,
+.access-perm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.access-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.access-label {
+  min-width: 6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.access-token {
+  flex: 1 1 16rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.access-link {
+  margin: 0;
+  padding-left: 6.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.access-perms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.4rem 1rem;
+  padding: 0.5rem 0 0.2rem;
+  border-top: 1px solid var(--line-soft);
+}
+.access-perm-group {
+  display: grid;
+  gap: 0.15rem;
+  align-content: start;
+}
+.access-perm-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.access-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  padding-left: 6.5rem;
 }
 
 /* Страница одного контеста: крошка группы и «листалка» соседних контестов. */

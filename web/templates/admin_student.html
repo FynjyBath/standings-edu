@@ -267,10 +267,10 @@
     var buttons = [].slice.call(document.querySelectorAll(".flag-review-btn"));
     if (!buttons.length) return;
     var student = "{{.StudentID}}";
-    var roleToken = "{{.RoleToken}}";
-    // Разметка флагов: админка — /api/admin, панель группы — /api/jury с
-    // role-token'ом роли «жюри». По одному токену группы разметка недоступна.
-    var juryView = {{if .TokenView}}true{{else}}false{{end}};
+    var accessToken = "{{.Token}}";
+    // Разметка флагов: админка — /api/admin, доступ группы — /api/jury (право
+    // «разметка флагов»; подтверждается токеном в адресе или кукой сессии).
+    var juryView = {{if .CanReviewFlags}}{{if .TokenView}}true{{else}}false{{end}}{{else}}false{{end}};
     var PROMPTS = {
       legit: "«Сам решил» — посылки корректные, эпизод вернётся в подсчёт темпа.\nКомментарий (необязательно):",
       transfer: "«Перенос» — посылки корректные, но в темпе учитываться не будут.\nКомментарий (необязательно):",
@@ -290,7 +290,10 @@
         }
         var body = { student_id: student, group_slug: group, flag_key: btn.getAttribute("data-flag-key"), resolution: resolution, comment: comment || "" };
         var url = "/api/admin/flags/review";
-        if (juryView) { url = "/api/jury/flags/review"; body.slug = group; body.role_token = roleToken; }
+        if (juryView) {
+          url = "/api/jury/flags/review" + (accessToken ? "?token=" + encodeURIComponent(accessToken) : "");
+          body.slug = group;
+        }
         btn.disabled = true;
         fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
           .then(function (r) { return r.json(); })

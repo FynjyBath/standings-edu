@@ -482,7 +482,7 @@ func TestAdminGroupManagePageRenders(t *testing.T) {
 		t.Fatalf("page status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	html := rec.Body.String()
-	for _, want := range []string{"g1", "inl", "inline-data", "add-ref-select"} {
+	for _, want := range []string{"g1", "inl", "inline-data", "add-ref-select", "acc-list", "acc-catalog"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("page missing %q", want)
 		}
@@ -665,34 +665,35 @@ func TestHideUpcomingContestTaskURLs(t *testing.T) {
 	}
 }
 
-// Токенный просмотр: с верным токеном RowsFull/GradesFull подменяют публичные,
-// без токена — вырезаются из ответа. Токен управляется админ-эндпоинтом и
-// переживает перезапись group.json (grades не теряются).
+// Просмотр по доступу: с верным токеном RowsFull/GradesFull подменяют
+// публичные, без токена — вырезаются из ответа. Доступы сохраняются админ-
+// эндпоинтом и переживают перезапись group.json (grades не теряются).
 func TestGroupSecretTokenFlow(t *testing.T) {
 	h, dataDir := newTestHandlers(t)
 	h.ConfigureSourceDir(dataDir)
 	writeTestFile(t, filepath.Join(dataDir, "groups", "grp", "group.json"),
 		`{"title":"Т","student_ids":["s1"],"grades":{"columns":[{"id":"z","title":"З","weight":1,"type":"manual"}]}}`)
 
-	// Генерация токена.
-	code, resp := postJSON(t, h.AdminGroupTokenSet, `{"slug":"grp","clear":false}`)
+	// Доступ-наблюдатель: токен генерируется сервером, если его не прислали.
+	code, resp := postJSON(t, h.AdminGroupAccessesSave,
+		`{"slug":"grp","accesses":[{"title":"Наблюдатель","auth":"token","perms":["view.unfrozen","view.hidden"]}]}`)
 	if code != http.StatusOK || resp["ok"] != true {
-		t.Fatalf("token generate failed: code=%d resp=%v", code, resp)
-	}
-	token, _ := resp["token"].(string)
-	if len(token) != 32 {
-		t.Fatalf("unexpected token: %q", token)
+		t.Fatalf("accesses save failed: code=%d resp=%v", code, resp)
 	}
 	var gf domain.GroupFile
 	body, _ := os.ReadFile(filepath.Join(dataDir, "groups", "grp", "group.json"))
-	if err := json.Unmarshal(body, &gf); err != nil || gf.GroupSecretToken != token {
-		t.Fatalf("token not saved: %v %s", err, body)
+	if err := json.Unmarshal(body, &gf); err != nil || len(gf.Accesses) != 1 {
+		t.Fatalf("accesses not saved: %v %s", err, body)
+	}
+	token := gf.Accesses[0].Token
+	if len(token) != 32 {
+		t.Fatalf("unexpected token: %q", token)
 	}
 	if gf.Grades == nil || len(gf.Grades.Columns) != 1 {
-		t.Fatalf("grades lost on token write: %s", body)
+		t.Fatalf("grades lost on accesses write: %s", body)
 	}
 
-	// applyFreezeView: без токена — full-варианты вырезаются.
+	// applyAccessView: без токена — full-варианты вырезаются.
 	frozenAt := time.Now().Add(-time.Hour)
 	makeStandings := func() domain.GeneratedGroupStandings {
 		return domain.GeneratedGroupStandings{
@@ -712,7 +713,7 @@ func TestGroupSecretTokenFlow(t *testing.T) {
 
 	s := makeStandings()
 	req := httptest.NewRequest(http.MethodGet, "/standings/grp", nil)
-	if h.applyFreezeView(&s, "grp", req) {
+	if h.applyAccessView(&s, "grp", h.resolveAccess("grp", req)) {
 		t.Fatal("no token must not unfreeze")
 	}
 	if s.Contests[0].RowsFull != nil || s.GradesFull != nil || s.Contests[0].Rows[0].SolvedCount != 1 {
@@ -725,14 +726,14 @@ func TestGroupSecretTokenFlow(t *testing.T) {
 	// Неверный токен — тоже публичная версия.
 	s = makeStandings()
 	req = httptest.NewRequest(http.MethodGet, "/standings/grp?token=wrong", nil)
-	if h.applyFreezeView(&s, "grp", req) {
+	if h.applyAccessView(&s, "grp", h.resolveAccess("grp", req)) {
 		t.Fatal("wrong token must not unfreeze")
 	}
 
 	// Верный токен — полная версия, full-поля убраны из ответа.
 	s = makeStandings()
 	req = httptest.NewRequest(http.MethodGet, "/standings/grp?token="+token, nil)
-	if !h.applyFreezeView(&s, "grp", req) {
+	if !h.applyAccessView(&s, "grp", h.resolveAccess("grp", req)) {
 		t.Fatal("valid token must unfreeze")
 	}
 	if s.Contests[0].Rows[0].SolvedCount != 5 || s.Grades.Title != "Полные" {
@@ -745,15 +746,15 @@ func TestGroupSecretTokenFlow(t *testing.T) {
 		t.Fatalf("hidden contest must remain for token (jury) view: %+v", s.Contests)
 	}
 
-	// Удаление токена — доступ закрыт сразу.
-	code, resp = postJSON(t, h.AdminGroupTokenSet, `{"slug":"grp","clear":true}`)
-	if code != http.StatusOK || resp["token"] != "" {
-		t.Fatalf("token clear failed: code=%d resp=%v", code, resp)
+	// Удаление доступа — ссылка закрыта сразу.
+	code, resp = postJSON(t, h.AdminGroupAccessesSave, `{"slug":"grp","accesses":[]}`)
+	if code != http.StatusOK || resp["ok"] != true {
+		t.Fatalf("accesses clear failed: code=%d resp=%v", code, resp)
 	}
 	s = makeStandings()
 	req = httptest.NewRequest(http.MethodGet, "/standings/grp?token="+token, nil)
-	if h.applyFreezeView(&s, "grp", req) {
-		t.Fatal("cleared token must not unfreeze")
+	if h.applyAccessView(&s, "grp", h.resolveAccess("grp", req)) {
+		t.Fatal("удалённый доступ не должен размораживать")
 	}
 }
 

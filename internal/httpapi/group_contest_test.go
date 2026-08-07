@@ -105,8 +105,8 @@ func TestGroupContestPage(t *testing.T) {
 	}
 }
 
-// По токену — экспорт и токен в ссылках; в панели — ссылки ведут в панель.
-func TestGroupContestPageRoles(t *testing.T) {
+// По токену — экспорт и токен в ссылках; при входе по паролю — подпись доступа.
+func TestGroupContestPageAccess(t *testing.T) {
 	h := contestPageHandlers(t)
 
 	withToken := contestPageGet(t, h, h.GroupContestPage, "/standings/g1/contest?id=c2&token=tok", "", "").Body.String()
@@ -117,23 +117,13 @@ func TestGroupContestPageRoles(t *testing.T) {
 		t.Error("токен должен переноситься в ссылки листалки")
 	}
 
-	// Панель: без логина — 401, с логином — ссылки внутри панели.
-	if rec := contestPageGet(t, h, h.GroupPanelContestPage, "/standings/g1/panel/contest?id=c2", "", ""); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("панель без логина: code=%d want 401", rec.Code)
-	}
-	rec := contestPageGet(t, h, h.GroupPanelContestPage, "/standings/g1/panel/contest?id=c2", "j", "jp")
+	// Вход по паролю: та же страница, но с подписью доступа в шапке.
+	rec := contestPageGet(t, h, h.GroupContestPage, "/standings/g1/contest?id=c2", "j", "jp")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("панель: code=%d want 200", rec.Code)
+		t.Fatalf("страница под учёткой: code=%d want 200", rec.Code)
 	}
-	panelBody := rec.Body.String()
-	if !strings.Contains(panelBody, "/panel/contest?id=c1") || !strings.Contains(panelBody, "/panel/contest?id=c3") {
-		t.Error("в панели листалка должна оставаться в панели")
-	}
-	if !strings.Contains(panelBody, "🛠 Жюри") {
-		t.Error("в панели нужен бейдж роли")
-	}
-	if rec.Header().Get("Cache-Control") != "no-store" {
-		t.Error("страницы панели не кэшируются")
+	if !strings.Contains(rec.Body.String(), "🛠 Жюри") {
+		t.Error("нужна подпись доступа")
 	}
 }
 

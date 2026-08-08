@@ -41,6 +41,9 @@ type AccessEditorData struct {
 type accessEditorGroup struct {
 	Slug  string `json:"slug"`
 	Title string `json:"title"`
+	// Archived — группа в архиве: в форме уезжает в свёрнутый блок, чтобы
+	// старые группы не растягивали список на всю страницу.
+	Archived bool `json:"archived"`
 }
 
 // buildAccessEditor собирает данные редактора. list — что показывать.
@@ -76,13 +79,21 @@ func (h *Handlers) accessEditorGroups() []accessEditorGroup {
 	slugs := h.allGroupSlugs()
 	out := make([]accessEditorGroup, 0, len(slugs))
 	for _, s := range slugs {
-		title := s
-		if gf, ok := h.readSourceGroupFile(s); ok && strings.TrimSpace(gf.Title) != "" {
-			title = strings.TrimSpace(gf.Title)
+		item := accessEditorGroup{Slug: s, Title: s}
+		if gf, ok := h.readSourceGroupFile(s); ok {
+			if title := strings.TrimSpace(gf.Title); title != "" {
+				item.Title = title
+			}
+			item.Archived = gf.Archived()
 		}
-		out = append(out, accessEditorGroup{Slug: s, Title: title})
+		out = append(out, item)
 	}
-	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title) })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Archived != out[j].Archived {
+			return !out[i].Archived // активные выше архивных
+		}
+		return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title)
+	})
 	return out
 }
 

@@ -16,7 +16,10 @@ import (
 type AdminExportPageData struct {
 	PageTitle string
 	Footer    FooterInfo
-	Groups    []AdminGroupLink
+	// Groups — активные группы; Archived — архивные, отдельным свёрнутым
+	// блоком (их со временем становится больше, чем активных).
+	Groups   []AdminGroupLink
+	Archived []AdminGroupLink
 }
 
 // slugSetFromForm превращает список слагов из формы в множество валидных slug→true.
@@ -51,7 +54,13 @@ func (h *Handlers) AdminExportPage(w http.ResponseWriter, _ *http.Request) {
 	page := AdminExportPageData{
 		PageTitle: "Экспорт данных",
 		Footer:    h.buildFooterInfo(),
-		Groups:    links,
+	}
+	for _, link := range links {
+		if link.Archived {
+			page.Archived = append(page.Archived, link)
+		} else {
+			page.Groups = append(page.Groups, link)
+		}
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_export.html", page); err != nil {
 		h.logger.Printf("ERROR render admin export: %v", err)

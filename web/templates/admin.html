@@ -86,7 +86,8 @@
   {{if .Groups}}
   <div class="filter-bar">
     <input type="search" class="filter-input" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false"
-           data-filter-rows="#groups-grid > li" data-filter-count="#groups-count" data-filter-empty="#groups-empty" />
+           data-filter-rows="#groups-grid > li, #archived-groups-grid > li"
+           data-filter-count="#groups-count" data-filter-empty="#groups-empty" data-filter-fold="#archived-groups-fold" />
     <span class="filter-count" id="groups-count"></span>
   </div>
   <ul class="admin-groups-grid" id="groups-grid">
@@ -102,27 +103,36 @@
     {{end}}
     {{end}}
   </ul>
+  {{if not .HasActiveGroups}}
+  <p class="empty-hint">Активных групп нет — все в архиве (ниже).</p>
+  {{end}}
   <p class="empty-hint" id="groups-empty" hidden>Ничего не найдено.</p>
   {{else}}
   <p class="empty-hint">Группы не найдены.</p>
   {{end}}
-</section>
 
-<section class="admin-block admin-block--muted" id="archived-groups-block"{{if not .HasArchivedGroups}} hidden{{end}}>
-  <h2>Архивные группы</h2>
-  <p class="empty-hint">Не пересобираются при генерации (update=false), но их страницы остаются доступными. Из активных списков убраны. Достать из архива — на странице группы.</p>
-  <ul class="admin-groups-grid admin-groups-grid--archived">
-    {{range .Groups}}
-    {{if and (not .IsCombined) .Archived}}
-    <li>
-      <a class="admin-btn admin-btn--secondary" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
-      <span>({{.Slug}})</span>
-      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
-      <span class="archived-badge">🗄 в архиве</span>
-    </li>
-    {{end}}
-    {{end}}
-  </ul>
+  {{if .HasArchivedGroups}}
+  <details class="archive-fold" id="archived-groups-fold">
+    <summary>
+      <span>🗄 Архивные группы</span>
+      <span class="archive-fold-count">{{.ArchivedCount}}</span>
+      <span class="archive-fold-hint">не пересобираются при генерации, но страницы доступны</span>
+    </summary>
+    <p class="empty-hint">Из активных списков убраны. Достать из архива — на странице группы.</p>
+    <ul class="admin-groups-grid admin-groups-grid--archived" id="archived-groups-grid">
+      {{range .Groups}}
+      {{if and (not .IsCombined) .Archived}}
+      <li data-filter-text="{{.Title}} {{.Slug}}">
+        <a class="admin-btn admin-btn--secondary" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
+        <span>({{.Slug}})</span>
+        <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+        <span class="archived-badge">🗄 в архиве</span>
+      </li>
+      {{end}}
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
 </section>
 
 <section class="admin-block">

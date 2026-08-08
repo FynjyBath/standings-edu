@@ -70,9 +70,13 @@ type AdminPageData struct {
 	DefaultPath      string
 	// Accesses — блок глобальных доступов (тот же редактор, что у группы).
 	Accesses AccessEditorData
-	// HasArchivedGroups — есть ли хоть одна архивная (обычная) группа: секцию
-	// «Архивные группы» показываем только тогда.
+	// HasArchivedGroups/ArchivedCount — архивные (обычные) группы: свёрнутый
+	// блок показываем, только если они есть, и подписываем их числом.
+	// HasActiveGroups — есть ли активные: иначе вместо пустого списка объясняем,
+	// что всё уехало в архив.
 	HasArchivedGroups bool
+	ArchivedCount     int
+	HasActiveGroups   bool
 }
 
 type AdminGroupLink struct {
@@ -341,11 +345,16 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		Accesses:         h.buildAccessEditor(true, "", "/api/admin/global-accesses/save", h.loadGlobalAccesses()),
 	}
 	for _, g := range groupLinks {
-		if g.Archived && !g.IsCombined {
-			page.HasArchivedGroups = true
-			break
+		if g.IsCombined {
+			continue
+		}
+		if g.Archived {
+			page.ArchivedCount++
+		} else {
+			page.HasActiveGroups = true
 		}
 	}
+	page.HasArchivedGroups = page.ArchivedCount > 0
 	if err := h.renderer.Render(w, http.StatusOK, "admin.html", page); err != nil {
 		h.logger.Printf("ERROR render admin page: %v", err)
 	}

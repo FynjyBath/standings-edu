@@ -10,30 +10,48 @@
 
   // ── 1. Живой фильтр строк таблицы/списка ────────────────────────────────
   // Разметка: <input data-filter-rows="СЕЛЕКТОР_СТРОК"
-  //                  [data-filter-count="#счётчик"] [data-filter-empty="#пусто"]>
+  //                  [data-filter-count="#счётчик"] [data-filter-empty="#пусто"]
+  //                  [data-filter-fold="#details"]>
   // У каждой строки текст для поиска берётся из data-filter-text, иначе из
   // textContent. Скрытие — классом .filtered-out (см. styles.css).
+  // data-filter-fold — свёрнутый блок (обычно архив), строки которого тоже
+  // участвуют в поиске: при совпадениях внутри он раскрывается сам, а его
+  // счётчик (.archive-fold-count) считает найденное отдельно, чтобы основной
+  // счётчик не мешал архив с активными.
   function initTableFilters() {
     var inputs = document.querySelectorAll("[data-filter-rows]");
     [].forEach.call(inputs, function (input) {
       var rowsSel = input.getAttribute("data-filter-rows");
       var countNode = sel(input.getAttribute("data-filter-count"));
       var emptyNode = sel(input.getAttribute("data-filter-empty"));
+      var foldNode = sel(input.getAttribute("data-filter-fold"));
+      var foldCount = foldNode ? foldNode.querySelector(".archive-fold-count") : null;
 
       function rowText(r) {
         var t = r.getAttribute("data-filter-text");
         if (t == null) t = r.textContent || "";
         return t.toLowerCase();
       }
+      function inFold(r) { return !!foldNode && foldNode.contains(r); }
       function apply() {
         var q = norm(input.value);
         var rows = document.querySelectorAll(rowsSel);
-        var total = rows.length, shown = 0;
+        var total = 0, shown = 0, foldTotal = 0, foldShown = 0;
         [].forEach.call(rows, function (r) {
           var match = !q || rowText(r).indexOf(q) !== -1;
           r.classList.toggle("filtered-out", !match);
+          if (inFold(r)) {
+            foldTotal++;
+            if (match) foldShown++;
+            return;
+          }
+          total++;
           if (match) shown++;
         });
+        if (foldCount) foldCount.textContent = q ? (foldShown + " из " + foldTotal) : String(foldTotal);
+        // Нашлось только в архиве — раскрываем, иначе совпадения не видно.
+        // Обратно не закрываем: раскрытый вручную блок захлопывать невежливо.
+        if (foldNode && q && foldShown > 0) foldNode.open = true;
         // Свёрнутая таблица (data-collapse-rows) на время поиска раскрывается,
         // иначе совпадения ниже порога остались бы скрыты; очистка запроса
         // возвращает свёртку.
@@ -42,7 +60,9 @@
           if (table) table.classList.toggle("filter-active", !!q);
         }
         if (countNode) countNode.textContent = q ? (shown + " из " + total) : String(total);
-        if (emptyNode) emptyNode.hidden = shown !== 0 || total === 0;
+        // Плашка «ничего не найдено» — только при активном поиске без совпадений
+        // (в том числе в архиве); без запроса её не показываем никогда.
+        if (emptyNode) emptyNode.hidden = !q || shown + foldShown !== 0 || total + foldTotal === 0;
       }
       input.addEventListener("input", apply);
       apply();

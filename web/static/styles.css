@@ -425,12 +425,15 @@ button.summary-link-btn {
 }
 
 /* Свёрнутый блок архивных групп внизу каталога. */
-.dir-archive {
+/* Свёрнутый блок архива. Архивных групп со временем становится больше, чем
+   активных, поэтому везде, где они перечисляются, список закрыт по умолчанию —
+   раскрывается кликом (и сам собой при поиске, если там есть совпадения). */
+.archive-fold {
   margin-top: 1.1rem;
   border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent 30%);
   padding-top: 0.6rem;
 }
-.dir-archive > summary {
+.archive-fold > summary {
   cursor: pointer;
   padding: 0.4rem 0.2rem;
   color: var(--muted);
@@ -440,15 +443,16 @@ button.summary-link-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
-.dir-archive > summary::-webkit-details-marker { display: none; }
-.dir-archive > summary::after {
+.archive-fold > summary::-webkit-details-marker { display: none; }
+.archive-fold > summary::after {
   content: "▸";
   font-size: 0.8em;
   color: var(--muted);
 }
-.dir-archive[open] > summary::after { content: "▾"; }
-.dir-archive-count {
+.archive-fold[open] > summary::after { content: "▾"; }
+.archive-fold-count {
   font-size: 0.75rem;
   font-weight: 700;
   padding: 0.05rem 0.5rem;
@@ -456,8 +460,13 @@ button.summary-link-btn {
   color: var(--muted);
   background: color-mix(in srgb, var(--muted) 14%, var(--surface) 86%);
 }
+.archive-fold-hint {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 /* Архивные строки — чуть приглушены, чтобы отличались от активных. */
-.dir-archive .dir-title { color: color-mix(in srgb, var(--text) 78%, var(--muted) 22%); }
+.archive-fold .dir-title { color: color-mix(in srgb, var(--text) 78%, var(--muted) 22%); }
 
 .dir-slug {
   color: var(--muted);

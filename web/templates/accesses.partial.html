@@ -238,8 +238,8 @@
         wrap.appendChild(scopeRow);
 
         if ((entry.scope || "all") === "groups") {
-          var list = el("div", "access-groups");
-          groups.forEach(function (g) {
+          // Галочка группы; архивные — те же галочки, но в свёрнутом блоке.
+          function groupBox(g) {
             var lab = el("label", "access-perm");
             var cb = el("input");
             cb.type = "checkbox";
@@ -253,10 +253,34 @@
             });
             lab.appendChild(cb);
             lab.appendChild(el("span", null, g.title));
-            list.appendChild(lab);
-          });
+            lab.title = g.slug + (g.archived ? " (в архиве)" : "");
+            return lab;
+          }
+
+          var active = groups.filter(function (g) { return !g.archived; });
+          var archived = groups.filter(function (g) { return g.archived; });
+
+          var list = el("div", "access-groups");
+          active.forEach(function (g) { list.appendChild(groupBox(g)); });
           if (!groups.length) list.appendChild(el("span", "grade-weight", "Групп пока нет."));
+          else if (!active.length) list.appendChild(el("span", "grade-weight", "Активных групп нет — все в архиве."));
           wrap.appendChild(list);
+
+          if (archived.length) {
+            // Отмеченные архивные видно сразу: иначе непонятно, почему доступ
+            // покрывает больше групп, чем показано галочками.
+            var chosen = archived.filter(function (g) { return (entry.groups || []).indexOf(g.slug) >= 0; });
+            var fold = el("details", "archive-fold");
+            var sum = el("summary");
+            sum.appendChild(el("span", null, "🗄 Архивные группы"));
+            sum.appendChild(el("span", "archive-fold-count", chosen.length ? chosen.length + " из " + archived.length : String(archived.length)));
+            fold.appendChild(sum);
+            var archList = el("div", "access-groups");
+            archived.forEach(function (g) { archList.appendChild(groupBox(g)); });
+            fold.appendChild(archList);
+            if (chosen.length) fold.open = true;
+            wrap.appendChild(fold);
+          }
         }
       }
       return wrap;

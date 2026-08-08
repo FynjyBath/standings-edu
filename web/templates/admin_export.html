@@ -1,3 +1,15 @@
+{{define "adminExportRow"}}
+        <tr data-filter-text="{{.Title}} {{.Slug}}">
+          <td>{{.Title}} <span class="grade-weight">({{.Slug}}){{if .IsCombined}} · объединённая{{end}}{{if .Archived}} · архив{{end}}</span></td>
+          <td class="count-col">
+            {{if .IsCombined}}<span class="grade-weight">—</span>{{else}}<input type="checkbox" name="participants" value="{{.Slug}}" checked />{{end}}
+          </td>
+          <td class="count-col">
+            {{if .IsCombined}}<input type="checkbox" name="contests" value="{{.Slug}}" checked title="включить объединённую группу в бандл" />{{else}}<input type="checkbox" name="contests" value="{{.Slug}}" checked />{{end}}
+          </td>
+        </tr>
+{{end}}
+
 {{define "content"}}
 <section class="page-head">
   <h1>Экспорт данных</h1>
@@ -11,35 +23,49 @@
 <section class="admin-block">
   <h2>Что экспортировать</h2>
   <form method="post" action="/api/admin/export/download">
-    {{if .Groups}}
+    {{if or .Groups .Archived}}
     <div class="admin-editor-tools" style="margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap;">
       <button type="button" class="admin-btn admin-btn--secondary" data-check="all">Отметить всё</button>
       <button type="button" class="admin-btn admin-btn--secondary" data-check="none">Снять всё</button>
+      <input type="search" class="filter-input" placeholder="Фильтр по названию или slug…" autocomplete="off" spellcheck="false"
+             data-filter-rows="#export-groups > tr, #export-archived-groups > tr"
+             data-filter-count="#export-count" data-filter-fold="#export-archived" style="flex:0 1 18rem;" />
+      <span class="filter-count" id="export-count"></span>
     </div>
+    {{if .Groups}}
     <table class="standings-table data-table migrate-select">
       <thead><tr><th>Группа</th><th class="count-col">участники</th><th class="count-col">контесты</th></tr></thead>
-      <tbody>
-        {{range .Groups}}
-        <tr>
-          <td>{{.Title}} <span class="grade-weight">({{.Slug}}){{if .IsCombined}} · объединённая{{end}}</span></td>
-          <td class="count-col">
-            {{if .IsCombined}}<span class="grade-weight">—</span>{{else}}<input type="checkbox" name="participants" value="{{.Slug}}" checked />{{end}}
-          </td>
-          <td class="count-col">
-            {{if .IsCombined}}<input type="checkbox" name="contests" value="{{.Slug}}" checked title="включить объединённую группу в бандл" />{{else}}<input type="checkbox" name="contests" value="{{.Slug}}" checked />{{end}}
-          </td>
-        </tr>
-        {{end}}
+      <tbody id="export-groups">
+        {{range .Groups}}{{template "adminExportRow" .}}{{end}}
       </tbody>
     </table>
+    {{else}}
+    <p class="empty-hint">Активных групп нет — все в архиве (ниже).</p>
+    {{end}}
     <p class="empty-hint">У объединённой группы своих участников/контестов нет — отметка включает саму группу в бандл (её участницы придут автоматически).</p>
+
+    {{if .Archived}}
+    <details class="archive-fold" id="export-archived">
+      <summary>
+        <span>🗄 Архивные группы</span>
+        <span class="archive-fold-count">{{len .Archived}}</span>
+        <span class="archive-fold-hint">отмечены и войдут в бандл — снимите галочки, если не нужны</span>
+      </summary>
+      <table class="standings-table data-table migrate-select">
+        <thead><tr><th>Группа</th><th class="count-col">участники</th><th class="count-col">контесты</th></tr></thead>
+        <tbody id="export-archived-groups">
+          {{range .Archived}}{{template "adminExportRow" .}}{{end}}
+        </tbody>
+      </table>
+    </details>
+    {{end}}
     {{else}}
     <p class="empty-hint">Групп пока нет.</p>
     {{end}}
     <div class="admin-editor-tools" style="margin-top:0.8rem;flex-wrap:wrap;gap:0.6rem;">
       <label class="field-inline">
         <input type="checkbox" name="include_tokens" value="1" checked style="width:auto;" />
-        включить токены наблюдателя и учётки панели
+        включить доступы групп (токены ссылок и пароли)
       </label>
       <button type="submit" class="admin-btn">Скачать бандл</button>
     </div>

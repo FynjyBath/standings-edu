@@ -54,8 +54,8 @@
   <p class="empty-hint dir-empty" id="dir-empty" hidden>Ничего не найдено.</p>
 
   {{if .ArchivedGroups}}
-  <details class="dir-archive" id="dir-archive">
-    <summary><span class="dir-archive-title">🗄 Архив групп</span> <span class="dir-archive-count">{{len .ArchivedGroups}}</span></summary>
+  <details class="archive-fold" id="dir-archive">
+    <summary><span>🗄 Архив групп</span> <span class="archive-fold-count">{{len .ArchivedGroups}}</span></summary>
     <p class="empty-hint">Эти группы в архиве: таблицы не пересобираются, но страницы доступны по прежним ссылкам.</p>
     <div class="table-wrap">
       <table class="standings-table data-table" id="dir-archive-table">
@@ -81,6 +81,7 @@
     var countNode = document.getElementById("dir-count");
     var emptyNode = document.getElementById("dir-empty");
     var archive = document.getElementById("dir-archive");
+    var archiveCount = archive ? archive.querySelector(".archive-fold-count") : null;
     var rows = [].slice.call(document.querySelectorAll(".dir-row"));
 
     function inArchive(row) { return archive && archive.contains(row); }
@@ -96,6 +97,10 @@
       });
       if (countNode) countNode.textContent = q ? shown + " из " + rows.length : rows.length + " " + plural(rows.length);
       if (emptyNode) emptyNode.hidden = shown !== 0;
+      if (archiveCount) {
+        var archiveTotal = rows.filter(inArchive).length;
+        archiveCount.textContent = q ? archiveHits + " из " + archiveTotal : String(archiveTotal);
+      }
       // Есть совпадение в архиве при активном поиске — раскрываем архив, чтобы
       // найденное было видно (при пустом запросе не трогаем — пусть свёрнут).
       if (archive && q && archiveHits > 0) archive.open = true;

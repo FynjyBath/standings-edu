@@ -1163,3 +1163,39 @@ func TestAdminGroupSetFormLink(t *testing.T) {
 		t.Error("поле формы должно показывать сохранённую ссылку")
 	}
 }
+
+// JSON-редактор живёт отдельной страницей: на главной админке от него остаётся
+// только ссылка, а тяжёлый ACE грузится лишь на самой странице редактора.
+func TestAdminFilesPageSeparateFromAdmin(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	writeTestFile(t, filepath.Join(dataDir, "students.json"), `[]`)
+	writeTestFile(t, filepath.Join(dataDir, "contests.json"), `[]`)
+
+	rec := httptest.NewRecorder()
+	h.AdminPage(rec, httptest.NewRequest(http.MethodGet, "/standings/admin", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("админка: code=%d", rec.Code)
+	}
+	admin := rec.Body.String()
+	for _, unwanted := range []string{"vendor/ace/", `id="admin-editor"`, `id="admin-file-select"`} {
+		if strings.Contains(admin, unwanted) {
+			t.Errorf("админка не должна тянуть редактор (%q)", unwanted)
+		}
+	}
+	if !strings.Contains(admin, `href="/standings/admin/files"`) {
+		t.Error("в админке нужна кнопка на страницу редактора")
+	}
+
+	rec = httptest.NewRecorder()
+	h.AdminFilesPage(rec, httptest.NewRequest(http.MethodGet, "/standings/admin/files", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("страница редактора: code=%d", rec.Code)
+	}
+	files := rec.Body.String()
+	for _, want := range []string{"vendor/ace/ace.js", `id="admin-editor"`, `id="admin-file-select"`, "data/students.json"} {
+		if !strings.Contains(files, want) {
+			t.Errorf("на странице редактора нет %q", want)
+		}
+	}
+}

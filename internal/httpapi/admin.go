@@ -62,12 +62,10 @@ type AdminActionResult struct {
 type AdminPageData struct {
 	PageTitle        string
 	Footer           FooterInfo
-	Editable         []string
 	Groups           []AdminGroupLink
 	CombinedGroups   []AdminCombinedGroup
 	SelectableGroups []AdminGroupLink
 	LastResult       *AdminActionResult
-	DefaultPath      string
 	// Accesses — блок глобальных доступов (тот же редактор, что у группы).
 	Accesses AccessEditorData
 	// HasArchivedGroups/ArchivedCount — архивные (обычные) группы: свёрнутый
@@ -316,11 +314,6 @@ func (h *Handlers) AdminAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
-	files, err := h.listEditableFiles()
-	if err != nil {
-		h.logger.Printf("ERROR list editable files: %v", err)
-		files = []string{"data/students.json", "data/contests.json", adminIntakePath}
-	}
 	groupLinks, err := h.listAdminGroupLinks()
 	if err != nil {
 		h.logger.Printf("ERROR list admin groups: %v", err)
@@ -328,20 +321,13 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 	}
 	combinedGroups, selectableGroups := h.listCombinedGroups()
 
-	defaultPath := ""
-	if len(files) > 0 {
-		defaultPath = files[0]
-	}
-
 	page := AdminPageData{
 		PageTitle:        "Admin",
 		Footer:           h.buildFooterInfo(),
-		Editable:         files,
 		Groups:           groupLinks,
 		CombinedGroups:   combinedGroups,
 		SelectableGroups: selectableGroups,
 		LastResult:       h.lastAdminResult(),
-		DefaultPath:      defaultPath,
 		Accesses:         h.buildAccessEditor(true, "", "/api/admin/global-accesses/save", h.loadGlobalAccesses()),
 	}
 	for _, g := range groupLinks {
@@ -357,6 +343,37 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 	page.HasArchivedGroups = page.ArchivedCount > 0
 	if err := h.renderer.Render(w, http.StatusOK, "admin.html", page); err != nil {
 		h.logger.Printf("ERROR render admin page: %v", err)
+	}
+}
+
+// AdminFilesPageData — страница JSON-редактора файлов данных.
+type AdminFilesPageData struct {
+	PageTitle string
+	Footer    FooterInfo
+	// Editable — файлы, доступные для правки; DefaultPath — что открыть сразу.
+	Editable    []string
+	DefaultPath string
+}
+
+// AdminFilesPage — JSON-редактор отдельной страницей: ACE весит прилично, и
+// тянуть его на каждый заход в админку незачем (список файлов страница потом
+// всё равно перечитывает через /api/admin/files).
+func (h *Handlers) AdminFilesPage(w http.ResponseWriter, _ *http.Request) {
+	files, err := h.listEditableFiles()
+	if err != nil {
+		h.logger.Printf("ERROR list editable files: %v", err)
+		files = []string{"data/students.json", "data/contests.json", adminIntakePath}
+	}
+	page := AdminFilesPageData{
+		PageTitle: "JSON-редактор",
+		Footer:    h.buildFooterInfo(),
+		Editable:  files,
+	}
+	if len(files) > 0 {
+		page.DefaultPath = files[0]
+	}
+	if err := h.renderer.Render(w, http.StatusOK, "admin_files.html", page); err != nil {
+		h.logger.Printf("ERROR render admin files page: %v", err)
 	}
 }
 

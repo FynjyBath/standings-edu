@@ -28,6 +28,17 @@
 </section>
 
 <section class="admin-block">
+  <h2>Ссылка на форму регистрации</h2>
+  <p class="empty-hint">Форма, по которой ученики сдают свои аккаунты на сайтах (и обновляют их). Показывается сверху на странице группы. Пустое поле — ссылки не будет. Изменение попадает на страницу после ближайшей генерации.</p>
+  <div class="admin-editor-tools">
+    <input type="url" id="form-link" value="{{.FormLink}}" placeholder="https://forms.gle/…" style="flex:1 1 22rem;" />
+    <button type="button" id="form-link-save" class="admin-btn">Сохранить</button>
+    <a class="admin-btn admin-btn--secondary" id="form-link-open" href="{{if .FormLink}}{{.FormLink}}{{else}}#{{end}}" target="_blank" rel="noopener noreferrer"{{if not .FormLink}} hidden{{end}}>Открыть ↗</a>
+    <span id="form-link-status" class="admin-editor-status"></span>
+  </div>
+</section>
+
+<section class="admin-block">
   <h2>Короткое название</h2>
   <p class="empty-hint">Короткая подпись группы для тесных мест. В объединённой группе им подписываются участники: «Имя ({{if .ShortName}}{{.ShortName}}{{else}}кратко{{end}})».</p>
   <div class="admin-editor-tools">
@@ -115,6 +126,28 @@
       st.textContent = "Сохранение…"; st.className = "admin-editor-status";
       post("/api/admin/group/archive/set", { slug: slug, archived: toArchive })
         .then(function () { location.reload(); })
+        .catch(function (err) { st.textContent = err.message; st.className = "admin-editor-status admin-editor-status--error"; });
+    });
+
+    // Ссылка на форму регистрации: пустое поле — убрать ссылку.
+    var formLinkSave = document.getElementById("form-link-save");
+    if (formLinkSave) formLinkSave.addEventListener("click", function () {
+      var input = document.getElementById("form-link");
+      var st = document.getElementById("form-link-status");
+      var open = document.getElementById("form-link-open");
+      st.textContent = "Сохранение…";
+      st.className = "admin-editor-status";
+      post("/api/admin/group/form-link/set", { slug: slug, form_link: input.value })
+        .then(function (p) {
+          input.value = p.form_link || "";
+          // Кнопка «Открыть» должна вести туда же, куда указывает поле.
+          if (open) {
+            open.href = input.value || "#";
+            open.hidden = !input.value;
+          }
+          st.textContent = input.value ? "Сохранено. Появится на странице после генерации." : "Ссылка убрана";
+          st.className = "admin-editor-status admin-editor-status--ok";
+        })
         .catch(function (err) { st.textContent = err.message; st.className = "admin-editor-status admin-editor-status--error"; });
     });
 

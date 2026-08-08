@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -292,11 +293,13 @@ var groupInlineContestKeys = []string{
 }
 
 type AdminGroupManagePageData struct {
-	PageTitle       string
-	Footer          FooterInfo
-	GroupSlug       string
-	GroupTitle      string
-	ShortName       string
+	PageTitle  string
+	Footer     FooterInfo
+	GroupSlug  string
+	GroupTitle string
+	ShortName  string
+	// FormLink — ссылка на форму регистрации/обновления аккаунтов (form_link).
+	FormLink        string
 	Members         []AdminGroupMember
 	Entries         []AdminGroupContestEntry
 	AddableContests []AdminGroupContestOption
@@ -624,6 +627,7 @@ func (h *Handlers) buildGroupManageData(slug string) (AdminGroupManagePageData, 
 		GroupSlug:       slug,
 		GroupTitle:      title,
 		ShortName:       strings.TrimSpace(groupFile.ShortName),
+		FormLink:        strings.TrimSpace(groupFile.FormLink),
 		Members:         members,
 		Entries:         rows,
 		AddableContests: addable,
@@ -678,7 +682,6 @@ func (h *Handlers) AdminGroupMemberRemove(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// AdminGroupSetShortName сохраняет короткое название группы (пусто — убрать).
 // AdminGroupSetArchived архивирует/разархивирует группу: архив — это update=false
 // у группы. Архивная группа не пересобирается при генерации, её страница
 // остаётся из последней генерации, и в активных списках она не мелькает.
@@ -718,6 +721,7 @@ func (h *Handlers) AdminGroupSetArchived(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "archived": req.Archived})
 }
 
+// AdminGroupSetShortName сохраняет короткое название группы (пусто — убрать).
 func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request) {
 	if h.admin == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
@@ -747,6 +751,68 @@ func (h *Handlers) AdminGroupSetShortName(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "short_name": groupFile.ShortName})
+}
+
+// AdminGroupSetFormLink сохраняет ссылку на форму регистрации (form_link);
+// пустая строка — убрать ссылку. Ссылка попадает в таблицы при генерации,
+// поэтому на странице группы она обновится после ближайшего generate.
+func (h *Handlers) AdminGroupSetFormLink(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+		return
+	}
+	var req struct {
+		Slug     string `json:"slug"`
+		FormLink string `json:"form_link"`
+	}
+	if err := decodeAdminJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
+		return
+	}
+	slug := strings.TrimSpace(req.Slug)
+	if !domain.IsValidSlug(slug) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+		return
+	}
+	link, msg := normalizeFormLink(req.FormLink)
+	if msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	groupFile, ok, err := h.readGroupFile(slug)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
+		return
+	}
+	groupFile.FormLink = link
+	if err := h.writeGroupFile(slug, groupFile); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "form_link": link})
+}
+
+// normalizeFormLink проверяет ссылку на форму: пусто — убрать, иначе только
+// http(s) с хостом (иначе шаблон всё равно вырежет её как небезопасную, и
+// преподаватель увидит битую ссылку вместо формы).
+func normalizeFormLink(raw string) (string, string) {
+	link := strings.TrimSpace(raw)
+	if link == "" {
+		return "", ""
+	}
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return "", "не разобрать ссылку: " + err.Error()
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+	default:
+		return "", "ссылка должна начинаться с http:// или https://"
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return "", "в ссылке нет адреса сайта"
+	}
+	return link, ""
 }
 
 // AdminGroupSetShowTaskLinks переключает флаг show_task_links группы (показывать

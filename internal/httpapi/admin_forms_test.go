@@ -1115,3 +1115,51 @@ func TestAdminGroupSetArchived(t *testing.T) {
 		t.Fatalf("после разархива поле update должно исчезнуть: %s", blob)
 	}
 }
+
+// Ссылка на форму регистрации правится из админки группы: пробелы обрезаются,
+// пустое поле убирает ссылку, а неподходящую схему хендлер не пускает (иначе
+// шаблон вырезал бы её, и на странице оказалась бы битая ссылка).
+func TestAdminGroupSetFormLink(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "grp", "group.json"),
+		`{"title":"Т","student_ids":["s1"],"form_link":"https://old.example/form"}`)
+
+	for _, bad := range []string{"javascript:alert(1)", "forms.gle/abc", "http://"} {
+		body, _ := json.Marshal(map[string]any{"slug": "grp", "form_link": bad})
+		if code, resp := postJSON(t, h.AdminGroupSetFormLink, string(body)); code != http.StatusBadRequest {
+			t.Errorf("%q: code=%d resp=%v, ожидался 400", bad, code, resp)
+		}
+	}
+	// Отказ ничего не портит: прежняя ссылка на месте.
+	if gf, ok, _ := h.readGroupFile("grp"); !ok || gf.FormLink != "https://old.example/form" {
+		t.Fatalf("ссылка не должна меняться при ошибке: %+v", gf)
+	}
+
+	code, resp := postJSON(t, h.AdminGroupSetFormLink, `{"slug":"grp","form_link":"  https://forms.gle/abc  "}`)
+	if code != http.StatusOK || resp["form_link"] != "https://forms.gle/abc" {
+		t.Fatalf("сохранение: code=%d resp=%v", code, resp)
+	}
+	gf, ok, err := h.readGroupFile("grp")
+	if err != nil || !ok || gf.FormLink != "https://forms.gle/abc" {
+		t.Fatalf("ссылка не сохранилась: %+v", gf)
+	}
+
+	if code, resp := postJSON(t, h.AdminGroupSetFormLink, `{"slug":"grp","form_link":"   "}`); code != http.StatusOK || resp["form_link"] != "" {
+		t.Fatalf("очистка: code=%d resp=%v", code, resp)
+	}
+	if gf, ok, _ := h.readGroupFile("grp"); !ok || gf.FormLink != "" {
+		t.Fatalf("ссылка должна убраться: %+v", gf)
+	}
+
+	// Страница группы в админке показывает текущее значение в поле.
+	if code, resp := postJSON(t, h.AdminGroupSetFormLink, `{"slug":"grp","form_link":"https://forms.gle/xyz"}`); code != http.StatusOK {
+		t.Fatalf("сохранение: code=%d resp=%v", code, resp)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/standings/admin/group?slug=grp", nil)
+	rec := httptest.NewRecorder()
+	h.AdminGroupManagePage(rec, req)
+	if !strings.Contains(rec.Body.String(), `id="form-link" value="https://forms.gle/xyz"`) {
+		t.Error("поле формы должно показывать сохранённую ссылку")
+	}
+}

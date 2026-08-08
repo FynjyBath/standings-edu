@@ -28,6 +28,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("POST /api/admin/group/register-names/apply", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupRegisterNamesApply))))
 	mux.HandleFunc("POST /api/admin/group/accesses/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGroupAccessesSave)))
 	mux.HandleFunc("POST /api/admin/global-accesses/save", handlers.AdminAuth(handlers.SerializeDataWrite(handlers.AdminGlobalAccessesSave)))
+	mux.HandleFunc("POST /api/admin/group/form-link/set", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupSetFormLink))))
 	mux.HandleFunc("POST /api/admin/group/short-name/set", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupSetShortName))))
 	mux.HandleFunc("POST /api/admin/group/archive/set", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupSetArchived))))
 	mux.HandleFunc("POST /api/admin/group/show-task-links/set", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupSetShowTaskLinks))))

@@ -16,6 +16,11 @@
 <section class="admin-block">
   <h2>Список ({{len .Contests}})</h2>
   {{if .Contests}}
+  <p class="empty-hint">Порядок в списке — это порядок в <code>contests.json</code> и в выпадашках «добавить контест в группу». На таблицы групп он не влияет: там свой порядок.</p>
+  <div class="admin-editor-tools" style="margin-bottom:0.6rem;">
+    <button type="button" id="c-sort" class="admin-btn admin-btn--secondary" title="Переставит все контесты в порядке их id (week_9 раньше week_10)">⇅ Отсортировать по id</button>
+    <span id="c-sort-status" class="admin-editor-status"></span>
+  </div>
   <div class="filter-bar">
     <input type="search" class="filter-input" placeholder="Фильтр по названию, id, типу…" autocomplete="off" spellcheck="false"
            data-filter-rows="#contests-tbody tr" data-filter-count="#contests-count" data-filter-empty="#contests-empty" />
@@ -26,9 +31,11 @@
       <thead><tr><th>Название</th><th>id</th><th>Тип</th><th>score</th><th></th></tr></thead>
       <tbody id="contests-tbody">
         {{range .Contests}}
-        <tr data-filter-text="{{.Title}} {{.ID}} {{.Type}} {{.ScoreSystem}}">
+        <tr data-id="{{.ID}}" data-filter-text="{{.Title}} {{.ID}} {{.Type}} {{.ScoreSystem}}">
           <td>{{.Title}}</td><td><code>{{.ID}}</code></td><td>{{.Type}}</td><td>{{.ScoreSystem}}</td>
           <td style="white-space:nowrap;">
+            <button type="button" class="admin-btn admin-btn--secondary c-move-up" data-id="{{.ID}}" title="Поднять выше">↑</button>
+            <button type="button" class="admin-btn admin-btn--secondary c-move-down" data-id="{{.ID}}" title="Опустить ниже">↓</button>
             <button type="button" class="admin-btn admin-btn--secondary c-edit" data-id="{{.ID}}">Изм.</button>
             <button type="button" class="admin-btn admin-btn--secondary c-delete" data-id="{{.ID}}">Удал.</button>
           </td>
@@ -62,6 +69,46 @@
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
         .then(function () { location.reload(); })
         .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    // Перестановка соседей и сортировка по id меняют порядок в contests.json —
+    // после успеха перечитываем страницу, чтобы список был как в файле.
+    function reorder(url, body, statusNode) {
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error(p.error || res.status); }); })
+        .then(function () { location.reload(); })
+        .catch(function (err) {
+          if (statusNode) {
+            statusNode.textContent = err.message;
+            statusNode.className = "admin-editor-status admin-editor-status--error";
+          } else {
+            setStatus(err.message, true);
+          }
+        });
+    }
+
+    document.querySelectorAll(".c-move-up, .c-move-down").forEach(function (b) {
+      b.addEventListener("click", function () {
+        reorder("/api/admin/contests/move", { id: b.dataset.id, dir: b.classList.contains("c-move-up") ? "up" : "down" });
+      });
+    });
+
+    // Крайние стрелки двигать некуда — гасим (фильтр порядок не меняет).
+    var rows = document.querySelectorAll("#contests-tbody tr[data-id]");
+    if (rows.length) {
+      var firstUp = rows[0].querySelector(".c-move-up");
+      if (firstUp) firstUp.disabled = true;
+      var lastDown = rows[rows.length - 1].querySelector(".c-move-down");
+      if (lastDown) lastDown.disabled = true;
+    }
+
+    var sortBtn = document.getElementById("c-sort");
+    if (sortBtn) sortBtn.addEventListener("click", function () {
+      if (!confirm("Отсортировать все контесты по id? Текущий порядок в contests.json будет заменён.")) return;
+      var st = document.getElementById("c-sort-status");
+      st.textContent = "Сортировка…";
+      st.className = "admin-editor-status";
+      reorder("/api/admin/contests/sort", {}, st);
     });
 
     document.querySelectorAll(".c-delete").forEach(function (b) {

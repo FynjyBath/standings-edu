@@ -8,8 +8,7 @@
         </div>
         <div class="dir-card-links">
           <span class="dir-links">
-            <a class="summary-link-btn" href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">Ученикам&nbsp;↗</a>
-            <button type="button" class="dir-copy" data-url="{{.StudentURL}}" title="Скопировать обычную ссылку на группу — её дают ученикам">⧉ Копировать</button>
+            <a class="summary-link-btn" href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">Перейти&nbsp;↗</a>
           </span>
           {{range .Links}}
           <span class="dir-links">
@@ -18,9 +17,6 @@
           </span>
           {{end}}
         </div>
-        {{if not .Links}}
-        <p class="dir-card-note">{{if .HasPassword}}Ссылок с токеном нет — в эту группу входят по логину и паролю.{{else}}Ссылок с токеном нет: у группы нет доступов по ссылке.{{end}}</p>
-        {{end}}
       </article>
 {{end}}
 
@@ -28,7 +24,7 @@
 {{if or .Directory .ArchivedGroups}}
 <section class="page-head">
   <h1>Все группы</h1>
-  <p class="empty-hint">Каталог для преподавателей.{{if .SignedIn}} Вы вошли по логину и паролю, поэтому любая ссылка отсюда откроется сразу с вашими правами — токен в адресе не нужен.{{end}} «Ученикам» — обычный адрес группы, его можно рассылать. Остальные ссылки секретные: у каждой написано, какой доступ она даёт (наблюдатель, жюри и т.д.) — их пересылают только преподавателям.</p>
+  <p class="empty-hint">Каталог для преподавателей.{{if .SignedIn}} Вы вошли по логину и паролю, поэтому любая ссылка отсюда откроется сразу с вашими правами — токен в адресе не нужен.{{end}} «Перейти» — обычный адрес группы, его же можно рассылать ученикам. Остальные ссылки секретные: у каждой написано, какой доступ она даёт (наблюдатель, жюри и т.д.) — их пересылают только преподавателям.</p>
   {{if .SignedIn}}<p class="summary-links"><a class="summary-link-btn" href="/standings/signout?back=/standings">Выйти</a></p>{{end}}
 </section>
 

@@ -939,11 +939,7 @@ func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
 			Archived:   gf.Archived(),
 		}
 		for _, e := range gf.EffectiveAccesses() {
-			if !e.IsEnabled() {
-				continue
-			}
-			if !e.UsesToken() {
-				item.HasPassword = item.HasPassword || e.UsesPassword()
+			if !e.IsEnabled() || !e.UsesToken() {
 				continue
 			}
 			linkTitle := strings.TrimSpace(e.Title)
@@ -1042,13 +1038,11 @@ type DirectoryGroup struct {
 	// StudentURL — адрес группы без токена: его рассылают ученикам, и по нему же
 	// вошедший преподаватель попадает в группу под своим доступом.
 	StudentURL string
-	// Links — ссылки с токеном (по доступу на ссылку); пусто — токен-доступов нет.
-	Links []DirectoryLink
-	// HasPassword — у группы есть доступ со входом по логину и паролю: объясняем
-	// в карточке, почему ссылок с токеном может не быть.
-	HasPassword bool
-	Combined    bool
-	Archived    bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
+	// Links — ссылки с токеном (по доступу на ссылку); пусто — показываем только
+	// обычный адрес.
+	Links    []DirectoryLink
+	Combined bool
+	Archived bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
 }
 
 type GroupPageData struct {

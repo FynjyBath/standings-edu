@@ -485,9 +485,41 @@ button.summary-link-btn {
   gap: 0.45rem;
   flex-wrap: wrap;
 }
-/* Ссылок у группы может быть несколько (по доступу на строку). */
-.dir-links + .dir-links {
-  margin-top: 0.3rem;
+
+/* Каталог групп: карточка на группу — название и ряд ссылок. Ссылок у группы
+   несколько (обычная для учеников плюс по одной на каждый токен-доступ), в
+   строке таблицы они не помещались. */
+.dir-cards {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+.dir-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  background: color-mix(in srgb, var(--surface) 60%, transparent 40%);
+}
+.dir-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.dir-card-head .dir-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+.dir-card-links {
+  display: flex;
+  gap: 0.5rem 1.2rem;
+  flex-wrap: wrap;
+}
+.dir-card-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .dir-copy {

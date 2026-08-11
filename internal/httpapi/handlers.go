@@ -916,9 +916,10 @@ func (h *Handlers) directoryScope(acc *GroupAccess) []string {
 	return out
 }
 
-// buildDirectory собирает каталог по списку слагов: для каждой группы — её
-// ссылки с токеном (по одной на каждый включённый токен-доступ). Ссылок нет —
-// группа показывается без них (значит, доступ туда только по паролю).
+// buildDirectory собирает каталог по списку слагов. У каждой группы: обычный
+// адрес (его дают ученикам, а вошедшему преподавателю он открывается сразу с
+// его правами — они уже подтверждены сессией) и ссылки с токеном, по одной на
+// каждый включённый токен-доступ.
 func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
 	out := make([]DirectoryGroup, 0, len(slugs))
 	for _, slug := range slugs {
@@ -931,13 +932,18 @@ func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
 			title = slug
 		}
 		item := DirectoryGroup{
-			Slug:     slug,
-			Title:    title,
-			Combined: len(gf.MemberGroups) > 0,
-			Archived: gf.Archived(),
+			Slug:       slug,
+			Title:      title,
+			StudentURL: "/standings/" + slug,
+			Combined:   len(gf.MemberGroups) > 0,
+			Archived:   gf.Archived(),
 		}
 		for _, e := range gf.EffectiveAccesses() {
-			if !e.IsEnabled() || !e.UsesToken() {
+			if !e.IsEnabled() {
+				continue
+			}
+			if !e.UsesToken() {
+				item.HasPassword = item.HasPassword || e.UsesPassword()
 				continue
 			}
 			linkTitle := strings.TrimSpace(e.Title)
@@ -1033,10 +1039,16 @@ type DirectoryLink struct {
 type DirectoryGroup struct {
 	Slug  string
 	Title string
-	// Links — ссылки с токеном (по доступу на ссылку); пусто — вход только по паролю.
-	Links    []DirectoryLink
-	Combined bool
-	Archived bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
+	// StudentURL — адрес группы без токена: его рассылают ученикам, и по нему же
+	// вошедший преподаватель попадает в группу под своим доступом.
+	StudentURL string
+	// Links — ссылки с токеном (по доступу на ссылку); пусто — токен-доступов нет.
+	Links []DirectoryLink
+	// HasPassword — у группы есть доступ со входом по логину и паролю: объясняем
+	// в карточке, почему ссылок с токеном может не быть.
+	HasPassword bool
+	Combined    bool
+	Archived    bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке
 }
 
 type GroupPageData struct {

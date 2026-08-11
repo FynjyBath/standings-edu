@@ -119,9 +119,10 @@ func TestIndexDirectoryByGlobalAccess(t *testing.T) {
 	if !strings.Contains(body, "token=tok1") {
 		t.Error("нужна ссылка с токеном доступа группы")
 	}
-	// Ссылок для учеников в каталоге больше нет — только доступы с токеном.
-	if strings.Contains(body, `href="/standings/one"`) {
-		t.Error("ссылка без токена в каталоге лишняя")
+	// И обычный адрес группы: его рассылают ученикам, а вошедшему преподавателю
+	// он открывает группу под его правами.
+	if !strings.Contains(body, `href="/standings/one"`) {
+		t.Error("нужна обычная ссылка на группу")
 	}
 	if strings.Contains(body, "jp") {
 		t.Error("пароли доступов в каталог попадать не должны")
@@ -237,7 +238,11 @@ func TestGlobalSignIn(t *testing.T) {
 	h.IndexPage(page, req)
 	body := page.Body.String()
 	if !strings.Contains(body, "Первая") || !strings.Contains(body, "/standings/signout") {
-		t.Fatalf("каталог по сессии не открылся: %s", body[:min(len(body), 400)])
+		t.Fatal("каталог по сессии не открылся")
+	}
+	// Вошедшему объясняем, что ссылки открываются с его правами.
+	if !strings.Contains(body, "Вы вошли по логину и паролю") {
+		t.Error("нужна подсказка про вход")
 	}
 	// Ссылка «Вход для преподавателей» показывается только на пустом экране.
 	anon := httptest.NewRecorder()

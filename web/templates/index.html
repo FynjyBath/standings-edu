@@ -1,32 +1,35 @@
-{{define "dirRow"}}
-        <tr class="dir-row" data-name="{{.Title}} {{.Slug}}">
-          <td class="student-name">
-            <span class="dir-title">{{.Title}}</span>
-            {{if .Combined}}<span class="dir-tag">объединённая</span>{{end}}
-            {{if .Archived}}<span class="dir-tag dir-tag--archived">архив</span>{{end}}
-            <span class="dir-slug">{{.Slug}}</span>
-          </td>
-          <td>
-            {{if .Links}}
-            {{range .Links}}
-            <span class="dir-links">
-              <a class="summary-link-btn" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}&nbsp;↗</a>
-              <button type="button" class="dir-copy" data-url="{{.URL}}" title="Скопировать секретную ссылку доступа «{{.Title}}»">⧉ Копировать</button>
-            </span>
-            {{end}}
-            {{else}}
-            <span class="dir-slug">ссылок с токеном нет</span>
-            {{end}}
-          </td>
-        </tr>
+{{define "dirCard"}}
+      <article class="dir-card dir-row" data-name="{{.Title}} {{.Slug}}">
+        <div class="dir-card-head">
+          <span class="dir-title">{{.Title}}</span>
+          {{if .Combined}}<span class="dir-tag">объединённая</span>{{end}}
+          {{if .Archived}}<span class="dir-tag dir-tag--archived">архив</span>{{end}}
+          <span class="dir-slug">{{.Slug}}</span>
+        </div>
+        <div class="dir-card-links">
+          <span class="dir-links">
+            <a class="summary-link-btn" href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">Ученикам&nbsp;↗</a>
+            <button type="button" class="dir-copy" data-url="{{.StudentURL}}" title="Скопировать обычную ссылку на группу — её дают ученикам">⧉ Копировать</button>
+          </span>
+          {{range .Links}}
+          <span class="dir-links">
+            <a class="summary-link-btn" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}&nbsp;↗</a>
+            <button type="button" class="dir-copy" data-url="{{.URL}}" title="Скопировать секретную ссылку доступа «{{.Title}}»">⧉ Копировать</button>
+          </span>
+          {{end}}
+        </div>
+        {{if not .Links}}
+        <p class="dir-card-note">{{if .HasPassword}}Ссылок с токеном нет — в эту группу входят по логину и паролю.{{else}}Ссылок с токеном нет: у группы нет доступов по ссылке.{{end}}</p>
+        {{end}}
+      </article>
 {{end}}
 
 {{define "content"}}
 {{if or .Directory .ArchivedGroups}}
 <section class="page-head">
   <h1>Все группы</h1>
-  <p class="empty-hint">Каталог для преподавателей: по каждой группе — её ссылки с токеном (что именно даёт ссылка, написано на кнопке: наблюдатель, жюри и т.д.). Ссылки секретные, ученикам их давать не нужно — им подойдёт адрес группы без токена. Доступы со входом по логину и паролю: глобальные — на /standings/login, отдельной группы — на /standings/&lt;группа&gt;/panel.
-  {{if .SignedIn}}<a class="summary-link-btn" href="/standings/signout?back=/standings">Выйти</a>{{end}}</p>
+  <p class="empty-hint">Каталог для преподавателей.{{if .SignedIn}} Вы вошли по логину и паролю, поэтому любая ссылка отсюда откроется сразу с вашими правами — токен в адресе не нужен.{{end}} «Ученикам» — обычный адрес группы, его можно рассылать. Остальные ссылки секретные: у каждой написано, какой доступ она даёт (наблюдатель, жюри и т.д.) — их пересылают только преподавателям.</p>
+  {{if .SignedIn}}<p class="summary-links"><a class="summary-link-btn" href="/standings/signout?back=/standings">Выйти</a></p>{{end}}
 </section>
 
 <section class="admin-block">
@@ -35,18 +38,8 @@
     <span class="dir-count" id="dir-count"></span>
   </div>
   {{if .Directory}}
-  <div class="table-wrap">
-    <table class="standings-table data-table" id="dir-table">
-      <thead>
-        <tr>
-          <th class="student-col">Группа</th>
-          <th>Ссылки с токеном</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Directory}}{{template "dirRow" .}}{{end}}
-      </tbody>
-    </table>
+  <div class="dir-cards" id="dir-list">
+    {{range .Directory}}{{template "dirCard" .}}{{end}}
   </div>
   {{else}}
   <p class="empty-hint">Активных групп нет — все в архиве (ниже).</p>
@@ -57,18 +50,8 @@
   <details class="archive-fold" id="dir-archive">
     <summary><span>🗄 Архив групп</span> <span class="archive-fold-count">{{len .ArchivedGroups}}</span></summary>
     <p class="empty-hint">Эти группы в архиве: таблицы не пересобираются, но страницы доступны по прежним ссылкам.</p>
-    <div class="table-wrap">
-      <table class="standings-table data-table" id="dir-archive-table">
-        <thead>
-          <tr>
-            <th class="student-col">Группа</th>
-            <th>Ссылки с токеном</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range .ArchivedGroups}}{{template "dirRow" .}}{{end}}
-        </tbody>
-      </table>
+    <div class="dir-cards" id="dir-archive-list">
+      {{range .ArchivedGroups}}{{template "dirCard" .}}{{end}}
     </div>
   </details>
   {{end}}

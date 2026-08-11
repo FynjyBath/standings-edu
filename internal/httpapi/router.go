@@ -74,6 +74,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	// Вход по логину и паролю: /panel спрашивает учётку (Basic Auth), выдаёт
 	// куку сессии и показывает страницу группы с правами вошедшего.
 	mux.HandleFunc("GET /standings/{group_name}/panel", handlers.GroupPanelPage)
+	mux.HandleFunc("GET /standings/login", handlers.GlobalSignIn)
 	mux.HandleFunc("GET /standings/signout", handlers.AccessSignOut)
 	mux.HandleFunc("GET /standings/{group_name}/manage/contests", handlers.GroupManageContestsPage)
 	mux.HandleFunc("GET /standings/{group_name}/manage/grades", handlers.GroupManageGradesPage)

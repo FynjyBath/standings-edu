@@ -409,6 +409,43 @@ func (h *Handlers) groupHasPasswordAccess(slug string) bool {
 	return false
 }
 
+// GlobalSignIn — дверь входа по логину и паролю для ГЛОБАЛЬНЫХ доступов:
+// спрашивает учётку и уводит в каталог групп. У доступов группы такая дверь
+// своя (/standings/<slug>/panel), а глобальному входить некуда — с этого
+// адреса и начинают преподаватели, у которых доступ сразу ко всем группам.
+func (h *Handlers) GlobalSignIn(w http.ResponseWriter, r *http.Request) {
+	acc := h.resolveGlobalAccess(r)
+	if acc.Elevated() {
+		// Вошли по паролю прямо сейчас — запоминаем сессией, дальше работают
+		// обычные адреса без повторного ввода.
+		if _, _, hasBasic := r.BasicAuth(); hasBasic {
+			h.setAccessSession(w, r, acc.Entries...)
+			h.audit(r, auditEntry{Action: "access.signin", Actor: acc.Title(), OK: true, Detail: "глобальный доступ"})
+		}
+		http.Redirect(w, r, "/standings", http.StatusSeeOther)
+		return
+	}
+	// Нечего спрашивать — глобальных доступов со входом по паролю нет.
+	if !h.hasGlobalPasswordAccess() {
+		http.NotFound(w, r)
+		return
+	}
+	if login, _, hasBasic := r.BasicAuth(); hasBasic {
+		h.audit(r, auditEntry{Action: "access.signin", Actor: login, OK: false, Detail: "глобальный доступ: неверный логин или пароль"})
+	}
+	accessChallenge(w, "standings")
+}
+
+// hasGlobalPasswordAccess — есть ли глобальный доступ со входом по паролю.
+func (h *Handlers) hasGlobalPasswordAccess() bool {
+	for _, e := range h.loadGlobalAccesses() {
+		if e.IsEnabled() && e.UsesPassword() {
+			return true
+		}
+	}
+	return false
+}
+
 // AccessSignOut — выход: гасим сессию и возвращаем на страницу группы.
 func (h *Handlers) AccessSignOut(w http.ResponseWriter, r *http.Request) {
 	clearAccessSession(w)

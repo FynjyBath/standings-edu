@@ -878,6 +878,7 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 	// токеном или вход по паролю). Без права — обычный экран, факт
 	// существования каталога не раскрываем.
 	acc := h.resolveGlobalAccess(r)
+	page.HasLogin = h.hasGlobalPasswordAccess()
 	if acc.Has(domain.PermViewDirectory) {
 		w.Header().Set("Cache-Control", "no-store")
 		page.SignedIn = acc.SignedIn
@@ -1018,6 +1019,9 @@ type IndexPageData struct {
 	ArchivedGroups []DirectoryGroup
 	// SignedIn — вход по логину и паролю: показываем кнопку «Выйти».
 	SignedIn bool
+	// HasLogin — настроен глобальный доступ со входом по паролю: на пустом
+	// экране показываем ссылку «Вход для преподавателей».
+	HasLogin bool
 }
 
 // DirectoryLink — одна ссылка с токеном в каталоге (название доступа + адрес).

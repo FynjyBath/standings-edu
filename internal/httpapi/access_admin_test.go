@@ -177,3 +177,72 @@ func TestAuditLogWritesAndPage(t *testing.T) {
 		t.Error("страница журнала должна показывать записи")
 	}
 }
+
+// Дверь глобального входа: без учётки — челлендж, с верной — сессия и каталог,
+// а если глобальных доступов по паролю нет — двери нет вовсе.
+func TestGlobalSignIn(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "one", "group.json"),
+		`{"title":"Первая","student_ids":[],"accesses":[
+		  {"id":"o","title":"Наблюдатель","auth":"token","token":"tok1","perms":["view.unfrozen"]}]}`)
+
+	get := func(login, password string, cookie *http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/standings/login", nil)
+		if login != "" {
+			req.SetBasicAuth(login, password)
+		}
+		if cookie != nil {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		h.GlobalSignIn(rec, req)
+		return rec
+	}
+
+	// Глобальных доступов с паролем нет — двери тоже нет.
+	if rec := get("", "", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("без парольных доступов: code=%d, ожидался 404", rec.Code)
+	}
+
+	if err := h.saveGlobalAccesses([]domain.AccessEntry{{
+		ID: "cur", Title: "Куратор", Auth: domain.AccessAuthPassword, Login: "cur", Password: "cp",
+		Scope: domain.AccessScopeAll,
+		Perms: []domain.Perm{domain.PermViewDirectory, domain.PermViewUnfrozen},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := get("", "", nil)
+	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Header().Get("WWW-Authenticate"), `realm="standings"`) {
+		t.Fatalf("без логина ожидался челлендж: code=%d auth=%q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	}
+	if rec := get("cur", "WRONG", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("неверный пароль: code=%d, ожидался 401", rec.Code)
+	}
+
+	rec = get("cur", "cp", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/standings" {
+		t.Fatalf("после входа ожидался редирект в каталог: code=%d loc=%q", rec.Code, rec.Header().Get("Location"))
+	}
+	session := sessionCookie(rec)
+	if session == nil {
+		t.Fatal("после входа должна выдаваться кука сессии")
+	}
+
+	// По сессии каталог открывается без повторного ввода пароля.
+	req := httptest.NewRequest(http.MethodGet, "/standings", nil)
+	req.AddCookie(session)
+	page := httptest.NewRecorder()
+	h.IndexPage(page, req)
+	body := page.Body.String()
+	if !strings.Contains(body, "Первая") || !strings.Contains(body, "/standings/signout") {
+		t.Fatalf("каталог по сессии не открылся: %s", body[:min(len(body), 400)])
+	}
+	// Ссылка «Вход для преподавателей» показывается только на пустом экране.
+	anon := httptest.NewRecorder()
+	h.IndexPage(anon, httptest.NewRequest(http.MethodGet, "/standings", nil))
+	if !strings.Contains(anon.Body.String(), "/standings/login") {
+		t.Error("на приветственном экране нужна ссылка входа")
+	}
+}

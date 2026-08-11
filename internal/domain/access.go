@@ -38,6 +38,7 @@ const (
 	// Контесты группы.
 	PermContestsManage Perm = "contests.manage" // добавить/убрать/переставить/настроить
 	PermContestsInline Perm = "contests.inline" // создавать и править inline-контесты
+	PermContestsGlobal Perm = "contests.global" // видеть общий список контестов сайта и добавлять из него
 
 	// Только для глобальных доступов.
 	PermViewDirectory Perm = "view.directory" // каталог групп со ссылками
@@ -79,8 +80,9 @@ func PermCatalog() []PermGroup {
 			{PermFlagsReview, "Размечать флаги", "Отмечать эпизоды «сам решил» / «перенос» / «нарушение».", false},
 		}},
 		{Title: "Контесты группы", Perms: []PermInfo{
-			{PermContestsManage, "Управлять контестами", "Добавлять, убирать, переставлять и настраивать записи группы.", false},
+			{PermContestsManage, "Управлять контестами", "Убирать, переставлять и настраивать записи группы (окно, заморозка, вкладка).", false},
 			{PermContestsInline, "Свои (inline) контесты", "Создавать и редактировать контесты внутри группы.", false},
+			{PermContestsGlobal, "Доступ ко всем контестам сайта", "Видеть общий список контестов и добавлять из него в группу. Без права список не показывается; уже добавленные админом контесты работают как обычно.", false},
 		}},
 		{Title: "Каталог", Perms: []PermInfo{
 			{PermViewDirectory, "Каталог групп", "Список доступных групп со ссылками на них.", true},
@@ -339,9 +341,10 @@ func JuryPerms() []Perm {
 		PermGradesManual, PermGradesConfig, PermKonduitFill, PermKonduitCreate, PermFlagsReview)
 }
 
-// AdminPerms — «Админ»: жюри + управление контестами группы.
+// AdminPerms — «Админ»: жюри + управление контестами группы, включая добавление
+// из общего списка сайта (прежняя роль «Админ группы» это умела).
 func AdminPerms() []Perm {
-	return append(JuryPerms(), PermContestsManage, PermContestsInline)
+	return append(JuryPerms(), PermContestsManage, PermContestsInline, PermContestsGlobal)
 }
 
 // Presets — заготовки для формы редактирования доступа.
@@ -349,7 +352,7 @@ func Presets() []AccessPreset {
 	return []AccessPreset{
 		{ID: "observer", Title: "Наблюдатель", Hint: "Полный просмотр: разморозка, скрытое, участники, экспорт. Ничего не меняет.", Perms: ObserverPerms()},
 		{ID: "jury", Title: "Жюри", Hint: "Наблюдатель + оценки, кондуиты и разметка флагов.", Perms: JuryPerms()},
-		{ID: "admin", Title: "Админ", Hint: "Жюри + управление контестами группы.", Perms: AdminPerms()},
+		{ID: "admin", Title: "Админ", Hint: "Жюри + управление контестами группы и доступ к общему списку контестов.", Perms: AdminPerms()},
 		{ID: "curator", Title: "Куратор", Hint: "Каталог групп + полный просмотр в них.", Perms: append(ObserverPerms(), PermViewDirectory), GlobalOnly: true},
 		{ID: "directory", Title: "Только каталог", Hint: "Список групп со ссылками, без доступа к самим таблицам.", Perms: []Perm{PermViewDirectory}, GlobalOnly: true},
 	}

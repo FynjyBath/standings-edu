@@ -1068,11 +1068,9 @@ type GroupPageData struct {
 	// Панель группы (заполняется от роли «Жюри»):
 	// CanManageContests — управление контестами группы (роль «админ», обычная
 	// группа: у объединённой своих контестов нет);
-	// JuryAddable — глобальные контесты, которых ещё нет в группе;
 	// JuryKonduits — id inline-кондуитов (жюри может заполнять оценки);
 	// JuryHasGrades — у группы есть ручные столбцы оценок (ссылка на редактор).
 	CanManageContests bool
-	JuryAddable       []AdminGroupContestOption
 	JuryKonduits      map[string]bool
 	JuryHasGrades     bool
 	// JuryNewKonduits — кондуиты группы, которых ещё нет в сгенерированных

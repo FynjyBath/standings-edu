@@ -83,7 +83,7 @@
             <button type="button" class="admin-btn admin-btn--secondary c-move-up" title="Поднять выше">↑</button>
             <button type="button" class="admin-btn admin-btn--secondary c-move-down" title="Опустить ниже">↓</button>
             <button type="button" class="admin-btn admin-btn--secondary c-apply">Применить</button>
-            {{if .Inline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
+            {{if and .Inline $.CanEditInline}}<button type="button" class="admin-btn admin-btn--secondary c-edit-inline">Изм.</button>{{end}}
             <button type="button" class="admin-btn admin-btn--secondary c-remove">Удал.</button>
           </td>
         </tr>
@@ -97,6 +97,7 @@
   {{end}}
 
   <div class="admin-editor-tools" style="margin-top:0.9rem;flex-wrap:wrap;gap:0.5rem;">
+    {{if .CanAddGlobal}}
     <label class="field-inline">
       <span>Добавить из глобальных:</span>
       <select id="add-ref-select" data-searchable data-placeholder="Поиск контеста по названию или id…">
@@ -105,11 +106,16 @@
       </select>
     </label>
     <button type="button" id="add-ref-btn" class="admin-btn">Добавить ссылку</button>
-    <button type="button" id="add-inline-btn" class="admin-btn admin-btn--secondary">+ inline-контест</button>
+    {{end}}
+    {{if .CanEditInline}}<button type="button" id="add-inline-btn" class="admin-btn admin-btn--secondary">+ inline-контест</button>{{end}}
     <span id="contests-status" class="admin-editor-status"></span>
   </div>
+  {{if not .CanAddGlobal}}
+  <p class="empty-hint">Общий список контестов сайта этому доступу не открыт: добавлять можно только свои контесты. Уже добавленные администратором работают как обычно — их можно настроить, переставить и убрать.</p>
+  {{end}}
 </section>
 
+{{if .CanEditInline}}
 <section class="admin-block" id="inline-form-block" style="display:none;">
   {{template "contestForm" .}}
   <div class="admin-editor-tools" style="margin-top:0.8rem;">
@@ -120,6 +126,7 @@
 </section>
 <script id="inline-data" type="application/json">{{.InlineJSON}}</script>
 <script id="group-members-data" type="application/json">{{.MembersJSON}}</script>
+{{end}}
 {{end}}
 
 {{define "groupContestsScript"}}
@@ -247,7 +254,10 @@
       if (lastDown) lastDown.disabled = true;
     }
 
-    document.getElementById("add-ref-btn").addEventListener("click", function () {
+    // Блоков «добавить из глобальных» и inline-формы может не быть: у доступа
+    // группы они показываются по правам contests.global / contests.inline.
+    var addRefBtn = document.getElementById("add-ref-btn");
+    if (addRefBtn) addRefBtn.addEventListener("click", function () {
       var sel = document.getElementById("add-ref-select");
       var id = sel.value;
       if (!id) { setStatus("Выберите контест", true); return; }
@@ -267,21 +277,24 @@
       block.scrollIntoView({ behavior: "smooth" });
     }
 
-    document.getElementById("add-inline-btn").addEventListener("click", function () {
-      ContestForm.reset();
-      setInlineStatus("", false);
-      openInlineForm();
-    });
-    document.getElementById("inline-cancel").addEventListener("click", function () {
-      block.style.display = "none";
-      setInlineStatus("", false);
-    });
-    document.getElementById("inline-save").addEventListener("click", function () {
-      var body = ContestForm.collect();
-      setInlineStatus("Сохранение…", false);
-      post("/contests/inline-save", body)
-        .then(function () { location.reload(); })
-        .catch(function (err) { setInlineStatus(err.message, true); });
-    });  })();
+    if (block) {
+      document.getElementById("add-inline-btn").addEventListener("click", function () {
+        ContestForm.reset();
+        setInlineStatus("", false);
+        openInlineForm();
+      });
+      document.getElementById("inline-cancel").addEventListener("click", function () {
+        block.style.display = "none";
+        setInlineStatus("", false);
+      });
+      document.getElementById("inline-save").addEventListener("click", function () {
+        var body = ContestForm.collect();
+        setInlineStatus("Сохранение…", false);
+        post("/contests/inline-save", body)
+          .then(function () { location.reload(); })
+          .catch(function (err) { setInlineStatus(err.message, true); });
+      });
+    }
+  })();
 </script>
 {{end}}

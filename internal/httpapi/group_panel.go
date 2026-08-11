@@ -53,6 +53,13 @@ func (h *Handlers) GroupManageContestsPage(w http.ResponseWriter, r *http.Reques
 	// Редактор доступов — только в админке: тут его не рисуют, а секреты в
 	// данных страницы держать незачем.
 	base.Accesses = AccessEditorData{}
+	// Общий список контестов сайта отдаём только по праву: без него это ещё и
+	// утечка названий чужих контестов.
+	base.CanAddGlobal = acc.Has(domain.PermContestsGlobal)
+	if !base.CanAddGlobal {
+		base.AddableContests = nil
+	}
+	base.CanEditInline = acc.Has(domain.PermContestsInline)
 	w.Header().Set("Cache-Control", "no-store")
 	page := GroupPanelContestsPageData{
 		AdminGroupManagePageData: base,
@@ -122,6 +129,12 @@ func (h *Handlers) PanelContestAddRef(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimSpace(req.Slug)
 	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsManage)
 	if !allowed {
+		return
+	}
+	// Добавление ссылки — это доступ к общему списку контестов сайта, отдельное
+	// право: без него доступ работает только со своими (inline) контестами.
+	if !acc.Has(domain.PermContestsGlobal) {
+		writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "нет доступа к общему списку контестов сайта"})
 		return
 	}
 	status, msg := h.addGroupContestRef(slug, strings.TrimSpace(req.ID))
@@ -224,6 +237,22 @@ func (h *Handlers) PanelContestInlineSave(w http.ResponseWriter, r *http.Request
 	acc, allowed := h.requirePerm(w, r, slug, domain.PermContestsInline)
 	if !allowed {
 		return
+	}
+	// Править из группы можно только свои (inline) записи: подмена ссылки на
+	// глобальный контест своим одноимённым контестом молча отцепила бы группу
+	// от общего определения.
+	if origID := strings.TrimSpace(req.OriginalID); origID != "" {
+		entries, err := h.loadGroupContestEntries(slug)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		for _, e := range entries {
+			if e.id == origID && !e.inline {
+				writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "это ссылка на глобальный контест — из группы её не изменить"})
+				return
+			}
+		}
 	}
 	// Окно обязательно у контестов-наборов задач; provider-контесты его не
 	// используют (результаты берутся из источника целиком).

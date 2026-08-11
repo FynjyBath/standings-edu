@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -100,7 +101,7 @@ func TestAccessUnionWithGlobal(t *testing.T) {
 	if err := h.saveGlobalAccesses([]domain.AccessEntry{{
 		ID: "curator", Title: "Куратор", Auth: domain.AccessAuthToken, Token: "gtok",
 		Scope: domain.AccessScopeAll,
-		Perms: []domain.Perm{domain.PermViewDirectory, domain.PermContestsManage},
+		Perms: []domain.Perm{domain.PermViewDirectory, domain.PermContestsManage, domain.PermContestsGlobal},
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -266,5 +267,78 @@ func TestLegacyAccessFallback(t *testing.T) {
 	acc = h.resolveAccess("old", req)
 	if !acc.Has(domain.PermContestsManage) {
 		t.Fatalf("старая учётка админа должна давать управление контестами: %v", acc.Perms.Sorted())
+	}
+}
+
+// Право «Доступ ко всем контестам сайта»: без него доступ распоряжается уже
+// добавленными контестами группы, но общего списка не видит и из него не
+// добавляет. Само определение глобального контеста из группы не меняется.
+func TestContestsGlobalPerm(t *testing.T) {
+	h, dataDir := juryTestSetup(t)
+
+	// Доступ «завуч»: полное управление записями группы и свои контесты, но без
+	// доступа к общему списку сайта.
+	gf, ok, err := h.readGroupFile("g1")
+	if err != nil || !ok {
+		t.Fatal("group not found")
+	}
+	gf.Accesses = append(gf.Accesses, domain.AccessEntry{
+		ID: "local", Title: "Завуч", Auth: domain.AccessAuthToken, Token: "loctok",
+		Perms: []domain.Perm{domain.PermViewUnfrozen, domain.PermContestsManage, domain.PermContestsInline},
+	})
+	if err := h.writeGroupFile("g1", gf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Добавить глобальный контест нельзя, а свой (inline) — можно.
+	if code, resp := juryPost(t, h.PanelContestAddRef, "loctok", map[string]any{"slug": "g1", "id": "global1"}); code != http.StatusForbidden {
+		t.Errorf("без права общего списка add-ref: code=%d resp=%v, ожидался 403", code, resp)
+	}
+	if code, _ := juryPost(t, h.PanelContestInlineSave, "loctok", map[string]any{
+		"slug": "g1", "id": "svoy", "title": "Свой", "score_system": "edu",
+		"subcontests": []map[string]any{{"title": "З", "tasks": []string{"https://acmp.ru/?main=task&id_task=3"}}},
+		"start_time":  "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z",
+	}); code != http.StatusOK {
+		t.Errorf("свои контесты должны остаться доступны: code=%d", code)
+	}
+	// Уже добавленными записями (в т.ч. ссылками) распоряжаться можно.
+	if code, _ := juryPost(t, h.PanelContestMove, "loctok", map[string]any{"slug": "g1", "id": "other", "dir": "up"}); code != http.StatusOK {
+		t.Errorf("переставить запись группы: code=%d, ожидался 200", code)
+	}
+
+	// С правом — добавляется.
+	if code, _ := juryPost(t, h.PanelContestAddRef, tokAdmin, map[string]any{"slug": "g1", "id": "global1"}); code != http.StatusOK {
+		t.Errorf("с правом общего списка add-ref должен работать: code=%d", code)
+	}
+
+	// Страница управления: без права нет ни списка сайта, ни выпадашки.
+	rec := accessGet(t, h.GroupManageContestsPage, "/standings/g1/manage/contests?token=loctok", "g1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("страница контестов: code=%d", rec.Code)
+	}
+	if body := rec.Body.String(); strings.Contains(body, `id="add-ref-select"`) || strings.Contains(body, "Общий кондуит") {
+		t.Error("без права ни выпадашки, ни чужих контестов на странице быть не должно")
+	}
+	rec = accessGet(t, h.GroupManageContestsPage, "/standings/g1/manage/contests?token="+tokAdmin, "g1")
+	if body := rec.Body.String(); !strings.Contains(body, `id="add-ref-select"`) || !strings.Contains(body, "Общий кондуит") {
+		t.Error("с правом нужны выпадашка «добавить из глобальных» и сам список")
+	}
+
+	// Ссылку на глобальный контест из группы не подменить своим контестом.
+	code, resp := juryPost(t, h.PanelContestInlineSave, tokAdmin, map[string]any{
+		"slug": "g1", "id": "global1", "original_id": "global1", "title": "Подмена", "score_system": "edu",
+		"subcontests": []map[string]any{{"title": "З", "tasks": []string{"https://acmp.ru/?main=task&id_task=4"}}},
+		"start_time":  "2026-09-01T09:00:00Z", "end_time": "2026-09-01T12:00:00Z",
+	})
+	if code != http.StatusForbidden {
+		t.Errorf("подмена ссылки на глобальный контест: code=%d resp=%v, ожидался 403", code, resp)
+	}
+	// Глобальное определение не тронуто.
+	blob, err := os.ReadFile(filepath.Join(dataDir, "contests.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(blob), "Подмена") {
+		t.Fatalf("определение глобального контеста изменилось: %s", blob)
 	}
 }

@@ -609,22 +609,4 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, acc *Gr
 		page.JuryNewKonduits = append(page.JuryNewKonduits, AdminGroupContestOption{ID: e.id, Title: title})
 	}
 
-	for _, c := range globals {
-		id := strings.TrimSpace(c.ID)
-		if id == "" {
-			continue
-		}
-		if _, ok := inGroup[id]; ok {
-			continue
-		}
-		t := strings.TrimSpace(c.Title)
-		if t == "" {
-			t = id
-		}
-		opt := AdminGroupContestOption{ID: id, Title: t}
-		if kind, isProvider := contestKindLabel(c); isProvider {
-			opt.Kind = kind
-		}
-		page.JuryAddable = append(page.JuryAddable, opt)
-	}
 }

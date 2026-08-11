@@ -303,7 +303,12 @@ type AdminGroupManagePageData struct {
 	Members         []AdminGroupMember
 	Entries         []AdminGroupContestEntry
 	AddableContests []AdminGroupContestOption
-	InlineJSON      template.JS
+	// CanAddGlobal/CanEditInline — показывать ли «Добавить из глобальных» и
+	// работу со своими (inline) контестами. В админке оба true, у доступа
+	// группы — по правам contests.global / contests.inline.
+	CanAddGlobal  bool
+	CanEditInline bool
+	InlineJSON    template.JS
 	// MembersJSON — участники группы для формы кондуита (сетка «Заполнить в
 	// форме»): [{id, name}], где name — полное ФИО (для матчинга по имени).
 	MembersJSON template.JS
@@ -631,6 +636,8 @@ func (h *Handlers) buildGroupManageData(slug string) (AdminGroupManagePageData, 
 		Members:         members,
 		Entries:         rows,
 		AddableContests: addable,
+		CanAddGlobal:    true,
+		CanEditInline:   true,
 		InlineJSON:      template.JS(inlineBlob),
 		MembersJSON:     template.JS(membersBlob),
 		HasGrades:       groupFile.Grades != nil && len(groupFile.Grades.Columns) > 0,

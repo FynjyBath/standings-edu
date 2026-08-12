@@ -33,6 +33,14 @@
       try { return JSON.parse(document.getElementById(id).textContent || "") || fallback; } catch (e) { return fallback; }
     }
     var accesses = readJSON("acc-data", []);
+    // Карточки свёрнуты; что раскрыто — помним по ключу, чтобы перерисовка
+    // (смена входа, пресета, области) не захлопывала открытую карточку.
+    var keySeq = 0;
+    var expanded = {};
+    function keyOf(entry) {
+      if (!entry.__key) entry.__key = entry.id || ("new" + (++keySeq));
+      return entry.__key;
+    }
     var catalog = readJSON("acc-catalog", []);
     var presets = readJSON("acc-presets", []);
     var groups = readJSON("acc-groups", []);
@@ -77,18 +85,93 @@
       if (!accesses.length) {
         box.appendChild(el("p", "empty-hint", "Доступов нет: страница группы открыта только в публичном виде."));
       }
-      accesses.forEach(function (entry, idx) { box.appendChild(card(entry, idx)); });
+      accesses.forEach(function (entry) { box.appendChild(card(entry)); });
     }
 
-    function card(entry, idx) {
-      var wrap = el("div", "access-card" + (entry.enabled === false ? " access-card--off" : ""));
+    // Абсолютная ссылка доступа ("" — вход по паролю или токен не задан).
+    function entryURL(entry) {
+      if ((entry.auth || "token") !== "token" || !entry.token) return "";
+      return location.origin + (GLOBAL ? "/standings" : "/standings/" + SLUG) + "?token=" + entry.token;
+    }
 
-      // ── Шапка: название, выключатель, удаление ──
+    // Свёрнутая строка: имя доступа и главное о нём — вход, набор прав, область.
+    function summaryOf(entry) {
+      var sum = el("summary", "access-summary");
+      var name = el("span", "access-summary-title", entry.title || "Без названия");
+      sum.appendChild(name);
+
+      var chips = el("span", "access-chips");
+      if ((entry.auth || "token") === "token") {
+        chips.appendChild(el("span", "access-chip", "🔗 ссылка"));
+      } else {
+        chips.appendChild(el("span", "access-chip", entry.login ? "🔑 логин: " + entry.login : "🔑 логин и пароль"));
+      }
+      var perms = entry.perms || [];
+      var preset = presetFor(perms);
+      var presetTitle = "";
+      presets.forEach(function (p) { if (p.ID === preset) presetTitle = p.Title; });
+      chips.appendChild(el("span", "access-chip", presetTitle || ("свой набор · " + perms.length)));
+      if (GLOBAL) {
+        chips.appendChild(el("span", "access-chip", (entry.scope || "all") === "all"
+          ? "все группы" : "групп: " + ((entry.groups || []).length)));
+      }
+      if (entry.enabled === false) chips.appendChild(el("span", "access-chip access-chip--off", "выключен"));
+      sum.appendChild(chips);
+
+      // Кнопки внутри summary не должны сворачивать карточку.
+      var tools = el("span", "access-summary-tools");
+      if (entryURL(entry)) {
+        var copy = el("button", "dir-copy", "⧉ Копировать ссылку");
+        copy.type = "button";
+        copy.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var url = entryURL(entry);
+          var done = function () {
+            copy.classList.add("dir-copy--done");
+            copy.textContent = "✓ Скопировано";
+            setTimeout(function () { copy.classList.remove("dir-copy--done"); copy.textContent = "⧉ Копировать ссылку"; }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(done, function () { window.prompt("Скопируйте ссылку:", url); });
+          } else {
+            window.prompt("Скопируйте ссылку:", url);
+          }
+        });
+        tools.appendChild(copy);
+      }
+      var del = el("button", "admin-btn admin-btn--secondary", "Убрать");
+      del.type = "button";
+      del.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!window.confirm("Убрать доступ «" + (entry.title || "без названия") + "»? Ссылка и учётка перестанут работать.")) return;
+        var at = accesses.indexOf(entry);
+        if (at >= 0) accesses.splice(at, 1);
+        render();
+      });
+      tools.appendChild(del);
+      sum.appendChild(tools);
+      return sum;
+    }
+
+    function card(entry) {
+      var wrap = el("details", "access-card" + (entry.enabled === false ? " access-card--off" : ""));
+      wrap.open = !!expanded[keyOf(entry)];
+      wrap.addEventListener("toggle", function () { expanded[keyOf(entry)] = wrap.open; });
+      wrap.appendChild(summaryOf(entry));
+
+      // ── Название и выключатель ──
       var head = el("div", "access-card-head");
+      head.appendChild(el("label", "access-label", "Название"));
       var title = el("input", "access-title");
-      title.type = "text"; title.placeholder = "Название доступа (например: Жюри — Иванов)";
+      title.type = "text"; title.placeholder = "Например: Жюри — Иванов";
       title.value = entry.title || "";
-      title.addEventListener("input", function () { entry.title = title.value; });
+      title.addEventListener("input", function () {
+        entry.title = title.value;
+        var node = wrap.querySelector(".access-summary-title");
+        if (node) node.textContent = entry.title || "Без названия";
+      });
       head.appendChild(title);
 
       var onLabel = el("label", "access-toggle");
@@ -96,20 +179,11 @@
       on.type = "checkbox"; on.checked = entry.enabled !== false;
       on.addEventListener("change", function () {
         entry.enabled = on.checked;
-        wrap.className = "access-card" + (on.checked ? "" : " access-card--off");
+        render();
       });
       onLabel.appendChild(on);
       onLabel.appendChild(el("span", null, "включён"));
       head.appendChild(onLabel);
-
-      var del = el("button", "admin-btn admin-btn--secondary", "Убрать");
-      del.type = "button";
-      del.addEventListener("click", function () {
-        if (!window.confirm("Убрать доступ «" + (entry.title || "без названия") + "»? Ссылка и учётка перестанут работать.")) return;
-        accesses.splice(idx, 1);
-        render();
-      });
-      head.appendChild(del);
       wrap.appendChild(head);
 
       // ── Способ входа ──
@@ -138,8 +212,7 @@
         gen.type = "button";
         gen.addEventListener("click", function () {
           entry.token = randomToken();
-          tok.value = entry.token;
-          linkOut();
+          render(); // обновить и ссылку, и кнопку копирования в свёрнутой строке
         });
         authRow.appendChild(gen);
       } else {
@@ -147,7 +220,11 @@
         login.type = "text"; login.placeholder = "логин"; login.value = entry.login || "";
         login.style.maxWidth = "10rem";
         login.autocomplete = "off";
-        login.addEventListener("input", function () { entry.login = login.value.trim(); });
+        login.addEventListener("input", function () {
+          entry.login = login.value.trim();
+          var chip = wrap.querySelector(".access-chips .access-chip");
+          if (chip) chip.textContent = entry.login ? "🔑 логин: " + entry.login : "🔑 логин и пароль";
+        });
         var pass = el("input");
         pass.type = "text"; pass.placeholder = "пароль"; pass.value = entry.password || "";
         pass.style.maxWidth = "12rem";
@@ -287,11 +364,13 @@
     }
 
     document.getElementById("acc-add").addEventListener("click", function () {
-      accesses.push({
+      var fresh = {
         title: "", enabled: true, auth: "token", token: randomToken(),
         perms: (presetPerms("observer") || []).slice(),
         scope: GLOBAL ? "all" : undefined, groups: []
-      });
+      };
+      accesses.push(fresh);
+      expanded[keyOf(fresh)] = true; // новый доступ сразу открыт для заполнения
       render();
     });
 
@@ -314,10 +393,18 @@
             e.enabled = e.enabled !== false;
             return e;
           });
+          expanded = {}; // сохранили — можно всё свернуть
           render();
           setStatus("Сохранено", false);
         })
-        .catch(function (err) { setStatus(err.message, true); });
+        .catch(function (err) {
+          // Сервер называет доступ в тексте ошибки — раскроем именно его.
+          accesses.forEach(function (e) {
+            if (e.title && err.message.indexOf(e.title) >= 0) expanded[keyOf(e)] = true;
+          });
+          render();
+          setStatus(err.message, true);
+        });
     });
 
     render();

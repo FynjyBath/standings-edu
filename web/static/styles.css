@@ -2594,16 +2594,69 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   gap: 0.7rem;
   margin: 0.6rem 0;
 }
+/* Карточка доступа — свёрнутая строка (summary) плюс раскрываемое тело: при
+   пяти доступах развёрнутые карточки занимали несколько экранов. */
 .access-card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 0.7rem;
+  padding: 0.55rem 0.7rem;
   background: color-mix(in srgb, var(--surface) 60%, transparent 40%);
+}
+.access-card[open] {
   display: grid;
   gap: 0.5rem;
+  padding-bottom: 0.7rem;
 }
 .access-card--off {
-  opacity: 0.55;
+  opacity: 0.6;
+}
+.access-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+  flex-wrap: wrap;
+}
+.access-summary::-webkit-details-marker { display: none; }
+.access-summary::before {
+  content: "▸";
+  font-size: 0.8em;
+  color: var(--muted);
+}
+.access-card[open] > .access-summary {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent 45%);
+}
+.access-card[open] > .access-summary::before { content: "▾"; }
+.access-summary-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+.access-chips {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.access-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, var(--surface) 86%);
+  white-space: nowrap;
+}
+.access-chip--off {
+  color: var(--attempt-text);
+  background: color-mix(in srgb, var(--attempt-bg) 60%, var(--surface) 40%);
+}
+/* Кнопки строки — вправо, чтобы имя и чипы не прыгали. */
+.access-summary-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 .access-card-head {
   display: flex;

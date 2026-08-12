@@ -1,0 +1,55 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Анкеты: {{.GroupTitle}}</h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .Token}}?token={{.Token}}{{end}}">← Таблицы группы</a>
+    {{if .RoleTitle}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
+  </p>
+  <p class="empty-hint">Анкеты, поданные в эту группу и ещё не подтверждённые. Список только для чтения: ученика заводит администратор — он же правит опечатки. Если видите ошибку в ФИО или аккаунте, попросите ученика прислать анкету заново или скажите администратору.</p>
+</section>
+
+<section class="admin-block">
+  {{if .Rows}}
+  <div class="filter-bar">
+    <input type="search" class="filter-input" placeholder="Фильтр по ФИО или аккаунту…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#intake-tbody > tr" data-filter-count="#intake-count" data-filter-empty="#intake-empty" />
+    <span class="filter-count" id="intake-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="standings-table data-table">
+      <thead>
+        <tr>
+          <th class="student-col">ФИО</th>
+          <th>Показывать как</th>
+          <th>Аккаунты</th>
+          <th>Состояние</th>
+        </tr>
+      </thead>
+      <tbody id="intake-tbody">
+        {{range .Rows}}
+        <tr data-filter-text="{{.FullName}} {{.PublicName}} {{range .Accounts}}{{.Site}} {{.AccountID}} {{end}}">
+          <td class="student-name">{{.FullName}}</td>
+          <td>{{.PublicName}}</td>
+          <td>
+            {{if .Accounts}}
+            {{range .Accounts}}<code>{{.Site}}:{{.AccountID}}</code> {{end}}
+            {{else}}<span class="grade-weight">— не указаны</span>{{end}}
+          </td>
+          <td>
+            {{if .InGroup}}<span class="dir-tag">уже в группе</span>
+            {{else if .KnownStudent}}<span class="dir-tag">ученик уже есть в базе</span>
+            {{else}}<span class="grade-weight">новый ученик</span>{{end}}
+            {{if .OtherGroups}}<span class="grade-weight">· ещё группы: {{range $i, $g := .OtherGroups}}{{if $i}}, {{end}}{{$g}}{{end}}</span>{{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="intake-empty" hidden>Ничего не найдено.</p>
+  <p class="empty-hint">«Уже в группе» — анкету, скорее всего, уже подтвердили (или ученик прислал её повторно). После подтверждения анкеты из списка пропадают.</p>
+  {{else}}
+  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">📮</span><p>Неподтверждённых анкет в эту группу нет.</p></div>
+  {{end}}
+</section>
+{{end}}

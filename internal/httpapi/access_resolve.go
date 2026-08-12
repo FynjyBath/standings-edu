@@ -111,13 +111,17 @@ func (a *GroupAccess) CanCreateKonduit() bool { return a.Has(domain.PermKonduitC
 // CanManageContests — управление списком контестов группы.
 func (a *GroupAccess) CanManageContests() bool { return a.Has(domain.PermContestsManage) }
 
+// CanViewIntake — анкеты, поданные в группу (только чтение).
+func (a *GroupAccess) CanViewIntake() bool { return a.Has(domain.PermIntakeView) }
+
 // CanReviewFlags — разметка флагов нечестности.
 func (a *GroupAccess) CanReviewFlags() bool { return a.Has(domain.PermFlagsReview) }
 
 // HasPanel — есть хоть одно действие: показывать ли панель на странице группы.
 func (a *GroupAccess) HasPanel() bool {
 	return a.HasAny(domain.PermGradesManual, domain.PermGradesConfig, domain.PermKonduitFill,
-		domain.PermKonduitCreate, domain.PermContestsManage, domain.PermContestsInline)
+		domain.PermKonduitCreate, domain.PermContestsManage, domain.PermContestsInline,
+		domain.PermIntakeView)
 }
 
 // ViewKey — отпечаток прав, влияющих на ВИД таблиц: ключ кэша готовых ответов

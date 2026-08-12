@@ -133,3 +133,32 @@ func TestAccessEnabledRoundTrip(t *testing.T) {
 		t.Fatalf("выключенность должна сохраняться: %s", blob)
 	}
 }
+
+// Каждое право из пресетов должно быть в каталоге: иначе форма его не покажет,
+// а сохранение доступа с этим пресетом упрётся в «неизвестное право».
+func TestPresetPermsAreKnown(t *testing.T) {
+	for _, preset := range Presets() {
+		for _, p := range preset.Perms {
+			if !KnownPerm(p) {
+				t.Errorf("пресет %q: право %q нет в каталоге", preset.ID, p)
+			}
+		}
+		entry := AccessEntry{
+			Title: preset.Title, Auth: AccessAuthToken, Token: "t",
+			Scope: AccessScopeAll, Perms: preset.Perms,
+		}
+		if err := entry.Validate(true); err != nil {
+			t.Errorf("пресет %q не проходит проверку: %v", preset.ID, err)
+		}
+	}
+	// Локальные пресеты не должны требовать глобальных прав.
+	for _, preset := range Presets() {
+		if preset.GlobalOnly {
+			continue
+		}
+		entry := AccessEntry{Title: preset.Title, Auth: AccessAuthToken, Token: "t", Perms: preset.Perms}
+		if err := entry.Validate(false); err != nil {
+			t.Errorf("пресет %q не годится для группы: %v", preset.ID, err)
+		}
+	}
+}

@@ -78,6 +78,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /standings/signout", handlers.AccessSignOut)
 	mux.HandleFunc("GET /standings/{group_name}/manage/contests", handlers.GroupManageContestsPage)
 	mux.HandleFunc("GET /standings/{group_name}/manage/grades", handlers.GroupManageGradesPage)
+	mux.HandleFunc("GET /standings/{group_name}/manage/intake", handlers.GroupIntakePage)
 	mux.HandleFunc("POST /api/group-panel/contests/add-ref", handlers.SerializeDataWrite(handlers.PanelContestAddRef))
 	mux.HandleFunc("POST /api/group-panel/contests/remove", handlers.SerializeDataWrite(handlers.PanelContestRemove))
 	mux.HandleFunc("POST /api/group-panel/contests/move", handlers.SerializeDataWrite(handlers.PanelContestMove))

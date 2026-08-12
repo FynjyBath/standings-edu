@@ -45,6 +45,15 @@
     <span id="jury-status" class="admin-editor-status"></span>
   </div>
   <div class="jury-actions">
+    {{if .Access.CanViewIntake}}
+    <div class="jury-action">
+      <label class="jury-action-label">Анкеты группы</label>
+      <div class="jury-action-row">
+        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/manage/intake{{if .Token}}?token={{.Token}}{{end}}">📮 Посмотреть анкеты</a>
+      </div>
+      <p class="jury-action-hint">Кто подал заявку в группу и с какими аккаунтами. Только чтение — заводит учеников администратор.</p>
+    </div>
+    {{end}}
     {{if .Access.CanEditGrades}}
     <div class="jury-action">
       <label class="jury-action-label">Оценки группы</label>

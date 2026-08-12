@@ -883,3 +883,40 @@ func slugifyASCII(s string) string {
 func isASCIIAlphaNum(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
 }
+
+// PendingIntake — анкеты, ещё не слитые в основную базу. Их два места:
+// свежие лежат в intake-файле, а забранные в админку — в staging (prepare
+// переносит записи туда и чистит источник). Списки объединяются теми же
+// правилами, что и merge, поэтому одна и та же анкета не задвоится.
+func (s *Store) PendingIntake(stagingPath string) ([]domain.Student, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	read := func(path string) ([]domain.Student, error) {
+		if strings.TrimSpace(path) == "" {
+			return nil, nil
+		}
+		list, err := LoadIntakeFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return list, nil
+	}
+
+	staging, err := read(stagingPath)
+	if err != nil {
+		return nil, err
+	}
+	fresh, err := read(s.intakePath)
+	if err != nil {
+		return nil, err
+	}
+	merged, _, err := MergeStudents(staging, fresh)
+	if err != nil {
+		return nil, err
+	}
+	return merged, nil
+}

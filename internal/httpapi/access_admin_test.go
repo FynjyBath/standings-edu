@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"standings-edu/internal/domain"
+	"standings-edu/internal/studentintake"
 )
 
 // Сохранение доступов группы: токен генерируется сам, право каталога локально
@@ -407,5 +408,58 @@ func TestMigrateAccessPasswords(t *testing.T) {
 	}
 	if !signedIn("old", "a", "ap") {
 		t.Error("после переноса старый пароль должен работать")
+	}
+}
+
+// Анкеты своей группы: доступ с правом видит только свои и только на чтение,
+// без права — 403. Учитываются и свежие анкеты, и уже забранные в админку.
+func TestGroupIntakeView(t *testing.T) {
+	h, dataDir := juryTestSetup(t)
+	h.intake = studentintake.NewStore(filepath.Join(dataDir, "student_intake.json"))
+
+	// Свежая анкета в g1, чужая в g2 и уже забранная в админку (staging) — тоже в g1.
+	writeTestFile(t, filepath.Join(dataDir, "student_intake.json"), `[
+	  {"full_name":"Сидоров Сидор","public_name":"Сидоров С.","groups":["g1"],
+	   "accounts":[{"site":"codeforces","account_id":"sidorov"}]},
+	  {"full_name":"Чужой Человек","groups":["g2"],"accounts":[]}]`)
+	writeTestFile(t, filepath.Join(dataDir, "student_intake_admin.json"), `[
+	  {"full_name":"Петров Пётр","groups":["g1"],"accounts":[{"site":"acmp","account_id":"12345"}]}]`)
+
+	// Без права — 403.
+	if rec := accessGet(t, h.GroupIntakePage, "/standings/g1/manage/intake?token="+tokObserver, "g1"); rec.Code != http.StatusForbidden {
+		t.Fatalf("без права анкеты: code=%d, ожидался 403", rec.Code)
+	}
+
+	rec := accessGet(t, h.GroupIntakePage, "/standings/g1/manage/intake?token="+tokJury, "g1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("с правом анкеты: code=%d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Сидоров Сидор", "codeforces:sidorov", "Петров Пётр", "acmp:12345"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("в списке нет %q", want)
+		}
+	}
+	if strings.Contains(body, "Чужой Человек") {
+		t.Error("анкета чужой группы не должна показываться")
+	}
+	// Только чтение: ни подтверждения, ни удаления, ни ручек merge.
+	for _, unwanted := range []string{"intake/merge", "intake/prepare", "Подтвердить", "Удалить"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("страница должна быть только на чтение, найдено %q", unwanted)
+		}
+	}
+	// Ученик, уже состоящий в группе, помечен.
+	if !strings.Contains(body, "новый ученик") {
+		t.Error("новую анкету нужно помечать")
+	}
+
+	// Файлы анкет страница не трогает (в отличие от админского prepare).
+	blob, err := os.ReadFile(filepath.Join(dataDir, "student_intake.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(blob), "Сидоров Сидор") {
+		t.Fatalf("чтение не должно вычищать intake-файл: %s", blob)
 	}
 }

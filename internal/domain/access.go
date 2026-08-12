@@ -25,6 +25,7 @@ const (
 	PermViewParticipants Perm = "view.participants" // статистика участников и профили
 	PermViewExport       Perm = "view.export"       // выгрузка в Excel
 	PermViewJudgeLinks   Perm = "view.judge_links"  // ejudge в режиме судьи
+	PermIntakeView       Perm = "intake.view"       // анкеты, поданные в эту группу (только чтение)
 
 	// Оценки.
 	PermGradesManual  Perm = "grades.manual"  // выставлять ручные оценки
@@ -69,6 +70,7 @@ func PermCatalog() []PermGroup {
 			{PermViewParticipants, "Статистика участников", "Страница участников, профили учеников, темп курса.", false},
 			{PermViewExport, "Выгрузка в Excel", "Скачивать таблицы книгой Excel.", false},
 			{PermViewJudgeLinks, "Судейские ссылки ejudge", "Задачи ejudge открываются в режиме судьи (new-judge).", false},
+			{PermIntakeView, "Анкеты своей группы", "Видеть анкеты, поданные в эту группу: ФИО и аккаунты. Только чтение — ученика заводит администратор.", false},
 		}},
 		{Title: "Оценки", Perms: []PermInfo{
 			{PermGradesManual, "Выставлять оценки", "Заполнять ручные столбцы таблицы оценок.", false},
@@ -335,10 +337,12 @@ func ObserverPerms() []Perm {
 	}
 }
 
-// JuryPerms — «Жюри»: просмотр + оценки, кондуиты, флаги.
+// JuryPerms — «Жюри»: просмотр + оценки, кондуиты, флаги и анкеты своей группы
+// (наблюдателю анкеты не нужны: там персональные данные, а не таблицы).
 func JuryPerms() []Perm {
 	return append(ObserverPerms(),
-		PermGradesManual, PermGradesConfig, PermKonduitFill, PermKonduitCreate, PermFlagsReview)
+		PermGradesManual, PermGradesConfig, PermKonduitFill, PermKonduitCreate,
+		PermFlagsReview, PermIntakeView)
 }
 
 // AdminPerms — «Админ»: жюри + управление контестами группы, включая добавление
@@ -351,7 +355,7 @@ func AdminPerms() []Perm {
 func Presets() []AccessPreset {
 	return []AccessPreset{
 		{ID: "observer", Title: "Наблюдатель", Hint: "Полный просмотр: разморозка, скрытое, участники, экспорт. Ничего не меняет.", Perms: ObserverPerms()},
-		{ID: "jury", Title: "Жюри", Hint: "Наблюдатель + оценки, кондуиты и разметка флагов.", Perms: JuryPerms()},
+		{ID: "jury", Title: "Жюри", Hint: "Наблюдатель + оценки, кондуиты, разметка флагов и анкеты группы.", Perms: JuryPerms()},
 		{ID: "admin", Title: "Админ", Hint: "Жюри + управление контестами группы и доступ к общему списку контестов.", Perms: AdminPerms()},
 		{ID: "curator", Title: "Куратор", Hint: "Каталог групп + полный просмотр в них.", Perms: append(ObserverPerms(), PermViewDirectory), GlobalOnly: true},
 		{ID: "directory", Title: "Только каталог", Hint: "Список групп со ссылками, без доступа к самим таблицам.", Perms: []Perm{PermViewDirectory}, GlobalOnly: true},

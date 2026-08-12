@@ -268,7 +268,7 @@ func (h *Handlers) resolveAccess(slug string, r *http.Request) *GroupAccess {
 			subtle.ConstantTimeCompare([]byte(token), []byte(strings.TrimSpace(entry.Token))) == 1:
 			matched = true
 			acc.Token = token
-		case hasBasic && entry.UsesPassword() && credentialsMatch(entry, basicUser, basicPass):
+		case hasBasic && entry.UsesPassword() && h.credentialsMatch(entry, basicUser, basicPass):
 			matched = true
 			acc.SignedIn = true
 		}
@@ -291,11 +291,63 @@ func (h *Handlers) resolveAccess(slug string, r *http.Request) *GroupAccess {
 	return acc
 }
 
-// credentialsMatch — логин и пароль записи (constant-time).
-func credentialsMatch(entry domain.AccessEntry, login, password string) bool {
-	loginOK := subtle.ConstantTimeCompare([]byte(strings.TrimSpace(login)), []byte(strings.TrimSpace(entry.Login))) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(entry.Password)) == 1
-	return loginOK && passOK
+// credentialsMatch — логин и пароль записи. Логин сверяется constant-time,
+// пароль — с хешем (см. domain.VerifyPassword), с кэшем удачных проверок.
+func (h *Handlers) credentialsMatch(entry domain.AccessEntry, login, password string) bool {
+	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(login)), []byte(strings.TrimSpace(entry.Login))) != 1 {
+		return false
+	}
+	if password == "" {
+		return false
+	}
+	key := entry.ID + "\x00" + digest(entry.Password) + "\x00" + digest(password)
+	if h.passwordCached(key) {
+		return true
+	}
+	if !domain.VerifyPassword(entry.Password, password) {
+		return false
+	}
+	h.rememberPassword(key)
+	return true
+}
+
+// digest — отпечаток строки для ключа кэша (сам пароль в памяти не держим).
+func digest(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:16])
+}
+
+// passwordCacheTTL — насколько удачная проверка избавляет от повторного счёта.
+const passwordCacheTTL = 5 * time.Minute
+
+func (h *Handlers) passwordCached(key string) bool {
+	h.pwCacheMu.Lock()
+	defer h.pwCacheMu.Unlock()
+	until, ok := h.pwCache[key]
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		delete(h.pwCache, key)
+		return false
+	}
+	return true
+}
+
+func (h *Handlers) rememberPassword(key string) {
+	h.pwCacheMu.Lock()
+	defer h.pwCacheMu.Unlock()
+	if h.pwCache == nil {
+		h.pwCache = make(map[string]time.Time)
+	}
+	now := time.Now()
+	// Заодно подчищаем просроченное: записей мало (по одной на вошедшего).
+	for k, until := range h.pwCache {
+		if now.After(until) {
+			delete(h.pwCache, k)
+		}
+	}
+	h.pwCache[key] = now.Add(passwordCacheTTL)
 }
 
 // anyGroupToken — токен первого включённого токен-доступа группы ("" — нет).
@@ -330,7 +382,7 @@ func (h *Handlers) resolveGlobalAccess(r *http.Request) *GroupAccess {
 			subtle.ConstantTimeCompare([]byte(token), []byte(strings.TrimSpace(entry.Token))) == 1:
 			matched = true
 			acc.Token = token
-		case hasBasic && entry.UsesPassword() && credentialsMatch(entry, basicUser, basicPass):
+		case hasBasic && entry.UsesPassword() && h.credentialsMatch(entry, basicUser, basicPass):
 			matched = true
 			acc.SignedIn = true
 		}

@@ -9,7 +9,7 @@
     {{else}}
     Каждый доступ — это ссылка с токеном или пара логин-пароль плюс набор прав. Вход по паролю: <code>/standings/{{.Slug}}/panel</code> (браузер спросит учётку и запомнит её на 12 часов).
     {{end}}
-    Пароли и токены хранятся в открытом виде, поэтому не переиспользуйте важные пароли. Из бандла экспорта доступы вырезаются.
+    Токены хранятся как есть (это и есть ссылка), пароли — только хешем: посмотреть забытый пароль нельзя, можно задать новый. Из бандла экспорта доступы вырезаются.
   </p>
 
   <div id="acc-list" class="access-list"></div>
@@ -225,10 +225,13 @@
           var chip = wrap.querySelector(".access-chips .access-chip");
           if (chip) chip.textContent = entry.login ? "🔑 логин: " + entry.login : "🔑 логин и пароль";
         });
+        // Пароль хранится хешем и в форму не приходит: пустое поле у заведённой
+        // учётки означает «оставить прежний».
         var pass = el("input");
-        pass.type = "text"; pass.placeholder = "пароль"; pass.value = entry.password || "";
-        pass.style.maxWidth = "12rem";
-        pass.autocomplete = "off";
+        pass.type = "password"; pass.value = "";
+        pass.placeholder = entry.has_password ? "пароль задан — введите новый, чтобы сменить" : "пароль";
+        pass.style.maxWidth = "18rem";
+        pass.autocomplete = "new-password";
         pass.addEventListener("input", function () { entry.password = pass.value; });
         authRow.appendChild(login);
         authRow.appendChild(pass);

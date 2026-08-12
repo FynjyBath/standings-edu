@@ -100,6 +100,9 @@ func main() {
 		logger.Printf("WARN read informatics credentials %s: %v", *informaticsCreds, err)
 	}
 	handlers.ConfigureGenerateInterval(*generateInterval)
+	// Разовая миграция: пароли доступов, заведённые до перехода на хеши,
+	// пересчитываются и перестают лежать на диске открытым текстом.
+	handlers.MigrateAccessPasswords()
 	if intakeToken == "" {
 		logger.Printf("WARN intake token is not configured (%s); POST /api/rpc принимает анкеты без токена", *intakeCreds)
 	} else {

@@ -53,6 +53,11 @@ type Handlers struct {
 	// читается/создаётся в data/credentials/panel_secret.json).
 	panelSecretMu    sync.Mutex
 	panelSecretValue []byte
+	// pwCache — недавно подтверждённые пары «доступ + пароль». Проверка пароля
+	// стоит десятки миллисекунд, а браузер шлёт Basic Auth на каждый запрос в
+	// том же разделе — без кэша каждая картинка страницы считала бы PBKDF2.
+	pwCacheMu sync.Mutex
+	pwCache   map[string]time.Time
 	// informaticsBaseURL — base_url из кредов informatics. Все добавляемые
 	// informatics-ссылки сразу приводятся к этому зеркалу (msk ⇄ mccme), чтобы в
 	// данных не смешивались домены. Пусто — приведение выключено.

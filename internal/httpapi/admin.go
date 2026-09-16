@@ -383,7 +383,7 @@ func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
 	// с сайтов, минуя дисковый кэш; без него генерация быстрая, из кэша.
 	refreshTasks := r.FormValue("refresh_tasks") == "1"
 	result := h.runAdminAction("generate", func() AdminActionResult {
-		return h.executeGenerateAction(refreshTasks)
+		return h.executeGenerateAction(refreshTasks, "")
 	})
 	h.setAdminResult(result)
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
@@ -811,13 +811,19 @@ func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult
 	return runner()
 }
 
-func (h *Handlers) executeGenerateAction(refreshTasks bool) AdminActionResult {
+// executeGenerateAction запускает bin/generate. onlyGroup != "" — пересобрать
+// только эту группу (-group): так генерацию можно отдать доступу группы, не
+// давая ему трогать чужие таблицы.
+func (h *Handlers) executeGenerateAction(refreshTasks bool, onlyGroup string) AdminActionResult {
 	generateBinary := filepath.Join(h.admin.cfg.ProjectRoot, "bin", "generate")
 	args := []string{
 		"-data-dir", h.admin.cfg.DataDir,
 		"-generated-dir", h.admin.cfg.GeneratedDir,
 		"-informatics-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "informatics_credentials.json"),
 		"-codeforces-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "codeforces_credentials.json"),
+	}
+	if strings.TrimSpace(onlyGroup) != "" {
+		args = append(args, "-group", strings.TrimSpace(onlyGroup))
 	}
 	if refreshTasks {
 		args = append(args, "-refresh-tasks")

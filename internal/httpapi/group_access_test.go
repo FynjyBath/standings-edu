@@ -234,8 +234,13 @@ func TestObserverSeesNoPanel(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("страница по токену: code=%d", rec.Code)
 	}
+	// Панель — только про изменения; у наблюдателя их нет (анкеты он смотрит
+	// ссылкой в общем ряду, панель для этого не нужна).
 	if strings.Contains(body, "Панель группы") {
 		t.Error("наблюдатель не должен видеть панель")
+	}
+	if !strings.Contains(body, "/manage/intake") {
+		t.Error("наблюдателю положена ссылка на анкеты группы")
 	}
 	// И никаких приглашений войти: вход — по прямой ссылке от админа.
 	if strings.Contains(body, "/panel") {

@@ -85,8 +85,8 @@ func TestAdminGlobalAccessesSave(t *testing.T) {
 	}
 }
 
-// Каталог: без права — приветственный экран, с правом — только покрытые группы
-// и только ссылки с токеном.
+// Список групп на /standings: анониму — приветственный экран; со своим доступом
+// — свои группы; с правом view.directory — ещё и все остальные группы сайта.
 func TestIndexDirectoryByGlobalAccess(t *testing.T) {
 	h, dataDir := newTestHandlers(t)
 	h.ConfigureSourceDir(dataDir)
@@ -106,19 +106,27 @@ func TestIndexDirectoryByGlobalAccess(t *testing.T) {
 	}
 
 	body := indexBody(t, h, "/standings")
-	if strings.Contains(body, "Все группы") {
-		t.Error("без права каталога должен быть обычный экран")
+	if strings.Contains(body, "Первая") || strings.Contains(body, "Вторая") {
+		t.Error("анониму список групп показывать нельзя")
 	}
 
 	body = indexBody(t, h, "/standings?token=dirtok")
+	if !strings.Contains(body, "Ваши группы") {
+		t.Error("область действия доступа — это его «свои» группы")
+	}
 	if !strings.Contains(body, "Первая") {
-		t.Fatal("каталог должен показывать покрытую группу")
+		t.Fatal("покрытая доступом группа должна быть в списке")
 	}
-	if strings.Contains(body, "Вторая") {
-		t.Error("группа вне области доступа не должна попадать в каталог")
+	// Право view.directory теперь означает «видеть все группы сайта», а не
+	// только покрытые областью действия.
+	if !strings.Contains(body, "Вторая") {
+		t.Error("с правом каталога видны и остальные группы сайта")
 	}
-	if !strings.Contains(body, "token=tok1") {
-		t.Error("нужна ссылка с токеном доступа группы")
+	if !strings.Contains(body, "Остальные группы сайта") {
+		t.Error("чужие группы должны идти отдельным блоком")
+	}
+	if !strings.Contains(body, "token=tok1") || !strings.Contains(body, "token=tok2") {
+		t.Error("нужны ссылки с токенами доступов групп")
 	}
 	// И обычный адрес группы: его рассылают ученикам, а вошедшему преподавателю
 	// он открывает группу под его правами.
@@ -425,9 +433,25 @@ func TestGroupIntakeView(t *testing.T) {
 	writeTestFile(t, filepath.Join(dataDir, "student_intake_admin.json"), `[
 	  {"full_name":"Петров Пётр","groups":["g1"],"accounts":[{"site":"acmp","account_id":"12345"}]}]`)
 
-	// Без права — 403.
-	if rec := accessGet(t, h.GroupIntakePage, "/standings/g1/manage/intake?token="+tokObserver, "g1"); rec.Code != http.StatusForbidden {
+	// Без права — 403. «Наблюдатель» анкеты видит, поэтому берём доступ,
+	// у которого из прав только просмотр таблиц.
+	gf, ok, err := h.readGroupFile("g1")
+	if err != nil || !ok {
+		t.Fatal("group not found")
+	}
+	gf.Accesses = append(gf.Accesses, domain.AccessEntry{
+		ID: "tables", Title: "Только таблицы", Auth: domain.AccessAuthToken, Token: "tabtok",
+		Perms: []domain.Perm{domain.PermViewUnfrozen},
+	})
+	if err := h.writeGroupFile("g1", gf); err != nil {
+		t.Fatal(err)
+	}
+	if rec := accessGet(t, h.GroupIntakePage, "/standings/g1/manage/intake?token=tabtok", "g1"); rec.Code != http.StatusForbidden {
 		t.Fatalf("без права анкеты: code=%d, ожидался 403", rec.Code)
+	}
+	// А наблюдателю анкеты теперь открыты (право входит в пресет).
+	if rec := accessGet(t, h.GroupIntakePage, "/standings/g1/manage/intake?token="+tokObserver, "g1"); rec.Code != http.StatusOK {
+		t.Fatalf("наблюдатель и анкеты: code=%d, ожидался 200", rec.Code)
 	}
 
 	rec := accessGet(t, h.GroupIntakePage, "/standings/g1/manage/intake?token="+tokJury, "g1")
@@ -461,5 +485,83 @@ func TestGroupIntakeView(t *testing.T) {
 	}
 	if !strings.Contains(string(blob), "Сидоров Сидор") {
 		t.Fatalf("чтение не должно вычищать intake-файл: %s", blob)
+	}
+}
+
+// Свои группы видны без права каталога: доступ группы (ссылка или вход по
+// паролю) сам по себе кладёт её в список на /standings, а чужие группы при
+// этом не показываются.
+func TestIndexOwnGroupsWithoutDirectoryPerm(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "one", "group.json"),
+		`{"title":"Первая","student_ids":[],"accesses":[
+		  {"id":"o","title":"Наблюдатель","auth":"token","token":"tok1","perms":["view.unfrozen"]},
+		  {"id":"p","title":"Жюри","auth":"password","login":"j","password":"jp","perms":["grades.manual"]}]}`)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "two", "group.json"),
+		`{"title":"Вторая","student_ids":[],"accesses":[
+		  {"id":"o2","title":"Наблюдатель","auth":"token","token":"tok2","perms":["view.unfrozen"]}]}`)
+
+	// Пришли по ссылке доступа группы «one».
+	body := indexBody(t, h, "/standings?token=tok1")
+	if !strings.Contains(body, "Первая") {
+		t.Error("группа со своим доступом должна быть в списке")
+	}
+	if strings.Contains(body, "Вторая") {
+		t.Error("чужая группа без права каталога попадать не должна")
+	}
+	if strings.Contains(body, "Остальные группы сайта") {
+		t.Error("без права каталога блока чужих групп быть не должно")
+	}
+	// Ссылки своей группы — все: и ученическая, и с токеном.
+	if !strings.Contains(body, `href="/standings/one"`) || !strings.Contains(body, "token=tok1") {
+		t.Error("у своей группы должны быть и обычная ссылка, и ссылки с токеном")
+	}
+	if strings.Contains(body, "jp") {
+		t.Error("пароли доступов в список попадать не должны")
+	}
+
+	// Вход по паролю в панель группы: сессия тоже делает группу «своей».
+	rec := panelGet(t, h.GroupPanelPage, "/standings/one/panel", "one", "j", "jp")
+	cookie := sessionCookie(rec)
+	if cookie == nil {
+		t.Fatal("вход по паролю должен выдать сессию")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/standings", nil)
+	req.AddCookie(cookie)
+	page := httptest.NewRecorder()
+	h.IndexPage(page, req)
+	if !strings.Contains(page.Body.String(), "Первая") {
+		t.Error("после входа в панель группа должна появиться в списке")
+	}
+	if strings.Contains(page.Body.String(), "Вторая") {
+		t.Error("чужая группа не должна появляться по сессии другой группы")
+	}
+}
+
+// Глобальный доступ без права каталога: видны только группы его области.
+func TestIndexGlobalScopeWithoutDirectoryPerm(t *testing.T) {
+	h, dataDir := newTestHandlers(t)
+	h.ConfigureSourceDir(dataDir)
+	for _, slug := range []string{"one", "two", "three"} {
+		writeTestFile(t, filepath.Join(dataDir, "groups", slug, "group.json"),
+			`{"title":"Группа `+slug+`","student_ids":[]}`)
+	}
+	if err := h.saveGlobalAccesses([]domain.AccessEntry{{
+		ID: "obs", Title: "Наблюдатель", Auth: domain.AccessAuthToken, Token: "gtok",
+		Scope: domain.AccessScopeGroups, Groups: []string{"one", "two"},
+		Perms: []domain.Perm{domain.PermViewUnfrozen},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := indexBody(t, h, "/standings?token=gtok")
+	for _, want := range []string{"Группа one", "Группа two"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("группа области действия %q должна быть в списке", want)
+		}
+	}
+	if strings.Contains(body, "Группа three") {
+		t.Error("группа вне области действия без права каталога видна быть не должна")
 	}
 }

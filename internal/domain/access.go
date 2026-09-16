@@ -33,6 +33,19 @@ const (
 	PermKonduitFill   Perm = "konduit.fill"   // заполнять кондуиты
 	PermKonduitCreate Perm = "konduit.create" // создавать кондуиты
 
+	// Состав группы. Ученик — запись общая для всего сайта, поэтому права
+	// разделены: members.manage распоряжается только составом (кого включить в
+	// группу из уже заведённых), а заводить новых и править их данные —
+	// отдельные права.
+	PermMembersManage   Perm = "members.manage"   // добавлять и убирать участников из уже заведённых
+	PermMembersRegister Perm = "members.register" // заводить новых учеников списком ФИО
+	PermStudentsEdit    Perm = "students.edit"    // править данные учеников своей группы
+	PermIntakeMerge     Perm = "intake.merge"     // принимать анкеты своей группы в базу
+
+	// Действия.
+	PermActionsGenerate   Perm = "actions.generate"    // пересобрать таблицы своей группы
+	PermActionsResetCache Perm = "actions.reset_cache" // сбросить кеш источников по своей группе
+
 	// Честность.
 	PermFlagsReview Perm = "flags.review" // размечать флаги нечестности
 
@@ -42,7 +55,7 @@ const (
 	PermContestsGlobal Perm = "contests.global" // видеть общий список контестов сайта и добавлять из него
 
 	// Только для глобальных доступов.
-	PermViewDirectory Perm = "view.directory" // каталог групп со ссылками
+	PermViewDirectory Perm = "view.directory" // видеть в списке ВСЕ группы сайта, а не только свои
 )
 
 // PermGroup — раздел прав для формы редактирования.
@@ -72,6 +85,16 @@ func PermCatalog() []PermGroup {
 			{PermViewJudgeLinks, "Судейские ссылки ejudge", "Задачи ejudge открываются в режиме судьи (new-judge).", false},
 			{PermIntakeView, "Анкеты своей группы", "Видеть анкеты, поданные в эту группу: ФИО и аккаунты. Только чтение — ученика заводит администратор.", false},
 		}},
+		{Title: "Состав группы", Perms: []PermInfo{
+			{PermMembersManage, "Управлять составом", "Добавлять в группу уже заведённых учеников (по ФИО) и убирать из неё. Сама запись ученика при этом не создаётся и не удаляется.", false},
+			{PermMembersRegister, "Заводить новых учеников", "Регистрация списком ФИО: для незнакомых имён создаётся новая запись ученика в общей базе сайта.", false},
+			{PermStudentsEdit, "Править данные учеников", "ФИО, публичное имя и аккаунты участников своей группы. Запись ученика общая — правка видна во всех его группах.", false},
+			{PermIntakeMerge, "Принимать анкеты", "Подтверждать анкеты, поданные в эту группу: ученик заводится (или находится по ФИО) и добавляется в группу.", false},
+		}},
+		{Title: "Действия", Perms: []PermInfo{
+			{PermActionsGenerate, "Пересобрать таблицы", "Запускать генерацию своей группы, не дожидаясь расписания.", false},
+			{PermActionsResetCache, "Сбросить кеш", "Заставить перечитать посылки учеников группы с нуля при следующей генерации.", false},
+		}},
 		{Title: "Оценки", Perms: []PermInfo{
 			{PermGradesManual, "Выставлять оценки", "Заполнять ручные столбцы таблицы оценок.", false},
 			{PermGradesConfig, "Настраивать таблицу оценок", "Столбцы, веса, метрика, нормировка, дорешка.", false},
@@ -87,7 +110,7 @@ func PermCatalog() []PermGroup {
 			{PermContestsGlobal, "Доступ ко всем контестам сайта", "Видеть общий список контестов и добавлять из него в группу. Без права список не показывается; уже добавленные админом контесты работают как обычно.", false},
 		}},
 		{Title: "Каталог", Perms: []PermInfo{
-			{PermViewDirectory, "Каталог групп", "Список доступных групп со ссылками на них.", true},
+			{PermViewDirectory, "Все группы сайта", "Видеть на /standings список всех групп сайта со ссылками, а не только свои. Группы, куда доступ и так есть, показываются и без этого права.", true},
 		}},
 	}
 }
@@ -334,31 +357,38 @@ func ObserverPerms() []Perm {
 	return []Perm{
 		PermViewUnfrozen, PermViewHidden, PermViewTaskLinks,
 		PermViewParticipants, PermViewExport, PermViewJudgeLinks,
+		PermIntakeView,
 	}
 }
 
-// JuryPerms — «Жюри»: просмотр + оценки, кондуиты, флаги и анкеты своей группы
-// (наблюдателю анкеты не нужны: там персональные данные, а не таблицы).
+// JuryPerms — «Жюри»: просмотр + оценки, кондуиты и флаги.
 func JuryPerms() []Perm {
 	return append(ObserverPerms(),
 		PermGradesManual, PermGradesConfig, PermKonduitFill, PermKonduitCreate,
-		PermFlagsReview, PermIntakeView)
+		PermFlagsReview)
 }
 
 // AdminPerms — «Админ»: жюри + управление контестами группы, включая добавление
-// из общего списка сайта (прежняя роль «Админ группы» это умела).
+// из общего списка сайта (прежняя роль «Админ группы» это умела), состав группы
+// и приём анкет.
+//
+// Действия (пересборка таблиц, сброс кеша) ни в один пресет не входят: они
+// нагружают сеть и источники, поэтому отмечаются галочкой осознанно.
 func AdminPerms() []Perm {
-	return append(JuryPerms(), PermContestsManage, PermContestsInline, PermContestsGlobal)
+	return append(JuryPerms(),
+		PermContestsManage, PermContestsInline, PermContestsGlobal,
+		PermMembersManage, PermMembersRegister, PermStudentsEdit, PermIntakeMerge)
 }
 
-// Presets — заготовки для формы редактирования доступа.
+// Presets — заготовки для формы редактирования доступа. Все они групповые:
+// глобальный доступ отличается не набором прав, а областью действия, и
+// собирается галочками (в т.ч. view.directory). Поле GlobalOnly оставлено —
+// форма его учитывает, если понадобится глобальный пресет.
 func Presets() []AccessPreset {
 	return []AccessPreset{
-		{ID: "observer", Title: "Наблюдатель", Hint: "Полный просмотр: разморозка, скрытое, участники, экспорт. Ничего не меняет.", Perms: ObserverPerms()},
-		{ID: "jury", Title: "Жюри", Hint: "Наблюдатель + оценки, кондуиты, разметка флагов и анкеты группы.", Perms: JuryPerms()},
-		{ID: "admin", Title: "Админ", Hint: "Жюри + управление контестами группы и доступ к общему списку контестов.", Perms: AdminPerms()},
-		{ID: "curator", Title: "Куратор", Hint: "Каталог групп + полный просмотр в них.", Perms: append(ObserverPerms(), PermViewDirectory), GlobalOnly: true},
-		{ID: "directory", Title: "Только каталог", Hint: "Список групп со ссылками, без доступа к самим таблицам.", Perms: []Perm{PermViewDirectory}, GlobalOnly: true},
+		{ID: "observer", Title: "Наблюдатель", Hint: "Полный просмотр: разморозка, скрытое, участники, экспорт, анкеты группы. Ничего не меняет.", Perms: ObserverPerms()},
+		{ID: "jury", Title: "Жюри", Hint: "Наблюдатель + оценки, кондуиты и разметка флагов.", Perms: JuryPerms()},
+		{ID: "admin", Title: "Админ", Hint: "Жюри + контесты группы и общий список контестов сайта, состав группы, приём анкет и правка учеников.", Perms: AdminPerms()},
 	}
 }
 

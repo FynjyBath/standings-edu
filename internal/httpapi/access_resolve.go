@@ -114,14 +114,37 @@ func (a *GroupAccess) CanManageContests() bool { return a.Has(domain.PermContest
 // CanViewIntake — анкеты, поданные в группу (только чтение).
 func (a *GroupAccess) CanViewIntake() bool { return a.Has(domain.PermIntakeView) }
 
+// CanMergeIntake — принимать анкеты своей группы.
+func (a *GroupAccess) CanMergeIntake() bool { return a.Has(domain.PermIntakeMerge) }
+
+// CanManageMembers — управлять составом группы.
+func (a *GroupAccess) CanManageMembers() bool { return a.Has(domain.PermMembersManage) }
+
+// CanEditStudents — править данные учеников своей группы.
+func (a *GroupAccess) CanEditStudents() bool { return a.Has(domain.PermStudentsEdit) }
+
+// CanGenerate — пересобрать таблицы своей группы.
+func (a *GroupAccess) CanGenerate() bool { return a.Has(domain.PermActionsGenerate) }
+
+// CanResetCache — сбросить кеш источников по своей группе.
+func (a *GroupAccess) CanResetCache() bool { return a.Has(domain.PermActionsResetCache) }
+
+// CanRunActions — есть хоть одно действие (показывать ли блок «Действия»).
+func (a *GroupAccess) CanRunActions() bool {
+	return a.HasAny(domain.PermActionsGenerate, domain.PermActionsResetCache)
+}
+
 // CanReviewFlags — разметка флагов нечестности.
 func (a *GroupAccess) CanReviewFlags() bool { return a.Has(domain.PermFlagsReview) }
 
-// HasPanel — есть хоть одно действие: показывать ли панель на странице группы.
+// HasPanel — есть хоть одно ИЗМЕНЯЮЩЕЕ действие: показывать ли панель на
+// странице группы. Просмотровые права (в т.ч. анкеты) панель не открывают —
+// их ссылки живут в общем ряду наверху, рядом со «Статистикой участников».
 func (a *GroupAccess) HasPanel() bool {
 	return a.HasAny(domain.PermGradesManual, domain.PermGradesConfig, domain.PermKonduitFill,
 		domain.PermKonduitCreate, domain.PermContestsManage, domain.PermContestsInline,
-		domain.PermIntakeView)
+		domain.PermMembersManage, domain.PermStudentsEdit,
+		domain.PermActionsGenerate, domain.PermActionsResetCache)
 }
 
 // ViewKey — отпечаток прав, влияющих на ВИД таблиц: ключ кэша готовых ответов
@@ -250,42 +273,74 @@ func (h *Handlers) candidateAccesses(slug string) []domain.AccessEntry {
 	return out
 }
 
+// requestCredentials — чем запрос подтверждает доступы: токен из адреса, ссылки
+// живой сессии и пара логин/пароль. Читается один раз на запрос: каталог
+// перебирает доступы всех групп сайта, и разбирать куку на каждую было бы зря.
+type requestCredentials struct {
+	token       string
+	sessionRefs map[string]struct{}
+	login       string
+	password    string
+	hasBasic    bool
+}
+
+// readRequestCredentials собирает всё, чем запрос может подтвердить доступ.
+func (h *Handlers) readRequestCredentials(r *http.Request) requestCredentials {
+	creds := requestCredentials{sessionRefs: map[string]struct{}{}}
+	creds.token = strings.TrimSpace(r.URL.Query().Get("token"))
+	if c, err := r.Cookie(accessCookieName); err == nil {
+		for _, ref := range h.parseSessionValue(c.Value) {
+			creds.sessionRefs[ref] = struct{}{}
+		}
+	}
+	creds.login, creds.password, creds.hasBasic = r.BasicAuth()
+	return creds
+}
+
+// Чем именно запрос подтвердил запись доступа.
+const (
+	matchNone = iota
+	matchToken
+	matchPassword
+	matchSession
+)
+
+// matchEntry — подтверждает ли запрос эту запись доступа и каким способом.
+// Порядок проверок важен: сначала токен из адреса, затем Basic Auth, и лишь
+// потом сессия — так «свежий» вход побеждает старую куку.
+func (h *Handlers) matchEntry(creds requestCredentials, entry domain.AccessEntry) int {
+	switch {
+	case creds.token != "" && entry.UsesToken() &&
+		subtle.ConstantTimeCompare([]byte(creds.token), []byte(strings.TrimSpace(entry.Token))) == 1:
+		return matchToken
+	case creds.hasBasic && entry.UsesPassword() && h.credentialsMatch(entry, creds.login, creds.password):
+		return matchPassword
+	}
+	if _, ok := creds.sessionRefs[entry.ID+":"+entryFingerprint(entry)]; ok {
+		return matchSession
+	}
+	return matchNone
+}
+
 // resolveAccess определяет права запроса на группу.
 func (h *Handlers) resolveAccess(slug string, r *http.Request) *GroupAccess {
 	acc := &GroupAccess{Perms: domain.PermSet{}}
 	if !domain.IsValidSlug(slug) {
 		return acc
 	}
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	sessionRefs := map[string]struct{}{}
-	if c, err := r.Cookie(accessCookieName); err == nil {
-		for _, ref := range h.parseSessionValue(c.Value) {
-			sessionRefs[ref] = struct{}{}
-		}
-	}
-	basicUser, basicPass, hasBasic := r.BasicAuth()
+	creds := h.readRequestCredentials(r)
 
 	for _, entry := range h.candidateAccesses(slug) {
-		matched := false
-		switch {
-		case token != "" && entry.UsesToken() &&
-			subtle.ConstantTimeCompare([]byte(token), []byte(strings.TrimSpace(entry.Token))) == 1:
-			matched = true
-			acc.Token = token
-		case hasBasic && entry.UsesPassword() && h.credentialsMatch(entry, basicUser, basicPass):
-			matched = true
+		switch h.matchEntry(creds, entry) {
+		case matchNone:
+			continue
+		case matchToken:
+			acc.Token = creds.token
+		default:
 			acc.SignedIn = true
 		}
-		if !matched {
-			if _, ok := sessionRefs[entry.ID+":"+entryFingerprint(entry)]; ok {
-				matched = true
-				acc.SignedIn = true
-			}
-		}
-		if matched {
-			acc.Perms.Add(entry.Perms)
-			acc.Entries = append(acc.Entries, entry)
-		}
+		acc.Perms.Add(entry.Perms)
+		acc.Entries = append(acc.Entries, entry)
 	}
 	// Токен для ссылок внутри страниц: если вошли по паролю, подставим любой
 	// токен-доступ этой группы, чтобы ссылки «поделиться» продолжали работать.
@@ -367,39 +422,22 @@ func (h *Handlers) anyGroupToken(slug string) string {
 // resolveGlobalAccess — доступ вне группы (каталог): токен, сессия или Basic.
 func (h *Handlers) resolveGlobalAccess(r *http.Request) *GroupAccess {
 	acc := &GroupAccess{Perms: domain.PermSet{}}
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	sessionRefs := map[string]struct{}{}
-	if c, err := r.Cookie(accessCookieName); err == nil {
-		for _, ref := range h.parseSessionValue(c.Value) {
-			sessionRefs[ref] = struct{}{}
-		}
-	}
-	basicUser, basicPass, hasBasic := r.BasicAuth()
+	creds := h.readRequestCredentials(r)
 
 	for _, entry := range h.loadGlobalAccesses() {
 		if !entry.IsEnabled() {
 			continue
 		}
-		matched := false
-		switch {
-		case token != "" && entry.UsesToken() &&
-			subtle.ConstantTimeCompare([]byte(token), []byte(strings.TrimSpace(entry.Token))) == 1:
-			matched = true
-			acc.Token = token
-		case hasBasic && entry.UsesPassword() && h.credentialsMatch(entry, basicUser, basicPass):
-			matched = true
+		switch h.matchEntry(creds, entry) {
+		case matchNone:
+			continue
+		case matchToken:
+			acc.Token = creds.token
+		default:
 			acc.SignedIn = true
 		}
-		if !matched {
-			if _, ok := sessionRefs[entry.ID+":"+entryFingerprint(entry)]; ok {
-				matched = true
-				acc.SignedIn = true
-			}
-		}
-		if matched {
-			acc.Perms.Add(entry.Perms)
-			acc.Entries = append(acc.Entries, entry)
-		}
+		acc.Perms.Add(entry.Perms)
+		acc.Entries = append(acc.Entries, entry)
 	}
 	return acc
 }

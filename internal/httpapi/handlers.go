@@ -879,20 +879,30 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 		PageTitle: "Standings",
 		Footer:    h.buildFooterInfo(),
 	}
-	// Каталог групп — по глобальному доступу с правом «каталог» (ссылка с
-	// токеном или вход по паролю). Без права — обычный экран, факт
-	// существования каталога не раскрываем.
-	acc := h.resolveGlobalAccess(r)
 	page.HasLogin = h.hasGlobalPasswordAccess()
-	if acc.Has(domain.PermViewDirectory) {
+
+	// Список групп собирается из двух частей: свои (куда доступ подтверждён —
+	// глобальным доступом или доступом самой группы) и, по праву view.directory,
+	// все остальные группы сайта. Анониму не показываем ничего: факт
+	// существования каталога не раскрываем.
+	own, other, signedIn := h.directoryLists(r)
+	if len(own) > 0 || len(other) > 0 {
 		w.Header().Set("Cache-Control", "no-store")
-		page.SignedIn = acc.SignedIn
-		// Активные и архивные группы — разными списками (архив свёрнут).
-		for _, g := range h.buildDirectory(h.directoryScope(acc)) {
+		page.SignedIn = signedIn
+		page.CanSeeAll = len(other) > 0
+		// Активные и архивные — разными списками (архив свёрнут).
+		for _, g := range own {
 			if g.Archived {
-				page.ArchivedGroups = append(page.ArchivedGroups, g)
+				page.OwnArchived = append(page.OwnArchived, g)
 			} else {
-				page.Directory = append(page.Directory, g)
+				page.OwnGroups = append(page.OwnGroups, g)
+			}
+		}
+		for _, g := range other {
+			if g.Archived {
+				page.OtherArchived = append(page.OtherArchived, g)
+			} else {
+				page.OtherGroups = append(page.OtherGroups, g)
 			}
 		}
 	}
@@ -901,24 +911,81 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// directoryScope — слаги групп, которые видно в каталоге этому доступу.
-func (h *Handlers) directoryScope(acc *GroupAccess) []string {
-	seen := make(map[string]struct{})
-	for i := range acc.Entries {
-		entry := acc.Entries[i]
-		if !entry.PermSet().Has(domain.PermViewDirectory) {
+// directoryLists — что показать на /standings этому запросу: свои группы,
+// остальные группы сайта и признак входа по логину и паролю.
+//
+// «Свои» — это группы, куда доступ уже подтверждён: покрытые глобальным
+// доступом (по его области действия) и те, чей собственный доступ подтверждён
+// ссылкой, сессией или паролем. Они показываются всегда, без отдельного права:
+// человек и так может в них войти, список лишь избавляет от поиска ссылки.
+//
+// «Остальные» — все прочие группы сайта; их добавляет право view.directory.
+// Оно не про свои группы, а именно про чужие: увидеть, что ещё есть на сайте.
+func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup, signedIn bool) {
+	creds := h.readRequestCredentials(r)
+	// Предъявить нечего — подтвердить нельзя ничего, и перебирать доступы всех
+	// групп незачем: /standings открывают и ученики, и случайные посетители.
+	if creds.token == "" && len(creds.sessionRefs) == 0 && !creds.hasBasic {
+		return nil, nil, false
+	}
+	ownSlugs := make(map[string]struct{})
+	seeAll := false
+
+	// Глобальные доступы: область действия записи и есть её «свои» группы.
+	for _, entry := range h.loadGlobalAccesses() {
+		if !entry.IsEnabled() {
 			continue
 		}
+		match := h.matchEntry(creds, entry)
+		if match == matchNone {
+			continue
+		}
+		if match != matchToken {
+			signedIn = true
+		}
+		if entry.PermSet().Has(domain.PermViewDirectory) {
+			seeAll = true
+		}
 		for _, slug := range h.accessGroupsFor(&entry) {
-			seen[slug] = struct{}{}
+			ownSlugs[slug] = struct{}{}
 		}
 	}
-	out := make([]string, 0, len(seen))
-	for slug := range seen {
-		out = append(out, slug)
+
+	// Доступы самих групп: вошёл в панель группы (или пришёл по её ссылке) —
+	// группа своя, даже если глобального доступа нет вовсе.
+	allSlugs := h.allGroupSlugs()
+	for _, slug := range allSlugs {
+		if _, dup := ownSlugs[slug]; dup {
+			continue
+		}
+		for _, entry := range h.groupAccesses(slug) {
+			if !entry.IsEnabled() {
+				continue
+			}
+			match := h.matchEntry(creds, entry)
+			if match == matchNone {
+				continue
+			}
+			if match != matchToken {
+				signedIn = true
+			}
+			ownSlugs[slug] = struct{}{}
+			break
+		}
 	}
-	sort.Strings(out)
-	return out
+
+	ownList := make([]string, 0, len(ownSlugs))
+	otherList := make([]string, 0)
+	for _, slug := range allSlugs {
+		if _, mine := ownSlugs[slug]; mine {
+			ownList = append(ownList, slug)
+		} else if seeAll {
+			otherList = append(otherList, slug)
+		}
+	}
+	sort.Strings(ownList)
+	sort.Strings(otherList)
+	return h.buildDirectory(ownList), h.buildDirectory(otherList), signedIn
 }
 
 // buildDirectory собирает каталог по списку слагов. У каждой группы: обычный
@@ -1020,10 +1087,16 @@ type FooterInfo struct {
 type IndexPageData struct {
 	PageTitle string
 	Footer    FooterInfo
-	// Directory — активные группы каталога (по праву «каталог групп»). nil —
-	// обычный экран. ArchivedGroups — группы в архиве (свёрнутым блоком).
-	Directory      []DirectoryGroup
-	ArchivedGroups []DirectoryGroup
+	// OwnGroups/OwnArchived — группы, куда у пришедшего уже есть доступ. Всё
+	// пусто — обычный приветственный экран.
+	OwnGroups   []DirectoryGroup
+	OwnArchived []DirectoryGroup
+	// OtherGroups/OtherArchived — остальные группы сайта; заполняются только по
+	// праву view.directory.
+	OtherGroups   []DirectoryGroup
+	OtherArchived []DirectoryGroup
+	// CanSeeAll — показан ли блок «остальные группы» (право view.directory).
+	CanSeeAll bool
 	// SignedIn — вход по логину и паролю: показываем кнопку «Выйти».
 	SignedIn bool
 	// HasLogin — настроен глобальный доступ со входом по паролю: на пустом

@@ -1,9 +1,13 @@
 package httpapi
 
-// Анкеты своей группы — только чтение (право intake.view). Учитель видит, кто
+// Анкеты своей группы. С правом intake.view — только чтение: учитель видит, кто
 // подал заявку и с какими аккаунтами, и может заметить опечатку до того, как
-// анкету подтвердят. Подтверждение и правка остаются за админкой: merge пишет в
-// общий students.json и может слить анкету с учеником другой группы.
+// анкету подтвердят. С правом intake.merge анкету можно принять — ученик
+// заводится (или находится по ФИО) и попадает в состав этой группы; анкета,
+// поданная сразу в несколько групп, остаётся ждать остальных.
+//
+// Правка самих анкет по-прежнему за админкой: там merge идёт по всему staging
+// и умеет сливать анкету с учеником другой группы.
 
 import (
 	"net/http"
@@ -24,6 +28,8 @@ type GroupIntakePageData struct {
 	// RoleTitle — подпись доступа в шапке.
 	RoleTitle string
 	Rows      []GroupIntakeRow
+	// CanMerge — можно принимать анкеты (право intake.merge).
+	CanMerge bool
 }
 
 // GroupIntakeRow — одна анкета в списке.
@@ -48,7 +54,7 @@ func (h *Handlers) GroupIntakePage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !acc.Has(domain.PermIntakeView) {
+	if !acc.HasAny(domain.PermIntakeView, domain.PermIntakeMerge) {
 		http.Error(w, "нет права смотреть анкеты группы", http.StatusForbidden)
 		return
 	}
@@ -93,6 +99,7 @@ func (h *Handlers) GroupIntakePage(w http.ResponseWriter, r *http.Request) {
 		GroupTitle: title,
 		Token:      acc.Token,
 		RoleTitle:  acc.Title(),
+		CanMerge:   acc.Has(domain.PermIntakeMerge),
 	}
 	for _, st := range pending {
 		if !containsSlug(st.Groups, slug) {

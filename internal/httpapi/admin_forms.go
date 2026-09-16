@@ -142,11 +142,32 @@ func (h *Handlers) AdminStudentSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
+	// В админке можно править кого угодно и заводить новых.
+	savedID, status, msg := h.saveStudentRecord(req, nil)
+	if msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": savedID})
+}
 
+// saveStudentRecord создаёт или обновляет запись ученика в общем students.json.
+// allowedIDs != nil — режим доступа группы: править можно только перечисленных
+// учеников (состав своей группы), а заводить новых нельзя. Общий helper
+// админки и панели группы.
+func (h *Handlers) saveStudentRecord(req adminStudentSaveRequest, allowedIDs map[string]struct{}) (string, int, string) {
 	fullName := domain.NormalizeWhitespace(req.FullName)
 	if fullName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "ФИО обязательно"})
-		return
+		return "", http.StatusBadRequest, "ФИО обязательно"
+	}
+	if allowedIDs != nil {
+		id := domain.NormalizeID(req.ID)
+		if id == "" {
+			return "", http.StatusForbidden, "заводить новых учеников можно только из админки"
+		}
+		if _, ok := allowedIDs[id]; !ok {
+			return "", http.StatusForbidden, "этот ученик не состоит в вашей группе"
+		}
 	}
 
 	accounts := make([]domain.Account, 0, len(req.Accounts))
@@ -158,8 +179,7 @@ func (h *Handlers) AdminStudentSave(w http.ResponseWriter, r *http.Request) {
 
 	students, err := h.loadStudentsList()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
 
 	id := domain.NormalizeID(req.ID)
@@ -181,6 +201,11 @@ func (h *Handlers) AdminStudentSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !updated {
+		if allowedIDs != nil {
+			// Сюда не дойти (id проверен выше), но пусть режим доступа группы
+			// не создаёт учеников ни при каких обстоятельствах.
+			return "", http.StatusForbidden, "заводить новых учеников можно только из админки"
+		}
 		newID := studentintake.GenerateUniqueID(fullName, func(candidate string) bool {
 			for _, s := range students {
 				if strings.TrimSpace(s.ID) == candidate {
@@ -197,10 +222,9 @@ func (h *Handlers) AdminStudentSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := studentintake.WriteStudentsFile(h.dataPath("students.json"), students); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return "", http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": savedID})
+	return savedID, http.StatusOK, ""
 }
 
 func (h *Handlers) AdminStudentDelete(w http.ResponseWriter, r *http.Request) {
@@ -663,30 +687,45 @@ func (h *Handlers) AdminGroupMemberRemove(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	slug := strings.TrimSpace(req.Slug)
-	studentID := strings.TrimSpace(req.StudentID)
-	if !domain.IsValidSlug(slug) || studentID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad request"})
+	status, msg := h.removeGroupMember(strings.TrimSpace(req.Slug), strings.TrimSpace(req.StudentID))
+	if msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// removeGroupMember убирает ученика из состава группы. Сама запись ученика
+// (students.json) не трогается: он остаётся в базе и в других своих группах.
+// Общий helper админки и панели группы (см. group_members.go).
+func (h *Handlers) removeGroupMember(slug, studentID string) (int, string) {
+	if !domain.IsValidSlug(slug) || studentID == "" {
+		return http.StatusBadRequest, "bad request"
 	}
 	groupFile, ok, err := h.readGroupFile(slug)
 	if err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
+		return http.StatusBadRequest, "group not found"
+	}
+	if len(groupFile.MemberGroups) > 0 {
+		return http.StatusBadRequest, "у объединённой группы нет своего состава — правьте группы-участницы"
 	}
 	filtered := make([]string, 0, len(groupFile.StudentIDs))
+	removed := false
 	for _, sid := range groupFile.StudentIDs {
 		if strings.TrimSpace(sid) == studentID {
+			removed = true
 			continue
 		}
 		filtered = append(filtered, sid)
 	}
+	if !removed {
+		return http.StatusBadRequest, "этого ученика нет в составе группы"
+	}
 	groupFile.StudentIDs = filtered
 	if err := h.writeGroupFile(slug, groupFile); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return http.StatusInternalServerError, err.Error()
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return http.StatusOK, ""
 }
 
 // AdminGroupSetArchived архивирует/разархивирует группу: архив — это update=false

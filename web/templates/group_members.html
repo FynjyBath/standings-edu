@@ -1,0 +1,276 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Состав группы: {{.GroupTitle}} <span class="grade-weight">({{.GroupSlug}})</span></h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .GroupToken}}?token={{.GroupToken}}{{end}}">← Таблицы группы</a>
+    {{if .RoleTitle}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
+  </p>
+  <p class="empty-hint">
+    Участники добавляются по ФИО: ученик — общая запись сайта, и списка всех учеников здесь нет.
+    {{if .CanRegister}}Незнакомые ФИО будут заведены как новые ученики (без аккаунтов).{{else}}Заводить новых учеников это право не даёт: ФИО, которых нет в базе, будут пропущены — их добавит администратор.{{end}}
+    Изменения появятся в таблицах после ближайшей генерации.
+  </p>
+</section>
+
+<section class="admin-block">
+  <h2>Добавить по списку ФИО</h2>
+  <p class="empty-hint">По одному ФИО в строке. «Пробный запуск» ничего не пишет — только показывает, что произойдёт.</p>
+  <textarea id="fio-names" class="account-list" rows="6" spellcheck="false" placeholder="Иванов Иван Иванович&#10;Петрова Мария Сергеевна"></textarea>
+  <div class="admin-editor-tools" style="margin-top:0.5rem;">
+    <button type="button" id="fio-dry" class="admin-btn admin-btn--secondary">Пробный запуск</button>
+    <button type="button" id="fio-apply" class="admin-btn" disabled>Применить</button>
+    <span id="fio-status" class="admin-editor-status"></span>
+  </div>
+  <div id="fio-plan" style="margin-top:0.6rem;"></div>
+</section>
+
+<section class="admin-block">
+  <h2>Участники ({{len .Members}})</h2>
+  {{if .Members}}
+  <input type="search" class="filter-input" placeholder="Поиск по имени…" autocomplete="off" spellcheck="false"
+         data-filter-rows="#members-tbody > tr" data-filter-count="#members-count" data-filter-empty="#members-empty" />
+  <span class="filter-count" id="members-count"></span>
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead>
+        <tr>
+          <th class="student-col">Ученик</th>
+          <th>ФИО</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="members-tbody">
+        {{range .Members}}
+        <tr data-filter-text="{{.PublicName}} {{.FullName}} {{.StudentID}}">
+          <td class="student-name">{{.PublicName}}</td>
+          <td>{{.FullName}}</td>
+          <td>
+            {{if $.CanEditStudents}}
+            <button type="button" class="admin-btn admin-btn--secondary member-edit"
+                    data-id="{{.StudentID}}" data-full-name="{{.FullName}}" data-public-name="{{.PublicName}}">Править</button>
+            {{end}}
+            <button type="button" class="admin-btn admin-btn--secondary member-remove"
+                    data-id="{{.StudentID}}" data-name="{{.PublicName}}">Убрать</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="members-empty" hidden>Ничего не найдено.</p>
+  {{else}}
+  <p class="empty-hint">В группе пока никого нет.</p>
+  {{end}}
+</section>
+
+{{if .CanEditStudents}}
+<section class="admin-block" id="student-editor" hidden>
+  <h2>Ученик: <span id="student-editor-title"></span></h2>
+  <p class="empty-hint">Запись ученика общая для всего сайта: правка ФИО, имени и аккаунтов видна во всех его группах. Аккаунты подтянутся в таблицы после ближайшей генерации.</p>
+  <input type="hidden" id="student-id" />
+  <label class="jury-action-label" for="student-fullname">ФИО</label>
+  <input type="text" id="student-fullname" />
+  <label class="jury-action-label" for="student-publicname">Показывать как</label>
+  <input type="text" id="student-publicname" placeholder="пусто — по ФИО" />
+  <label class="jury-action-label">Аккаунты</label>
+  <div id="student-accounts"></div>
+  <div class="admin-editor-tools" style="margin-top:0.5rem;">
+    <button type="button" id="student-add-account" class="admin-btn admin-btn--secondary">＋ Аккаунт</button>
+    <button type="button" id="student-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="student-cancel" class="admin-btn admin-btn--secondary">Отмена</button>
+    <span id="student-status" class="admin-editor-status"></span>
+  </div>
+  <datalist id="known-sites">
+    <option value="codeforces"></option>
+    <option value="informatics"></option>
+    <option value="acmp"></option>
+  </datalist>
+</section>
+{{end}}
+
+<script>
+  (function () {
+    var slug = {{.GroupSlug}};
+    var accessToken = {{.GroupToken}};
+    var status = document.getElementById("fio-status");
+
+    function setStatus(m, err) {
+      status.textContent = m;
+      status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+    // Права запроса сервер определяет по токену в адресе или куке сессии.
+    function withToken(url) {
+      if (!accessToken) return url;
+      return url + (url.indexOf("?") < 0 ? "?" : "&") + "token=" + encodeURIComponent(accessToken);
+    }
+    function post(url, body) {
+      body.slug = slug;
+      return fetch(withToken(url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }).then(function (res) {
+        return res.json().then(function (p) {
+          if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status));
+          return p;
+        });
+      });
+    }
+
+    // ── Убрать участника ────────────────────────────────────────────────
+    document.querySelectorAll(".member-remove").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!confirm("Убрать из группы: " + btn.dataset.name + "?\nЗапись ученика останется в базе.")) return;
+        btn.disabled = true;
+        post("/api/group-panel/members/remove", { student_id: btn.dataset.id })
+          .then(function () { location.reload(); })
+          .catch(function (err) { btn.disabled = false; setStatus(err.message, true); });
+      });
+    });
+
+    // ── Правка ученика ──────────────────────────────────────────────────
+    // Запись ученика общая для сайта; сервер пускает править только тех, кто
+    // состоит в этой группе (см. PanelStudentSave).
+    var members = {{.MembersJSON}};
+    var editor = document.getElementById("student-editor");
+    if (editor) (function () {
+      var idField = document.getElementById("student-id");
+      var fullName = document.getElementById("student-fullname");
+      var publicName = document.getElementById("student-publicname");
+      var accountsBox = document.getElementById("student-accounts");
+      var titleNode = document.getElementById("student-editor-title");
+      var st = document.getElementById("student-status");
+
+      function setEditorStatus(m, err) {
+        st.textContent = m;
+        st.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+      }
+      function addAccountRow(site, account) {
+        var row = document.createElement("div");
+        row.className = "account-row";
+        row.style.cssText = "display:flex;gap:0.5rem;margin-top:0.4rem;align-items:center;";
+        var siteInp = document.createElement("input");
+        siteInp.type = "text"; siteInp.className = "acc-site"; siteInp.placeholder = "сайт";
+        siteInp.setAttribute("list", "known-sites"); siteInp.style.maxWidth = "12rem";
+        siteInp.value = site || "";
+        var idInp = document.createElement("input");
+        idInp.type = "text"; idInp.className = "acc-id"; idInp.placeholder = "account_id"; idInp.value = account || "";
+        var del = document.createElement("button");
+        del.type = "button"; del.className = "admin-btn admin-btn--secondary"; del.textContent = "×";
+        del.addEventListener("click", function () { row.remove(); });
+        row.appendChild(siteInp); row.appendChild(idInp); row.appendChild(del);
+        accountsBox.appendChild(row);
+      }
+      function openEditor(id) {
+        var data = null;
+        for (var i = 0; i < members.length; i++) if (members[i].id === id) data = members[i];
+        if (!data) return;
+        idField.value = data.id;
+        fullName.value = data.full_name || "";
+        publicName.value = data.public_name || "";
+        accountsBox.innerHTML = "";
+        (data.accounts || []).forEach(function (a) { addAccountRow(a.site, a.account_id); });
+        if (!(data.accounts || []).length) addAccountRow("", "");
+        titleNode.textContent = data.full_name || data.id;
+        setEditorStatus("", false);
+        editor.hidden = false;
+        editor.scrollIntoView({ block: "nearest" });
+      }
+
+      document.querySelectorAll(".member-edit").forEach(function (btn) {
+        btn.addEventListener("click", function () { openEditor(btn.dataset.id); });
+      });
+      document.getElementById("student-add-account").addEventListener("click", function () { addAccountRow("", ""); });
+      document.getElementById("student-cancel").addEventListener("click", function () { editor.hidden = true; });
+      document.getElementById("student-save").addEventListener("click", function () {
+        var accounts = [];
+        accountsBox.querySelectorAll(".account-row").forEach(function (row) {
+          var site = row.querySelector(".acc-site").value.trim();
+          var acc = row.querySelector(".acc-id").value.trim();
+          if (site && acc) accounts.push({ site: site, account_id: acc });
+        });
+        setEditorStatus("Сохраняю…", false);
+        post("/api/group-panel/students/save", {
+          id: idField.value,
+          full_name: fullName.value,
+          public_name: publicName.value,
+          accounts: accounts
+        })
+          .then(function () { setEditorStatus("Сохранено — обновляю…", false); setTimeout(function () { location.reload(); }, 600); })
+          .catch(function (err) { setEditorStatus(err.message, true); });
+      });
+    })();
+
+    // ── Добавление по списку ФИО ────────────────────────────────────────
+    var names = document.getElementById("fio-names");
+    var planBox = document.getElementById("fio-plan");
+    var applyBtn = document.getElementById("fio-apply");
+    var LABELS = {
+      create: "будет заведён",
+      add: "добавить в группу",
+      already: "уже в группе",
+      ambiguous: "неоднозначно",
+      duplicate: "повтор в списке",
+      unknown: "нет в базе"
+    };
+
+    function renderPlan(plan, applied) {
+      planBox.textContent = "";
+      var sum = document.createElement("p");
+      sum.className = "empty-hint";
+      sum.textContent = (applied ? "Готово. " : "") +
+        "Добавить: " + plan.add + " · Завести новых: " + plan.create +
+        " · Уже в группе: " + plan.already + " · Пропущено: " + plan.warnings;
+      planBox.appendChild(sum);
+
+      var wrap = document.createElement("div");
+      wrap.className = "table-wrap";
+      var table = document.createElement("table");
+      table.className = "standings-table";
+      var thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>ФИО</th><th>Что будет</th><th>Комментарий</th></tr>";
+      table.appendChild(thead);
+      var tb = document.createElement("tbody");
+      plan.rows.forEach(function (row) {
+        var tr = document.createElement("tr");
+        var c1 = document.createElement("td");
+        c1.textContent = row.full_name || row.input;
+        var c2 = document.createElement("td");
+        c2.textContent = LABELS[row.status] || row.status;
+        var c3 = document.createElement("td");
+        c3.textContent = row.note || "";
+        tr.appendChild(c1); tr.appendChild(c2); tr.appendChild(c3);
+        tb.appendChild(tr);
+      });
+      table.appendChild(tb);
+      wrap.appendChild(table);
+      planBox.appendChild(wrap);
+    }
+
+    document.getElementById("fio-dry").addEventListener("click", function () {
+      setStatus("Проверяю…", false);
+      applyBtn.disabled = true;
+      post("/api/group-panel/members/register-names/dry-run", { names: names.value })
+        .then(function (p) {
+          renderPlan(p.plan, false);
+          // Применять есть смысл, только если что-то изменится.
+          applyBtn.disabled = (p.plan.add + p.plan.create) === 0;
+          setStatus(applyBtn.disabled ? "Добавлять нечего" : "Проверьте и примените", false);
+        })
+        .catch(function (err) { setStatus(err.message, true); });
+    });
+
+    applyBtn.addEventListener("click", function () {
+      applyBtn.disabled = true;
+      setStatus("Применяю…", false);
+      post("/api/group-panel/members/register-names/apply", { names: names.value })
+        .then(function (p) {
+          renderPlan(p.plan, true);
+          setStatus("Готово — обновляю список…", false);
+          setTimeout(function () { location.reload(); }, 800);
+        })
+        .catch(function (err) { applyBtn.disabled = false; setStatus(err.message, true); });
+    });
+  })();
+</script>
+{{end}}

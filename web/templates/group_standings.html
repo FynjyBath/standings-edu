@@ -19,6 +19,9 @@
     {{if .Access.CanViewParticipants}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/participants{{if .Token}}?token={{.Token}}{{end}}">Статистика участников</a>
     {{end}}
+    {{if .Access.CanViewIntake}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/manage/intake{{if .Token}}?token={{.Token}}{{end}}" title="Кто подал заявку в группу и с какими аккаунтами.">📮 Анкеты</a>
+    {{end}}
     {{if and .Access.CanEditGrades .JuryHasGrades}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/manage/grades{{if .Token}}?token={{.Token}}{{end}}">✏️ Выставить оценки</a>
     {{end}}
@@ -45,15 +48,6 @@
     <span id="jury-status" class="admin-editor-status"></span>
   </div>
   <div class="jury-actions">
-    {{if .Access.CanViewIntake}}
-    <div class="jury-action">
-      <label class="jury-action-label">Анкеты группы</label>
-      <div class="jury-action-row">
-        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/manage/intake{{if .Token}}?token={{.Token}}{{end}}">📮 Посмотреть анкеты</a>
-      </div>
-      <p class="jury-action-hint">Кто подал заявку в группу и с какими аккаунтами. Только чтение — заводит учеников администратор.</p>
-    </div>
-    {{end}}
     {{if .Access.CanEditGrades}}
     <div class="jury-action">
       <label class="jury-action-label">Оценки группы</label>
@@ -70,6 +64,26 @@
         <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/manage/contests{{if .Token}}?token={{.Token}}{{end}}">🗂 Управление контестами</a>
       </div>
       <p class="jury-action-hint">Добавить, настроить и убрать; свои (inline) контесты — полной формой.</p>
+    </div>
+    {{end}}
+    {{if .Access.CanManageMembers}}
+    <div class="jury-action">
+      <label class="jury-action-label">Состав группы</label>
+      <div class="jury-action-row">
+        <a class="admin-btn" href="/standings/{{.Standings.GroupSlug}}/manage/members{{if .Token}}?token={{.Token}}{{end}}">👥 Управлять составом</a>
+      </div>
+      <p class="jury-action-hint">Добавить участников по списку ФИО и убрать выбывших.</p>
+    </div>
+    {{end}}
+    {{if .Access.CanRunActions}}
+    <div class="jury-action">
+      <label class="jury-action-label">Действия</label>
+      <div class="jury-action-row">
+        {{if .Access.CanGenerate}}<button type="button" id="jury-generate" class="admin-btn">🔄 Пересобрать таблицы</button>{{end}}
+        {{if .Access.CanResetCache}}<button type="button" id="jury-reset-cache" class="admin-btn admin-btn--secondary">🧹 Сбросить кеш</button>{{end}}
+      </div>
+      <p class="jury-action-hint">Пересборка идёт только по этой группе и занимает от нескольких секунд до минут. Сброс кеша заставит перечитать посылки учеников с нуля при следующей генерации.</p>
+      <pre id="jury-action-output" class="admin-log" hidden></pre>
     </div>
     {{end}}
     {{if .Access.CanCreateKonduit}}
@@ -261,6 +275,31 @@
       return fetch(withToken(url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then(function (res) { return res.json().then(function (p) { if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status)); return p; }); });
     }
+    // Действия по группе: пересборка таблиц и сброс кеша. Ответ приходит
+    // синхронно (команда выполняется на сервере), поэтому показываем вывод.
+    var output = document.getElementById("jury-action-output");
+    function runAction(url, body, btn, startText) {
+      btn.disabled = true;
+      setStatus(startText, false);
+      if (output) { output.hidden = true; output.textContent = ""; }
+      post(url, body)
+        .then(function (p) {
+          setStatus("Готово" + (p.duration ? " за " + p.duration : ""), false);
+          if (output && p.output) { output.textContent = p.output; output.hidden = false; }
+        })
+        .catch(function (err) { setStatus(err.message, true); })
+        .then(function () { btn.disabled = false; });
+    }
+    var genBtn = document.getElementById("jury-generate");
+    if (genBtn) genBtn.addEventListener("click", function () {
+      runAction("/api/group-panel/actions/generate", {}, genBtn, "Пересобираю таблицы, это может занять минуту…");
+    });
+    var resetBtn = document.getElementById("jury-reset-cache");
+    if (resetBtn) resetBtn.addEventListener("click", function () {
+      if (!confirm("Сбросить кеш посылок по этой группе?\nСледующая генерация перечитает их с нуля и будет дольше обычной.")) return;
+      runAction("/api/group-panel/actions/reset-cache", { period: "all" }, resetBtn, "Сбрасываю кеш…");
+    });
+
     // Создание кондуита: название + число задач; после создания сразу редактор.
     var konduitBtn = document.getElementById("jury-konduit-create");
     if (konduitBtn) konduitBtn.addEventListener("click", function () {

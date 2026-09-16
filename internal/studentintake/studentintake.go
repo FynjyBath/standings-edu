@@ -405,7 +405,9 @@ func parseIntakeItems(items []map[string]json.RawMessage) ([]domain.Student, err
 	return out, nil
 }
 
-func WriteStudentsFile(path string, students []domain.Student) error {
+// studentItems приводит учеников к форме записи на диск. Форма общая для
+// students.json и очереди анкет: decodeIntakeItem читает ровно эти поля.
+func studentItems(students []domain.Student) []studentJSON {
 	normalized := domain.NormalizeStudents(students)
 
 	items := make([]studentJSON, 0, len(normalized))
@@ -422,8 +424,11 @@ func WriteStudentsFile(path string, students []domain.Student) error {
 		}
 		items = append(items, item)
 	}
+	return items
+}
 
-	if err := fileutil.WriteJSON(path, items, 0o644); err != nil {
+func WriteStudentsFile(path string, students []domain.Student) error {
+	if err := fileutil.WriteJSON(path, studentItems(students), 0o644); err != nil {
 		return fmt.Errorf("write students %q: %w", path, err)
 	}
 	return nil
@@ -919,4 +924,173 @@ func (s *Store) PendingIntake(stagingPath string) ([]domain.Student, error) {
 		return nil, err
 	}
 	return merged, nil
+}
+
+// GroupMergeStats — итог приёма анкет одной группы.
+type GroupMergeStats struct {
+	// Accepted — сколько анкет принято в группу.
+	Accepted int
+	// Created/Updated — сколько учеников заведено заново и сколько обновлено
+	// (анкета сошлась по ФИО с уже существующим).
+	Created int
+	Updated int
+	// Remaining — сколько анкет осталось ждать (чужие группы и непринятые).
+	Remaining int
+}
+
+// MergeGroupIntake принимает анкеты, поданные в одну группу: ученики заводятся
+// (или находятся по ФИО) в общем students.json и добавляются в состав группы,
+// а сами анкеты уходят из очереди. fullNames != nil — принять только
+// перечисленные ФИО, иначе все анкеты этой группы.
+//
+// Отличие от админского merge (bin/merge_students по всему staging): здесь
+// обрабатываются только записи своей группы. Анкета, поданная сразу в
+// несколько групп, остаётся в очереди для остальных — из её списка вычёркивается
+// только принятая группа.
+//
+// Очередь анкет живёт в двух файлах (свежие и staging админки), поэтому, как и
+// admin-«Подготовить», операция сливает их в один: остаток пишется в staging,
+// свежий файл очищается.
+func (s *Store) MergeGroupIntake(dataDir, stagingPath, slug string, fullNames []string) (GroupMergeStats, error) {
+	slug = strings.TrimSpace(slug)
+	if !domain.IsValidSlug(slug) {
+		return GroupMergeStats{}, ErrInvalidGroupSlug
+	}
+	stagingPath = filepath.Clean(strings.TrimSpace(stagingPath))
+	if stagingPath == "" || stagingPath == "." {
+		return GroupMergeStats{}, fmt.Errorf("staging path is required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	read := func(path string) ([]domain.Student, error) {
+		if strings.TrimSpace(path) == "" {
+			return nil, nil
+		}
+		list, err := LoadIntakeFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return list, nil
+	}
+	staging, err := read(stagingPath)
+	if err != nil {
+		return GroupMergeStats{}, err
+	}
+	fresh, err := read(s.intakePath)
+	if err != nil {
+		return GroupMergeStats{}, err
+	}
+	pending, _, err := MergeStudents(staging, fresh)
+	if err != nil {
+		return GroupMergeStats{}, err
+	}
+
+	// nil — берём все анкеты группы; иначе только выбранные ФИО.
+	var want map[string]struct{}
+	if fullNames != nil {
+		want = make(map[string]struct{}, len(fullNames))
+		for _, name := range fullNames {
+			if key := domain.NormalizeWhitespace(name); key != "" {
+				want[strings.ToLower(key)] = struct{}{}
+			}
+		}
+	}
+
+	selected := make([]domain.Student, 0, len(pending))
+	remaining := make([]domain.Student, 0, len(pending))
+	for _, raw := range pending {
+		student := domain.NormalizeStudent(raw)
+		picked := containsGroupSlug(student.Groups, slug)
+		if picked && want != nil {
+			_, picked = want[strings.ToLower(student.FullName)]
+		}
+		if !picked {
+			remaining = append(remaining, student)
+			continue
+		}
+		accepted := student
+		accepted.Groups = []string{slug}
+		selected = append(selected, accepted)
+
+		// Анкета могла быть подана и в другие группы — там её ещё не приняли.
+		if rest := groupsWithout(student.Groups, slug); len(rest) > 0 {
+			other := student
+			other.Groups = rest
+			remaining = append(remaining, other)
+		}
+	}
+	if len(selected) == 0 {
+		return GroupMergeStats{Remaining: len(remaining)}, fmt.Errorf("нечего принимать: подходящих анкет нет")
+	}
+
+	studentsPath := filepath.Join(dataDir, "students.json")
+	existing, err := LoadStudentsFile(studentsPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return GroupMergeStats{}, err
+	}
+	merged, stats, err := MergeStudents(existing, selected)
+	if err != nil {
+		return GroupMergeStats{}, err
+	}
+	if err := WriteStudentsFile(studentsPath, merged); err != nil {
+		return GroupMergeStats{}, err
+	}
+	if err := AddStudentsToGroups(dataDir, merged, selected); err != nil {
+		return GroupMergeStats{}, err
+	}
+
+	// Очередь: остаток — в staging, свежий файл очищаем (он уже учтён).
+	if err := writeIntakeFile(stagingPath, remaining); err != nil {
+		return GroupMergeStats{}, err
+	}
+	intakeMode, err := fileutil.DetectFileMode(s.intakePath, 0o644)
+	if err != nil {
+		return GroupMergeStats{}, err
+	}
+	if err := fileutil.WriteFileAtomic(s.intakePath, []byte("[]\n"), intakeMode); err != nil {
+		return GroupMergeStats{}, fmt.Errorf("clear source intake file %q: %w", s.intakePath, err)
+	}
+
+	return GroupMergeStats{
+		Accepted:  len(selected),
+		Created:   stats.Added,
+		Updated:   stats.Updated,
+		Remaining: len(remaining),
+	}, nil
+}
+
+// containsGroupSlug — есть ли слаг в списке групп анкеты.
+func containsGroupSlug(groups []string, slug string) bool {
+	for _, g := range groups {
+		if strings.EqualFold(strings.TrimSpace(g), slug) {
+			return true
+		}
+	}
+	return false
+}
+
+// groupsWithout — список групп без указанной.
+func groupsWithout(groups []string, slug string) []string {
+	out := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if strings.EqualFold(strings.TrimSpace(g), slug) {
+			continue
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+// writeIntakeFile пишет очередь анкет в том же виде, в каком её читает
+// LoadIntakeFile (id/full_name/public_name/accounts/groups).
+func writeIntakeFile(path string, students []domain.Student) error {
+	if err := fileutil.WriteJSON(path, studentItems(students), 0o644); err != nil {
+		return fmt.Errorf("write intake %q: %w", path, err)
+	}
+	return nil
 }

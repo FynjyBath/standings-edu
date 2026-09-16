@@ -21,6 +21,9 @@ const (
 	fioStatusAlready   = "already"   // уже в группе — ничего не делаем
 	fioStatusAmbiguous = "ambiguous" // несколько учеников с таким ФИО — пропуск
 	fioStatusDuplicate = "duplicate" // повтор в самом списке — пропуск
+	// fioStatusUnknown — ФИО нет в базе, а права заводить новых учеников нет
+	// (режим «только из уже заведённых»): строка пропускается.
+	fioStatusUnknown = "unknown"
 )
 
 // maxFIORegLines — верхний предел строк, чтобы случайная огромная вставка не
@@ -128,24 +131,34 @@ func (h *Handlers) adminGroupRegisterNames(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	slug := strings.TrimSpace(req.Slug)
-	if !domain.IsValidSlug(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid slug"})
+	// В админке новых учеников заводить можно всегда.
+	plan, status, msg := h.registerGroupNames(strings.TrimSpace(req.Slug), req.Names, apply, true)
+	if msg != "" {
+		writeJSON(w, status, map[string]any{"ok": false, "error": msg})
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "plan": plan, "applied": apply})
+}
+
+// registerGroupNames — разбор и (при apply) применение списка ФИО к составу
+// группы. allowCreate=false — режим «только из уже заведённых»: незнакомые ФИО
+// не создаются, а помечаются отдельным статусом и пропускаются (право
+// members.manage распоряжается составом, но не заводит учеников в общей базе).
+// Общий helper админки и панели группы.
+func (h *Handlers) registerGroupNames(slug, rawNames string, apply, allowCreate bool) (FIORegPlan, int, string) {
+	if !domain.IsValidSlug(slug) {
+		return FIORegPlan{}, http.StatusBadRequest, "invalid slug"
 	}
 	groupFile, ok, err := h.readGroupFile(slug)
 	if err != nil || !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "group not found"})
-		return
+		return FIORegPlan{}, http.StatusBadRequest, "group not found"
 	}
 	if len(groupFile.MemberGroups) > 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "у объединённой группы нет своего состава — регистрируйте ФИО в группы-участницы"})
-		return
+		return FIORegPlan{}, http.StatusBadRequest, "у объединённой группы нет своего состава — регистрируйте ФИО в группы-участницы"
 	}
 	students, err := h.loadStudentsList()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
+		return FIORegPlan{}, http.StatusInternalServerError, err.Error()
 	}
 
 	memberIDs := make(map[string]struct{}, len(groupFile.StudentIDs))
@@ -153,15 +166,15 @@ func (h *Handlers) adminGroupRegisterNames(w http.ResponseWriter, r *http.Reques
 		memberIDs[id] = struct{}{}
 	}
 
-	plan := planFIORegistration(students, memberIDs, req.Names)
+	plan := planFIORegistration(students, memberIDs, rawNames)
 	if plan.Total == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "список пуст — введите ФИО по одному в строке"})
-		return
+		return FIORegPlan{}, http.StatusBadRequest, "список пуст — введите ФИО по одному в строке"
 	}
-
+	if !allowCreate {
+		plan.demoteCreateRows()
+	}
 	if !apply {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "plan": plan, "applied": false})
-		return
+		return plan, http.StatusOK, ""
 	}
 
 	// Применение: создаём новых учеников (уникальные id, пустые аккаунты) и
@@ -196,19 +209,35 @@ func (h *Handlers) adminGroupRegisterNames(w http.ResponseWriter, r *http.Reques
 
 	if created > 0 {
 		if err := studentintake.WriteStudentsFile(h.dataPath("students.json"), students); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
+			return FIORegPlan{}, http.StatusInternalServerError, err.Error()
 		}
 	}
 	if len(additions) > 0 {
 		groupFile.StudentIDs = domain.MergeGroups(groupFile.StudentIDs, additions)
 		if err := h.writeGroupFile(slug, groupFile); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
+			return FIORegPlan{}, http.StatusInternalServerError, err.Error()
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "plan": plan, "applied": true})
+	return plan, http.StatusOK, ""
+}
+
+// demoteCreateRows переводит строки «создать нового» в «пропущено»: в режиме без
+// права заводить учеников такие ФИО не создаются. Счётчики пересобираются,
+// чтобы превью показывало честные числа.
+func (p *FIORegPlan) demoteCreateRows() {
+	if p.Create == 0 {
+		return
+	}
+	for i := range p.Rows {
+		if p.Rows[i].Status != fioStatusCreate {
+			continue
+		}
+		p.Rows[i].Status = fioStatusUnknown
+		p.Rows[i].Note = "такого ученика нет в базе — нужно право «Заводить новых учеников»"
+		p.Warnings++
+	}
+	p.Create = 0
 }
 
 // AdminGroupRegisterNamesDryRun — превью регистрации списка ФИО (без записи).

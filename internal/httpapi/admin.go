@@ -27,7 +27,10 @@ import (
 const maxAdminJSONBodyBytes = 8 << 20
 
 const (
-	adminIntakePath        = "data/student_intake.json"
+	adminIntakePath = "data/student_intake.json"
+	// adminIntakeStagingPath — файл-пачка старой схемы. Приём анкет им больше не
+	// пользуется (ядро вливает остаток в очередь), но открыть его в редакторе
+	// можно, пока он не удалён с диска.
 	adminIntakeStagingPath = "data/student_intake_admin.json"
 )
 
@@ -245,10 +248,6 @@ type adminGroupGradesSaveRequest struct {
 
 type adminFileRequest struct {
 	Path    string `json:"path"`
-	Content string `json:"content"`
-}
-
-type adminIntakeMergeRequest struct {
 	Content string `json:"content"`
 }
 
@@ -1554,22 +1553,6 @@ func decodeAdminFileRequest(r *http.Request) (adminFileRequest, error) {
 	req.Path = strings.TrimSpace(req.Path)
 	if req.Path == "" {
 		return adminFileRequest{}, fmt.Errorf("path is required")
-	}
-
-	return req, nil
-}
-
-func decodeAdminIntakeMergeRequest(r *http.Request) (adminIntakeMergeRequest, error) {
-	var req adminIntakeMergeRequest
-
-	decoder := json.NewDecoder(io.LimitReader(r.Body, maxAdminJSONBodyBytes))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		return adminIntakeMergeRequest{}, fmt.Errorf("invalid request body: %w", err)
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return adminIntakeMergeRequest{}, fmt.Errorf("request body must contain a single JSON object")
 	}
 
 	return req, nil

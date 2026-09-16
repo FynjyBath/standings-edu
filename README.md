@@ -593,8 +593,19 @@ merge; или `go run ./cmd/merge_students -write`). Сопоставление 
 - **Favicon'ы** (`web/static/favicon*`, `apple-touch-icon.png`) в git **не
   отслеживаются** — каждый сервер держит свои; при обновлении кода они не
   затираются. На новый сервер их копируют руками (scp).
-- **Бинарники:** после обновления кода пересоберите оба —
-  `go build -o bin/server ./cmd/server && go build -o bin/generate ./cmd/generate`.
+- **Бинарники:** после обновления кода пересоберите **все четыре**:
+
+  ```bash
+  for c in server generate create_group merge_students; do go build -o bin/$c ./cmd/$c; done
+  ```
+
+  Пересобирать только `server` и `generate` — нельзя. Админка запускает
+  `bin/merge_students` и `bin/create_group` как подпроцессы, и они работают с
+  теми же `data/`-файлами. Устаревший бинарник не знает про поля, добавленные
+  позже: при разборе JSON они молча теряются, а при записи файла — исчезают с
+  диска. Так, `merge_students`, собранный до появления доступов, стирал
+  `accesses` из `group.json` каждой группы, куда принимал ученика.
+
   Шаблоны (`web/templates`) и статика читаются с диска, для их правок
   пересборка не нужна.
 
@@ -640,6 +651,8 @@ go run ./cmd/merge_students -dry-run   # или -write
 gofmt -l . && go vet ./... && go test ./...
 go run ./cmd/generate -group <тестовая_группа>
 go run ./cmd/server   # и глазами проверить страницы
+# и обязательно — пересборка ВСЕХ бинарников (см. «Эксплуатация»):
+for c in server generate create_group merge_students; do go build -o bin/$c ./cmd/$c; done
 ```
 
 ---

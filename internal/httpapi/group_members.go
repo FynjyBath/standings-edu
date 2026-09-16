@@ -213,57 +213,6 @@ func (h *Handlers) PanelStudentSave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": savedID})
 }
 
-// PanelIntakeMerge — принять анкеты своей группы (право intake.merge):
-// ученики заводятся или находятся по ФИО и добавляются в состав группы.
-// full_names пустой — принять все анкеты группы.
-func (h *Handlers) PanelIntakeMerge(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Slug      string   `json:"slug"`
-		FullNames []string `json:"full_names"`
-	}
-	if err := decodeAdminJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
-		return
-	}
-	slug := strings.TrimSpace(req.Slug)
-	acc, allowed := h.requirePerm(w, r, slug, domain.PermIntakeMerge)
-	if !allowed {
-		return
-	}
-	if h.intake == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "приём анкет не настроен"})
-		return
-	}
-	// Глобальный доступ со scope=all покрывает любой слаг, а приём анкет умеет
-	// заводить группу «по дороге» (AddStudentsToGroups создаёт скелет). Создание
-	// групп — не это право, поэтому по несуществующему слагу отказываем.
-	if !h.groupExists(slug) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "группа не найдена"})
-		return
-	}
-	// Заводить учеников умеет только merge — но добавляет он их строго в свою
-	// группу, поэтому отдельного members.* здесь не требуем.
-	var names []string
-	if len(req.FullNames) > 0 {
-		names = req.FullNames
-	}
-	stats, err := h.intake.MergeGroupIntake(h.admin.cfg.DataDir, h.dataPath("student_intake_admin.json"), slug, names)
-	errMsg := ""
-	if err != nil {
-		errMsg = err.Error()
-	}
-	h.auditAccessResult(r, acc, slug, "intake.merge",
-		"принято "+strconv.Itoa(stats.Accepted)+", заведено "+strconv.Itoa(stats.Created), errMsg)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": errMsg})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok": true, "accepted": stats.Accepted, "created": stats.Created,
-		"updated": stats.Updated, "remaining": stats.Remaining,
-	})
-}
-
 // PanelActionGenerate — пересобрать таблицы своей группы (право
 // actions.generate). Запускается тот же bin/generate, что и в админке, но с
 // -group: чужие таблицы доступ не трогает. Параллельные запуски отсекает общий

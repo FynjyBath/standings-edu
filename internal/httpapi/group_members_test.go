@@ -189,11 +189,11 @@ func TestIntakeMergeGroupScope(t *testing.T) {
 	}
 
 	// Жюри принять не может — только смотреть.
-	if code, _ := juryPost(t, h.PanelIntakeMerge, tokJury, map[string]any{"slug": "g1"}); code != http.StatusForbidden {
+	if code, _ := juryPost(t, h.PanelIntakeAccept, tokJury, map[string]any{"slug": "g1"}); code != http.StatusForbidden {
 		t.Errorf("жюри: code=%d, ожидался 403", code)
 	}
 
-	code, resp := juryPost(t, h.PanelIntakeMerge, tokAdmin, map[string]any{"slug": "g1"})
+	code, resp := juryPost(t, h.PanelIntakeAccept, tokAdmin, map[string]any{"slug": "g1"})
 	if code != http.StatusOK {
 		t.Fatalf("приём анкет: code=%d, resp=%v", code, resp)
 	}
@@ -219,7 +219,7 @@ func TestIntakeMergeGroupScope(t *testing.T) {
 	}
 
 	// В очереди осталась чужая анкета и «двойная» — но уже только для g2.
-	pending, err := h.intake.PendingIntake(filepath.Join(dataDir, "student_intake_admin.json"))
+	pending, err := h.intake.IntakeQueue(filepath.Join(dataDir, "student_intake_admin.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestPanelPagesRender(t *testing.T) {
 		want    []string
 	}{
 		{"состав/админ", h.GroupManageMembersPage, tokAdmin, []string{"Состав группы", "Иванов И.", "Править"}},
-		{"анкеты/админ", h.GroupIntakePage, tokAdmin, []string{"Новиков Новик", "Принять"}},
+		{"анкеты/админ", h.GroupIntakePage, tokAdmin, []string{"Новиков Новик", `id="intake-accept"`, `id="intake-editor"`}},
 		{"анкеты/жюри", h.GroupIntakePage, tokJury, []string{"Новиков Новик"}},
 	}
 	for _, p := range pages {
@@ -380,10 +380,13 @@ func TestPanelPagesRender(t *testing.T) {
 		}
 	}
 
-	// Жюри анкеты видит, но кнопки приёма у него нет.
+	// Жюри анкеты видит, но управления приёмом у него нет (скрипт страницы
+	// упоминает те же id, поэтому ищем именно разметку кнопок).
 	rec := accessGet(t, h.GroupIntakePage, "/x?token="+tokJury, "g1")
-	if strings.Contains(rec.Body.String(), "intake-accept") {
-		t.Error("жюри не должно видеть кнопку приёма анкет")
+	for _, marker := range []string{`id="intake-accept"`, `class="intake-pick"`, `id="intake-editor"`} {
+		if strings.Contains(rec.Body.String(), marker) {
+			t.Errorf("жюри не должно видеть управление приёмом (%s)", marker)
+		}
 	}
 	// Наблюдателю состав закрыт.
 	if rec := accessGet(t, h.GroupManageMembersPage, "/x?token="+tokObserver, "g1"); rec.Code != http.StatusForbidden {
@@ -406,7 +409,7 @@ func TestPanelOperationsRejectUnknownGroup(t *testing.T) {
 		   "perms":["members.manage","members.register","students.edit","intake.merge","actions.generate"]}]`)
 
 	cases := map[string]http.HandlerFunc{
-		"intake":   h.PanelIntakeMerge,
+		"intake":   h.PanelIntakeAccept,
 		"register": h.PanelRegisterNamesApply,
 		"remove":   h.PanelMemberRemove,
 		"generate": h.PanelActionGenerate,

@@ -17,6 +17,7 @@ import (
 
 	"standings-edu/internal/domain"
 	"standings-edu/internal/storage"
+	"standings-edu/internal/studentintake"
 	"standings-edu/internal/web"
 )
 
@@ -1023,16 +1024,18 @@ func TestGroupParticipantsByToken(t *testing.T) {
 	}
 }
 
-// Dry-run merge через хендлер: возвращает превью без записи.
+// «Что произойдёт» в админке: возвращает превью по очереди, ничего не пишет.
 func TestAdminIntakeMergeDryRun(t *testing.T) {
 	h, dataDir := newTestHandlers(t)
 	writeTestFile(t, filepath.Join(dataDir, "students.json"), `[{"id":"voron-ea","full_name":"Ворон Егор Андреевич"}]`)
 	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"), `{"title":"Г","student_ids":["voron-ea"]}`)
+	writeTestFile(t, filepath.Join(dataDir, "student_intake.json"),
+		`[{"full_name":"Ворон Егор Андреевич","groups":["g1"]},{"full_name":"Новый Ученик","groups":["g1"]}]`)
+	h.intake = studentintake.NewStore(filepath.Join(dataDir, "student_intake.json"))
 
-	body := `{"content":"[{\"full_name\":\"Ворон Егор Андреевич\",\"groups\":[\"g1\"]},{\"full_name\":\"Новый Ученик\",\"groups\":[\"g1\"]}]"}`
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{}`))
 	rec := httptest.NewRecorder()
-	h.AdminIntakeMergeDryRun(rec, req)
+	h.AdminIntakePreview(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("dry-run code=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -1060,10 +1063,14 @@ func TestAdminIntakeMergeDryRun(t *testing.T) {
 	if !resp.Preview.Students[0].Groups[0].AlreadyMember || resp.Preview.Students[1].Groups[0].AlreadyMember {
 		t.Fatalf("membership flags wrong: %+v", resp.Preview.Students)
 	}
-	// Ничего не записано.
+	// Ничего не записано: ни в группу, ни в очередь.
 	gbody, _ := os.ReadFile(filepath.Join(dataDir, "groups", "g1", "group.json"))
 	if strings.Contains(string(gbody), "Новый") || strings.Contains(string(gbody), "novyy") {
-		t.Fatalf("dry-run must not write group: %s", gbody)
+		t.Fatalf("превью не должно писать в группу: %s", gbody)
+	}
+	qbody, _ := os.ReadFile(filepath.Join(dataDir, "student_intake.json"))
+	if !strings.Contains(string(qbody), "Новый Ученик") {
+		t.Fatalf("превью не должно трогать очередь: %s", qbody)
 	}
 }
 

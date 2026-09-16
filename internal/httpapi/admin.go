@@ -687,116 +687,55 @@ func (h *Handlers) AdminFileSave(w http.ResponseWriter, r *http.Request) {
 
 // AdminIntakePage — страница «Анкеты учеников»: форма над тем же staging-флоу
 // (prepare → dry-run → merge), что и раньше; данные подтягивает JS.
+// Анкеты в админке — та же очередь и то же ядро, что на странице группы
+// (см. intake.go): показать, посмотреть «что произойдёт», принять выбранные,
+// поправить или убрать. Разница только в отсутствии фильтра по группе.
 func (h *Handlers) AdminIntakePage(w http.ResponseWriter, _ *http.Request) {
-	page := struct {
-		PageTitle string
-		Footer    FooterInfo
-	}{PageTitle: "Анкеты учеников", Footer: h.buildFooterInfo()}
+	page := IntakePageData{
+		PageTitle: "Анкеты учеников",
+		Footer:    h.buildFooterInfo(),
+		Admin:     true,
+		CanAccept: true,
+		CanEdit:   true,
+		APIBase:   "/api/admin/intake",
+	}
+	if h.intake == nil {
+		http.Error(w, "приём анкет не настроен", http.StatusInternalServerError)
+		return
+	}
+	rows, rowsJSON, err := h.intakeRows("")
+	if err != nil {
+		h.logger.Printf("ERROR read intake queue: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	page.Rows = rows
+	page.RowsJSON = rowsJSON
+	page.KnownGroups = h.allGroupSlugs()
+	w.Header().Set("Cache-Control", "no-store")
 	if err := h.renderer.Render(w, http.StatusOK, "admin_intake.html", page); err != nil {
 		h.logger.Printf("ERROR render admin intake page: %v", err)
 	}
 }
 
-func (h *Handlers) AdminIntakeStagingPrepare(w http.ResponseWriter, _ *http.Request) {
-	if h.intake == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"ok":    false,
-			"error": "intake store is not configured",
-		})
-		return
-	}
-
-	stagingPath := filepath.Join(h.admin.cfg.DataDir, "student_intake_admin.json")
-	body, err := h.intake.PrepareAdminIntakeStaging(stagingPath)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"ok":    false,
-			"error": err.Error(),
-		})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":      true,
-		"path":    adminIntakeStagingPath,
-		"content": string(body),
-	})
+// AdminIntakePreview — что произойдёт при приёме выбранных анкет.
+func (h *Handlers) AdminIntakePreview(w http.ResponseWriter, r *http.Request) {
+	h.intakePreview(w, r, false)
 }
 
-func (h *Handlers) AdminIntakeStagingMerge(w http.ResponseWriter, r *http.Request) {
-	if h.intake == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"ok":    false,
-			"error": "intake store is not configured",
-		})
-		return
-	}
-
-	req, err := decodeAdminIntakeMergeRequest(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"ok":    false,
-			"error": err.Error(),
-		})
-		return
-	}
-	if err := validateJSONSyntax(req.Content); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"ok":    false,
-			"error": err.Error(),
-		})
-		return
-	}
-
-	stagingPath := filepath.Join(h.admin.cfg.DataDir, "student_intake_admin.json")
-	if err := h.intake.SaveAdminIntakeStaging(stagingPath, []byte(req.Content)); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"ok":    false,
-			"error": err.Error(),
-		})
-		return
-	}
-
-	result := h.runAdminAction("merge_intake_staging", func() AdminActionResult {
-		return h.executeMergeIntakeStagingAction(stagingPath)
-	})
-	h.setAdminResult(result)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":             true,
-		"action_success": result.Success,
-	})
+// AdminIntakeAccept — принять выбранные анкеты (все группы, указанные в них).
+func (h *Handlers) AdminIntakeAccept(w http.ResponseWriter, r *http.Request) {
+	h.intakeAccept(w, r, false)
 }
 
-// AdminIntakeMergeDryRun — пробный merge intake из содержимого редактора:
-// показывает, какие анкеты в кого разрешатся и в какие группы попадут, без
-// записи на диск.
-func (h *Handlers) AdminIntakeMergeDryRun(w http.ResponseWriter, r *http.Request) {
-	if h.admin == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
-		return
-	}
-	req, err := decodeAdminIntakeMergeRequest(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	intake, err := studentintake.ParseIntakeBytes([]byte(req.Content))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	existing, err := studentintake.LoadStudentsFile(filepath.Join(h.admin.cfg.DataDir, "students.json"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	preview, err := studentintake.BuildMergePreview(h.admin.cfg.DataDir, existing, intake)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "preview": preview})
+// AdminIntakeEntrySave — правка анкеты до приёма (в т.ч. списка групп).
+func (h *Handlers) AdminIntakeEntrySave(w http.ResponseWriter, r *http.Request) {
+	h.intakeEntrySave(w, r, false)
+}
+
+// AdminIntakeEntryDiscard — убрать анкету, не заводя ученика.
+func (h *Handlers) AdminIntakeEntryDiscard(w http.ResponseWriter, r *http.Request) {
+	h.intakeEntryDiscard(w, r, false)
 }
 
 func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult) AdminActionResult {
@@ -845,21 +784,6 @@ func (h *Handlers) executeCreateGroupAction(slug, name, formLink, shortName stri
 	}
 	commands := []adminCommand{{Path: createGroupBinary, Args: args}}
 	return h.runCommandSequence("create_group", commands)
-}
-
-func (h *Handlers) executeMergeIntakeStagingAction(stagingPath string) AdminActionResult {
-	mergeBinary := filepath.Join(h.admin.cfg.ProjectRoot, "bin", "merge_students")
-	commands := []adminCommand{
-		{
-			Path: mergeBinary,
-			Args: []string{
-				"-data-dir", h.admin.cfg.DataDir,
-				"-intake-file", stagingPath,
-				"-write",
-			},
-		},
-	}
-	return h.runCommandSequence("merge_intake_staging", commands)
 }
 
 func (h *Handlers) runCommandSequence(action string, commands []adminCommand) AdminActionResult {

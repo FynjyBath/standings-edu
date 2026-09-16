@@ -1,321 +1,330 @@
 {{define "content"}}
+{{/* Одна страница на два вида: админка (все анкеты, можно менять группы) и
+     панель группы (только свои анкеты). Отличия — в .Admin и .CanAccept/.CanEdit. */}}
 <section class="page-head">
-  <h1>Анкеты учеников</h1>
+  <h1>{{if .Admin}}Анкеты учеников{{else}}Анкеты: {{.GroupTitle}}{{end}}</h1>
   <p class="summary-links">
-    <a class="summary-link-btn" href="/standings/admin">← В админку</a>
+    {{if .Admin}}
+    <a class="summary-link-btn" href="/standings/admin">← Админка</a>
+    {{else}}
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}{{if .Token}}?token={{.Token}}{{end}}">← Таблицы группы</a>
+    {{if .RoleTitle}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
+    {{end}}
   </p>
-  <p class="empty-hint">Анкеты, присланные через формы. Поправьте ФИО/группы/аккаунты, уберите мусорные, затем «Пробный запуск» покажет, кто в кого сольётся и в какие группы попадёт. «Слить анкеты» применяет merge (как раньше). После merge нажмите «Сгенерировать таблицы».</p>
+  <p class="empty-hint">
+    {{if .Admin}}Все неподтверждённые анкеты сайта.{{else}}Анкеты, поданные в эту группу.{{end}}
+    {{if .CanAccept}}
+    Отметьте нужные, посмотрите «Что произойдёт» и примите: ученик заводится (или находится по ФИО) и попадает в свои группы.
+    Неотмеченные остаются в очереди — ничего не теряется.
+    {{else}}
+    Список только для чтения: подтверждает анкеты тот, у кого есть право «Принимать анкеты».
+    {{end}}
+  </p>
 </section>
 
 <section class="admin-block">
+  {{if .Rows}}
   <div class="filter-bar">
-    <input type="search" id="intake-filter" class="filter-input" placeholder="Фильтр по ФИО…" autocomplete="off" spellcheck="false" />
+    <input type="search" class="filter-input" placeholder="Фильтр по ФИО или аккаунту…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#intake-tbody > tr" data-filter-count="#intake-count" data-filter-empty="#intake-empty" />
     <span class="filter-count" id="intake-count"></span>
   </div>
-  <div id="intake-list"></div>
-  <div class="empty-state" id="intake-empty" hidden><span class="empty-state-icon" aria-hidden="true">📮</span><p>Анкет пока нет — появятся после заполнения форм учениками.</p></div>
-  <p class="empty-hint" id="intake-nomatch" hidden>Ничего не найдено.</p>
+  <div class="table-wrap">
+    <table class="standings-table data-table">
+      <thead>
+        <tr>
+          {{if .CanAccept}}<th class="count-col"><input type="checkbox" id="intake-all" title="Отметить все" /></th>{{end}}
+          <th class="student-col">ФИО</th>
+          <th>Показывать как</th>
+          <th>Аккаунты</th>
+          <th>{{if .Admin}}Группы{{else}}Состояние{{end}}</th>
+          {{if .CanEdit}}<th></th>{{end}}
+        </tr>
+      </thead>
+      <tbody id="intake-tbody">
+        {{range .Rows}}
+        <tr data-filter-text="{{.FullName}} {{.PublicName}} {{range .Accounts}}{{.Site}} {{.AccountID}} {{end}}"
+            data-full-name="{{.FullName}}">
+          {{if $.CanAccept}}
+          <td><input type="checkbox" class="intake-pick" value="{{.FullName}}" /></td>
+          {{end}}
+          <td class="student-name">{{.FullName}}</td>
+          <td>{{.PublicName}}</td>
+          <td>
+            {{if .Accounts}}{{range .Accounts}}<code>{{.Site}}:{{.AccountID}}</code> {{end}}
+            {{else}}<span class="grade-weight">— не указаны</span>{{end}}
+          </td>
+          <td>
+            {{if $.Admin}}
+              {{if .Groups}}{{range $i, $g := .Groups}}{{if $i}}, {{end}}<code>{{$g}}</code>{{end}}
+              {{else}}<span class="grade-weight">— без группы</span>{{end}}
+              {{if .KnownStudent}} <span class="dir-tag">ученик уже есть</span>{{end}}
+            {{else}}
+              {{if .InGroup}}<span class="dir-tag">уже в группе</span>
+              {{else if .KnownStudent}}<span class="dir-tag">ученик уже есть в базе</span>
+              {{else}}<span class="grade-weight">новый ученик</span>{{end}}
+              {{if .OtherGroups}}<span class="grade-weight">· ещё группы: {{range $i, $g := .OtherGroups}}{{if $i}}, {{end}}{{$g}}{{end}}</span>{{end}}
+            {{end}}
+          </td>
+          {{if $.CanEdit}}
+          <td class="intake-row-actions">
+            <button type="button" class="admin-btn admin-btn--secondary intake-edit">Править</button>
+            <button type="button" class="admin-btn admin-btn--secondary intake-discard" title="Убрать анкету, не заводя ученика">✕</button>
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="intake-empty" hidden>Ничего не найдено.</p>
 
-  <div class="admin-editor-tools" style="margin-top:0.9rem;">
-    <button type="button" id="intake-dryrun" class="admin-btn admin-btn--secondary">Пробный запуск (что куда)</button>
-    <button type="button" id="intake-merge" class="admin-btn" disabled>Слить анкеты</button>
+  {{if .CanAccept}}
+  <div class="admin-editor-tools" style="margin-top:0.6rem;">
+    <button type="button" id="intake-preview" class="admin-btn admin-btn--secondary">Что произойдёт</button>
+    <button type="button" id="intake-accept" class="admin-btn">Принять отмеченные</button>
     <span id="intake-status" class="admin-editor-status"></span>
   </div>
-  <div id="intake-preview" style="margin-top:0.8rem;"></div>
-
-  <details style="margin-top:1rem;" id="intake-json-details">
-    <summary class="empty-hint" style="cursor:pointer;">Режим эксперта (JSON)</summary>
-    <div id="intake-json" class="admin-editor" style="margin-top:0.5rem;" aria-label="JSON editor"></div>
-    <div class="admin-editor-tools" style="margin-top:0.4rem;">
-      <button type="button" id="intake-json-apply" class="admin-btn admin-btn--secondary">Применить JSON к форме</button>
-      <span id="intake-json-status" class="admin-editor-status"></span>
-    </div>
-  </details>
+  <div id="intake-preview-box" style="margin-top:0.6rem;"></div>
+  <p class="empty-hint">Ученики появятся в таблицах после ближайшей генерации.</p>
+  {{end}}
+  {{else}}
+  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">📮</span><p>Неподтверждённых анкет{{if not .Admin}} в эту группу{{end}} нет.</p></div>
+  {{end}}
 </section>
 
-<script src="/static/vendor/ace/ace.js"></script>
-<script src="/static/vendor/ace/mode-json.js"></script>
-<script src="/static/vendor/ace/theme-github.js"></script>
-<script src="/static/vendor/ace/theme-tomorrow_night.js"></script>
+{{if .CanEdit}}
+<section class="admin-block" id="intake-editor" hidden>
+  <h2>Анкета: <span id="intake-editor-title"></span></h2>
+  <p class="empty-hint">
+    Правка до приёма: опечатка в ФИО, публичное имя, аккаунты{{if .Admin}}, группы{{end}}.
+    ФИО — ключ: по нему анкета сходится с уже существующим учеником.
+    {{if not .Admin}}Список групп анкеты меняет только администратор.{{end}}
+  </p>
+  <input type="hidden" id="intake-orig-name" />
+  <label class="jury-action-label" for="intake-fullname">ФИО</label>
+  <input type="text" id="intake-fullname" />
+  <label class="jury-action-label" for="intake-publicname">Показывать как</label>
+  <input type="text" id="intake-publicname" placeholder="пусто — по ФИО" />
+  {{if .Admin}}
+  <label class="jury-action-label" for="intake-groups">Группы (через запятую)</label>
+  <input type="text" id="intake-groups" list="known-groups" placeholder="например: group_10a, group_11b" />
+  <datalist id="known-groups">
+    {{range .KnownGroups}}<option value="{{.}}"></option>{{end}}
+  </datalist>
+  {{end}}
+  <label class="jury-action-label">Аккаунты</label>
+  <div id="intake-accounts"></div>
+  <div class="admin-editor-tools" style="margin-top:0.5rem;">
+    <button type="button" id="intake-add-account" class="admin-btn admin-btn--secondary">＋ Аккаунт</button>
+    <button type="button" id="intake-save" class="admin-btn">Сохранить</button>
+    <button type="button" id="intake-cancel" class="admin-btn admin-btn--secondary">Отмена</button>
+    <span id="intake-editor-status" class="admin-editor-status"></span>
+  </div>
+  <datalist id="known-sites">
+    <option value="codeforces"></option>
+    <option value="informatics"></option>
+    <option value="acmp"></option>
+  </datalist>
+</section>
+{{end}}
 
+<script id="intake-data" type="application/json">{{.RowsJSON}}</script>
 <script>
   (function () {
-    var BASE_SITES = ["informatics", "codeforces", "acmp"];
-    var siteColumns = BASE_SITES.slice(); // + все сайты, встретившиеся в анкетах
-    var RESERVED = { "": 1, id: 1, full_name: 1, public_name: 1, accounts: 1, group: 1, groups: 1, token: 1 };
+    var API = {{.APIBase}};
+    var SLUG = {{.GroupSlug}};
+    var TOKEN = {{.Token}};
+    var IS_ADMIN = {{.Admin}};
+    var rows = [];
+    try { rows = JSON.parse(document.getElementById("intake-data").textContent || "[]") || []; } catch (e) {}
 
-    var listNode = document.getElementById("intake-list");
-    var emptyNode = document.getElementById("intake-empty");
-    var noMatch = document.getElementById("intake-nomatch");
-    var filter = document.getElementById("intake-filter");
-    var countNode = document.getElementById("intake-count");
-    var statusNode = document.getElementById("intake-status");
-    var dryBtn = document.getElementById("intake-dryrun");
-    var mergeBtn = document.getElementById("intake-merge");
-    var previewNode = document.getElementById("intake-preview");
-    var jsonDetails = document.getElementById("intake-json-details");
-    var jsonRoot = document.getElementById("intake-json");
-    var jsonStatus = document.getElementById("intake-json-status");
-
-    // Режим эксперта: тот же ACE-редактор, что в JSON-редакторе админки.
-    // Инициализируется лениво при первом открытии details.
-    var jsonEditor = null;
-    function ensureJSONEditor() {
-      if (jsonEditor || !jsonRoot) return jsonEditor;
-      if (!window.ace) {
-        jsonStatus.textContent = "ACE editor не загрузился";
-        jsonStatus.className = "admin-editor-status admin-editor-status--error";
-        return null;
-      }
-      jsonEditor = ace.edit(jsonRoot);
-      jsonEditor.session.setMode("ace/mode/json");
-      jsonEditor.session.setUseWorker(false);
-      jsonEditor.setOptions({ fontSize: "14px", tabSize: 2, useSoftTabs: true, showPrintMargin: false, wrap: false });
-      function updateTheme() {
-        var isDark = document.documentElement.getAttribute("data-theme") === "dark";
-        jsonEditor.setTheme(isDark ? "ace/theme/tomorrow_night" : "ace/theme/github");
-      }
-      updateTheme();
-      new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-      return jsonEditor;
+    // Права запроса: админка — по Basic Auth, группа — по токену или куке.
+    function withToken(url) {
+      if (!TOKEN) return url;
+      return url + (url.indexOf("?") < 0 ? "?" : "&") + "token=" + encodeURIComponent(TOKEN);
     }
-
-    var records = []; // сырые объекты анкет (неизвестные поля сохраняются как есть)
-
-    // Колонки аккаунтов: базовые сайты + все сайты, указанные хотя бы у одной
-    // анкеты (и как accounts[], и как строковые поля) — всё редактируемо.
-    function computeSiteColumns() {
-      var set = {};
-      BASE_SITES.forEach(function (s) { set[s] = true; });
-      records.forEach(function (rec) {
-        (rec.accounts || []).forEach(function (a) {
-          if (a && a.site) set[String(a.site).toLowerCase()] = true;
-        });
-        Object.keys(rec).forEach(function (k) {
-          var lk = k.toLowerCase();
-          if (!RESERVED[lk] && typeof rec[k] === "string") set[lk] = true;
-        });
-      });
-      siteColumns = BASE_SITES.slice();
-      Object.keys(set).sort().forEach(function (s) {
-        if (BASE_SITES.indexOf(s) === -1) siteColumns.push(s);
-      });
-    }
-
-    function setStatus(msg, err) {
-      statusNode.textContent = msg;
-      statusNode.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
-    }
-    function escapeHtml(s) {
-      return String(s == null ? "" : s).replace(/[&<>"']/g, function (ch) {
-        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
-      });
-    }
-    function invalidateDryRun() {
-      mergeBtn.disabled = true;
-      previewNode.innerHTML = "";
-    }
-
-    // Представление записи для формы: известные сайты — из accounts[] и из
-    // строковых полей; прочее (другие сайты/поля) остаётся в записи нетронутым.
-    function siteValue(rec, site) {
-      var v = "";
-      (rec.accounts || []).forEach(function (a) {
-        if (a && String(a.site).toLowerCase() === site) v = a.account_id;
-      });
-      if (!v && typeof rec[site] === "string") v = rec[site];
-      return v || "";
-    }
-    function groupsValue(rec) {
-      if (Array.isArray(rec.groups)) return rec.groups.join(", ");
-      if (typeof rec.group === "string") return rec.group;
-      return "";
-    }
-
-    // Правки формы записываются обратно в записи. Пустое поле (или из одних
-    // пробелов) НИЧЕГО не меняет по этому полю — существующее значение записи
-    // остаётся как было (удалять можно через «Режим эксперта»).
-    function writeBack() {
-      listNode.querySelectorAll(".intake-card").forEach(function (card) {
-        var rec = records[parseInt(card.dataset.idx, 10)];
-        if (!rec) return;
-        var name = card.querySelector(".ic-name").value.trim();
-        if (name) rec.full_name = name;
-        var groupsRaw = card.querySelector(".ic-groups").value.trim();
-        if (groupsRaw) {
-          delete rec.group;
-          rec.groups = groupsRaw.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
-        }
-        siteColumns.forEach(function (site) {
-          var input = card.querySelector('[data-site="' + site + '"]');
-          var v = input ? input.value.trim() : "";
-          if (!v) return; // пусто — поле записи не трогаем
-          // Устанавливаем аккаунт: заменяем в accounts[] запись этого сайта,
-          // строковый вариант поля убираем (то же значение в единой форме).
-          delete rec[site];
-          rec.accounts = (rec.accounts || []).filter(function (a) {
-            return !(a && String(a.site).toLowerCase() === site);
-          });
-          rec.accounts.push({ site: site, account_id: v });
-        });
-      });
-    }
-    function collectJSON() {
-      writeBack();
-      return JSON.stringify(records, null, 2) + "\n";
-    }
-
-    function render() {
-      listNode.innerHTML = "";
-      computeSiteColumns();
-      var gridCols = "minmax(180px, 1.4fr) minmax(140px, 1fr) repeat(" + siteColumns.length + ", minmax(110px, 0.8fr))";
-      records.forEach(function (rec, idx) {
-        var card = document.createElement("div");
-        card.className = "intake-card";
-        card.dataset.idx = String(idx);
-        card.innerHTML =
-          '<div class="intake-fields" style="grid-template-columns:' + gridCols + ';">' +
-          '<label><span>ФИО</span><input type="text" class="ic-name" value="' + escapeHtml(rec.full_name || "") + '" /></label>' +
-          '<label><span>Группы (через запятую)</span><input type="text" class="ic-groups" value="' + escapeHtml(groupsValue(rec)) + '" /></label>' +
-          siteColumns.map(function (site) {
-            return '<label><span>' + escapeHtml(site) + '</span><input type="text" data-site="' + escapeHtml(site) + '" value="' + escapeHtml(siteValue(rec, site)) + '" /></label>';
-          }).join("") +
-          "</div>" +
-          '<button type="button" class="admin-btn admin-btn--secondary intake-remove" title="Убрать анкету из merge">✕</button>';
-        listNode.appendChild(card);
-      });
-      emptyNode.hidden = records.length !== 0;
-      applyFilter();
-      invalidateDryRun();
-    }
-
-    function applyFilter() {
-      var q = (filter.value || "").trim().toLowerCase();
-      var shown = 0;
-      listNode.querySelectorAll(".intake-card").forEach(function (card) {
-        var name = (card.querySelector(".ic-name").value || "").toLowerCase();
-        var vis = !q || name.indexOf(q) !== -1;
-        card.classList.toggle("filtered-out", !vis);
-        if (vis) shown++;
-      });
-      countNode.textContent = q ? shown + " из " + records.length : String(records.length);
-      noMatch.hidden = shown !== 0 || records.length === 0;
-    }
-    filter.addEventListener("input", applyFilter);
-
-    listNode.addEventListener("click", function (e) {
-      var btn = e.target.closest ? e.target.closest(".intake-remove") : null;
-      if (!btn) return;
-      var card = btn.closest(".intake-card");
-      writeBack();
-      records.splice(parseInt(card.dataset.idx, 10), 1);
-      render();
-    });
-    listNode.addEventListener("input", invalidateDryRun);
-
-    function fetchJSON(url, opts) {
-      return fetch(url, opts).then(function (res) {
+    function post(path, body) {
+      if (SLUG) body.slug = SLUG;
+      return fetch(withToken(API + path), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      }).then(function (res) {
         return res.json().then(function (p) {
-          if (!res.ok || p.ok === false) throw new Error(p.error || ("HTTP " + res.status));
+          if (!res.ok || !p.ok) throw new Error((p && p.error) || ("HTTP " + res.status));
           return p;
         });
       });
     }
 
-    // Портированный рендер превью merge (тот же вид, что был в админке).
-    function renderMergePreview(preview) {
-      var totalConflicts = 0;
-      var rows = (preview.students || []).map(function (st) {
-        var groups = (st.groups || []).map(function (g) {
-          return "<code>" + escapeHtml(g.slug) + "</code>" + (g.already_member ? ' <span class="grade-weight">(уже в группе)</span>' : ' <span class="text-ok">+ добавится</span>');
-        }).join(", ") || '<span class="grade-weight">— без групп</span>';
-        var conflicts = st.conflicts || [];
-        totalConflicts += conflicts.length;
-        var conflictKeys = {};
-        conflicts.forEach(function (c) { conflictKeys[(c.site + ":" + c.account_id).toLowerCase()] = true; });
-        var accounts = (st.accounts || []).map(function (a) {
-          var label = escapeHtml(a.site) + ":" + escapeHtml(a.account_id);
-          if (conflictKeys[(a.site + ":" + a.account_id).toLowerCase()]) {
-            return '<code class="acct-conflict" title="Эта учётка есть и у другого ученика">' + label + "</code>";
-          }
-          return "<code>" + label + "</code>";
-        }).join(" ");
-        var warn = conflicts.map(function (c) {
-          return "⚠ <code>" + escapeHtml(c.site) + ":" + escapeHtml(c.account_id) + "</code> уже у <strong>" + escapeHtml(c.other_name || c.other_id) + "</strong>";
-        }).join("<br>") || '<span class="grade-weight">—</span>';
-        return "<tr" + (conflicts.length ? ' class="merge-conflict-row"' : "") + "><td>" + escapeHtml(st.full_name) + "</td>" +
-          "<td><code>" + escapeHtml(st.final_id) + "</code> " + (st.is_new ? '<span class="text-ok">новый</span>' : '<span class="grade-weight">обновление</span>') + "</td>" +
-          "<td>" + groups + "</td><td>" + accounts + "</td><td>" + warn + "</td></tr>";
-      }).join("");
-      var head = '<p class="empty-hint">Пробный запуск (ничего не записано). Новых учеников: <strong>' + preview.added + "</strong>, обновлений: <strong>" + preview.updated + "</strong>.</p>";
-      if (totalConflicts > 0) {
-        head += '<p class="merge-conflict-note">⚠ Совпадений аккаунтов с другими учениками: <strong>' + totalConflicts + "</strong>. Проверьте — возможно, указана чужая учётка.</p>";
-      }
-      previewNode.innerHTML = head +
-        '<div class="table-wrap"><table class="standings-table"><thead><tr><th>Анкета (ФИО)</th><th>Итоговый ученик</th><th>Группы</th><th>Аккаунты</th><th>Предупреждения</th></tr></thead><tbody>' +
-        (rows || '<tr><td colspan="5">Пусто</td></tr>') + "</tbody></table></div>";
+    var status = document.getElementById("intake-status");
+    function setStatus(m, err) {
+      if (!status) return;
+      status.textContent = m;
+      status.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
+    }
+    function picked() {
+      return [].slice.call(document.querySelectorAll(".intake-pick:checked")).map(function (c) { return c.value; });
     }
 
-    dryBtn.addEventListener("click", function () {
-      setStatus("Пробный запуск…", false);
-      fetchJSON("/api/admin/actions/intake/dry-run", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: collectJSON() })
-      }).then(function (p) {
-        renderMergePreview(p.preview || {});
-        mergeBtn.disabled = false;
-        setStatus("Проверьте таблицу ниже, затем «Слить анкеты».", false);
-      }).catch(function (err) { setStatus(err.message, true); });
+    // ── Отметки ─────────────────────────────────────────────────────────
+    var all = document.getElementById("intake-all");
+    if (all) all.addEventListener("change", function () {
+      document.querySelectorAll(".intake-pick").forEach(function (c) {
+        // Отмечаем только видимые: фильтр не должен захватывать скрытое.
+        var tr = c.closest("tr");
+        if (!tr || !tr.classList.contains("filtered-out")) c.checked = all.checked;
+      });
     });
 
-    mergeBtn.addEventListener("click", function () {
-      if (!confirm("Слить анкеты в базу учеников? Действие необратимо.")) return;
-      setStatus("Merge…", false);
-      fetchJSON("/api/admin/actions/intake/merge", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: collectJSON() })
-      }).then(function (p) {
-        if (p.action_success === false) throw new Error("merge завершился с ошибкой — детали в «Результате последнего действия» в админке");
-        setStatus("Готово. Обновляю…", false);
-        location.reload();
-      }).catch(function (err) { setStatus(err.message, true); });
+    // ── Что произойдёт ──────────────────────────────────────────────────
+    var box = document.getElementById("intake-preview-box");
+    function renderPreview(p) {
+      box.textContent = "";
+      var sum = document.createElement("p");
+      sum.className = "empty-hint";
+      sum.textContent = "Будет заведено: " + p.added + " · обновлено: " + p.updated;
+      box.appendChild(sum);
+      if (!p.students || !p.students.length) return;
+      var wrap = document.createElement("div");
+      wrap.className = "table-wrap";
+      var table = document.createElement("table");
+      table.className = "standings-table";
+      var head = document.createElement("thead");
+      head.innerHTML = "<tr><th>ФИО</th><th>Кем станет</th><th>Группы</th><th>Замечания</th></tr>";
+      table.appendChild(head);
+      var tb = document.createElement("tbody");
+      p.students.forEach(function (s) {
+        var tr = document.createElement("tr");
+        function td(text) { var c = document.createElement("td"); c.textContent = text; return c; }
+        tr.appendChild(td(s.full_name));
+        tr.appendChild(td((s.is_new ? "новый ученик" : "существующий") + " · " + s.final_id));
+        tr.appendChild(td((s.groups || []).map(function (g) {
+          return g.slug + (g.already_member ? " (уже там)" : "");
+        }).join(", ") || "—"));
+        var warn = (s.conflicts || []).map(function (c) {
+          return c.site + ":" + c.account_id + " — этот аккаунт уже у «" + c.other_name + "»";
+        }).join("; ");
+        var c = td(warn || "—");
+        if (warn) c.className = "intake-warn";
+        tr.appendChild(c);
+        tb.appendChild(tr);
+      });
+      table.appendChild(tb);
+      wrap.appendChild(table);
+      box.appendChild(wrap);
+    }
+
+    var previewBtn = document.getElementById("intake-preview");
+    if (previewBtn) previewBtn.addEventListener("click", function () {
+      var sel = picked();
+      setStatus(sel.length ? "Считаю…" : "Считаю по всем анкетам…", false);
+      post("/preview", { full_names: sel })
+        .then(function (p) { renderPreview(p.preview); setStatus("Проверьте и примите", false); })
+        .catch(function (err) { setStatus(err.message, true); });
     });
 
-    // Режим эксперта: JSON ↔ форма.
-    jsonDetails.addEventListener("toggle", function () {
-      if (!jsonDetails.open) return;
-      var ed = ensureJSONEditor();
-      if (ed) {
-        ed.setValue(collectJSON(), -1);
-        ed.resize();
+    var acceptBtn = document.getElementById("intake-accept");
+    if (acceptBtn) acceptBtn.addEventListener("click", function () {
+      var sel = picked();
+      var what = sel.length ? ("отмеченные анкеты (" + sel.length + ")") : "ВСЕ анкеты из списка";
+      if (!confirm("Принять " + what + "?")) return;
+      acceptBtn.disabled = true;
+      setStatus("Принимаю…", false);
+      post("/accept", { full_names: sel })
+        .then(function (p) {
+          setStatus("Принято: " + p.accepted + " · заведено: " + p.created + " · осталось: " + p.remaining, false);
+          setTimeout(function () { location.reload(); }, 900);
+        })
+        .catch(function (err) { acceptBtn.disabled = false; setStatus(err.message, true); });
+    });
+
+    // ── Убрать анкету ───────────────────────────────────────────────────
+    document.querySelectorAll(".intake-discard").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var name = btn.closest("tr").dataset.fullName;
+        if (!confirm("Убрать анкету «" + name + "» без заведения ученика?" +
+                     (IS_ADMIN ? "\nАнкета исчезнет совсем." : "\nВ других своих группах анкета останется."))) return;
+        post("/entry/discard", { full_name: name })
+          .then(function () { location.reload(); })
+          .catch(function (err) { setStatus(err.message, true); });
+      });
+    });
+
+    // ── Правка анкеты ───────────────────────────────────────────────────
+    var editor = document.getElementById("intake-editor");
+    if (editor) (function () {
+      var origName = document.getElementById("intake-orig-name");
+      var fullName = document.getElementById("intake-fullname");
+      var publicName = document.getElementById("intake-publicname");
+      var groupsInp = document.getElementById("intake-groups");
+      var accountsBox = document.getElementById("intake-accounts");
+      var titleNode = document.getElementById("intake-editor-title");
+      var st = document.getElementById("intake-editor-status");
+
+      function setEditorStatus(m, err) {
+        st.textContent = m;
+        st.className = err ? "admin-editor-status admin-editor-status--error" : "admin-editor-status admin-editor-status--ok";
       }
-    });
-    document.getElementById("intake-json-apply").addEventListener("click", function () {
-      var ed = ensureJSONEditor();
-      if (!ed) return;
-      try {
-        var parsed = JSON.parse(ed.getValue() || "[]");
-        if (!Array.isArray(parsed)) throw new Error("ожидается JSON-массив анкет");
-        records = parsed;
-        render();
-        jsonStatus.textContent = "Применено.";
-        jsonStatus.className = "admin-editor-status admin-editor-status--ok";
-      } catch (e) {
-        jsonStatus.textContent = "Ошибка JSON: " + e.message;
-        jsonStatus.className = "admin-editor-status admin-editor-status--error";
+      function addAccountRow(site, account) {
+        var row = document.createElement("div");
+        row.className = "account-row";
+        row.style.cssText = "display:flex;gap:0.5rem;margin-top:0.4rem;align-items:center;";
+        var siteInp = document.createElement("input");
+        siteInp.type = "text"; siteInp.className = "acc-site"; siteInp.placeholder = "сайт";
+        siteInp.setAttribute("list", "known-sites"); siteInp.style.maxWidth = "12rem";
+        siteInp.value = site || "";
+        var idInp = document.createElement("input");
+        idInp.type = "text"; idInp.className = "acc-id"; idInp.placeholder = "account_id"; idInp.value = account || "";
+        var del = document.createElement("button");
+        del.type = "button"; del.className = "admin-btn admin-btn--secondary"; del.textContent = "×";
+        del.addEventListener("click", function () { row.remove(); });
+        row.appendChild(siteInp); row.appendChild(idInp); row.appendChild(del);
+        accountsBox.appendChild(row);
       }
-    });
+      function openEditor(name) {
+        var data = null;
+        for (var i = 0; i < rows.length; i++) if (rows[i].full_name === name) data = rows[i];
+        if (!data) return;
+        origName.value = data.full_name;
+        fullName.value = data.full_name || "";
+        publicName.value = data.public_name || "";
+        if (groupsInp) groupsInp.value = (data.groups || []).join(", ");
+        accountsBox.innerHTML = "";
+        (data.accounts || []).forEach(function (a) { addAccountRow(a.site, a.account_id); });
+        if (!(data.accounts || []).length) addAccountRow("", "");
+        titleNode.textContent = data.full_name;
+        setEditorStatus("", false);
+        editor.hidden = false;
+        editor.scrollIntoView({ block: "nearest" });
+      }
 
-    // Загрузка: существующий prepare-endpoint (staging создаётся/возвращается).
-    setStatus("Загрузка анкет…", false);
-    fetchJSON("/api/admin/actions/intake/prepare", { method: "POST" })
-      .then(function (p) {
-        records = JSON.parse(p.content || "[]");
-        if (!Array.isArray(records)) records = [];
-        render();
-        setStatus("", false);
-      })
-      .catch(function (err) { setStatus(err.message, true); });
+      document.querySelectorAll(".intake-edit").forEach(function (btn) {
+        btn.addEventListener("click", function () { openEditor(btn.closest("tr").dataset.fullName); });
+      });
+      document.getElementById("intake-add-account").addEventListener("click", function () { addAccountRow("", ""); });
+      document.getElementById("intake-cancel").addEventListener("click", function () { editor.hidden = true; });
+      document.getElementById("intake-save").addEventListener("click", function () {
+        var accounts = [];
+        accountsBox.querySelectorAll(".account-row").forEach(function (row) {
+          var site = row.querySelector(".acc-site").value.trim();
+          var acc = row.querySelector(".acc-id").value.trim();
+          if (site && acc) accounts.push({ site: site, account_id: acc });
+        });
+        var body = {
+          orig_full_name: origName.value,
+          full_name: fullName.value,
+          public_name: publicName.value,
+          accounts: accounts
+        };
+        if (groupsInp) {
+          body.groups = groupsInp.value.split(",").map(function (g) { return g.trim(); }).filter(Boolean);
+        }
+        setEditorStatus("Сохраняю…", false);
+        post("/entry/save", body)
+          .then(function () { setEditorStatus("Сохранено — обновляю…", false); setTimeout(function () { location.reload(); }, 600); })
+          .catch(function (err) { setEditorStatus(err.message, true); });
+      });
+    })();
   })();
 </script>
 {{end}}

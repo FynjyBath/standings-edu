@@ -426,3 +426,55 @@ func TestPanelOperationsRejectUnknownGroup(t *testing.T) {
 		t.Error("группа ghost не должна была появиться на диске")
 	}
 }
+
+// Панельные ручки анкет обязаны требовать валидный слаг группы. Пустой slug
+// когда-то давал пустую область — неотличимую от админской — и запрос без
+// всякой авторизации принимал разом все анкеты сайта.
+func TestPanelIntakeRequiresGroup(t *testing.T) {
+	h, dataDir := juryTestSetup(t)
+	h.intake = studentintake.NewStore(filepath.Join(dataDir, "student_intake.json"))
+	if err := os.WriteFile(filepath.Join(dataDir, "student_intake.json"),
+		[]byte(`[{"full_name":"Секретная Анкета","groups":["g1"]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(dataDir, "students.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handlers := map[string]http.HandlerFunc{
+		"accept":        h.PanelIntakeAccept,
+		"preview":       h.PanelIntakePreview,
+		"entry/save":    h.PanelIntakeEntrySave,
+		"entry/discard": h.PanelIntakeEntryDiscard,
+	}
+	bodies := map[string]map[string]any{
+		"без slug":     {},
+		"пустой slug":  {"slug": ""},
+		"одни пробелы": {"slug": "   "},
+		"обход пути":   {"slug": "../../etc"},
+		"нет прав":     {"slug": "g1"},
+	}
+	for name, handler := range handlers {
+		for what, body := range bodies {
+			// Без токена вовсе: ни одна ручка не должна отработать.
+			code, resp := juryPost(t, handler, "", body)
+			if code == http.StatusOK {
+				t.Errorf("%s (%s): запрос без прав прошёл, resp=%v", name, what, resp)
+			}
+		}
+	}
+
+	// Очередь и база не тронуты.
+	queue, err := h.intake.IntakeQueue(filepath.Join(dataDir, "student_intake_admin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 1 {
+		t.Fatalf("очередь изменилась: %+v", queue)
+	}
+	after, _ := os.ReadFile(filepath.Join(dataDir, "students.json"))
+	if string(before) != string(after) {
+		t.Fatalf("students.json изменился:\nбыло: %s\nстало: %s", before, after)
+	}
+}

@@ -64,15 +64,6 @@ type IntakeRow struct {
 	InGroup bool
 }
 
-// intakeScope — область запроса: слаг группы для панели, пустая строка для
-// админки (там фильтра по группе нет, и слаг из тела не читается вовсе).
-func intakeScope(inGroup bool, slug string) string {
-	if !inGroup {
-		return ""
-	}
-	return strings.TrimSpace(slug)
-}
-
 // intakeStagingPath — файл-пачка старой схемы. Ядро вливает его в очередь при
 // первом чтении; путь передаётся только ради этой миграции.
 func (h *Handlers) intakeStagingPath() string {
@@ -161,27 +152,43 @@ func (req intakeSelectionRequest) selection(scope string) studentintake.IntakeSe
 	return sel
 }
 
-// requireIntake — общий вход мутирующих ручек: проверка права и настроенности
-// приёма анкет. scope=="" — админка (право уже проверено AdminAuth).
-func (h *Handlers) requireIntake(w http.ResponseWriter, r *http.Request, scope string, perm domain.Perm) (*GroupAccess, bool) {
+// requireIntake — общий вход ручек анкет: определяет область запроса и
+// проверяет права. Возвращает область («» — вся очередь, админка).
+//
+// Область вычисляется ТОЛЬКО здесь и только из inGroup: у панели группы слаг
+// обязан быть валидным. Иначе запрос с пустым slug дал бы пустую область,
+// неотличимую от админской, и проехал бы мимо проверки прав — приняв разом
+// все анкеты сайта.
+func (h *Handlers) requireIntake(w http.ResponseWriter, r *http.Request, inGroup bool, slug string, perm domain.Perm) (string, *GroupAccess, bool) {
 	if h.intake == nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "приём анкет не настроен"})
-		return nil, false
+		return "", nil, false
 	}
-	if scope == "" {
-		return nil, true
+	if !inGroup {
+		// Админка: права уже проверил AdminAuth, область — вся очередь.
+		if h.admin == nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "admin is not configured"})
+			return "", nil, false
+		}
+		return "", nil, true
+	}
+
+	scope := strings.TrimSpace(slug)
+	if !domain.IsValidSlug(scope) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "не указана группа"})
+		return "", nil, false
 	}
 	acc, allowed := h.requirePerm(w, r, scope, perm)
 	if !allowed {
-		return nil, false
+		return "", nil, false
 	}
 	// Глобальный доступ со scope=all покрывает любой слаг, а приём умеет
 	// заводить группу «по дороге» (AddStudentsToGroups создаёт скелет).
 	if !h.groupExists(scope) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "группа не найдена"})
-		return nil, false
+		return "", nil, false
 	}
-	return acc, true
+	return scope, acc, true
 }
 
 // intakePreview — «что произойдёт»: для каждой анкеты, кем она станет и куда
@@ -192,8 +199,8 @@ func (h *Handlers) intakePreview(w http.ResponseWriter, r *http.Request, inGroup
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	scope := intakeScope(inGroup, req.Slug)
-	if _, ok := h.requireIntake(w, r, scope, domain.PermIntakeMerge); !ok {
+	scope, _, ok := h.requireIntake(w, r, inGroup, req.Slug, domain.PermIntakeMerge)
+	if !ok {
 		return
 	}
 	preview, err := h.intake.PreviewIntake(h.admin.cfg.DataDir, h.intakeStagingPath(), req.selection(scope))
@@ -211,8 +218,7 @@ func (h *Handlers) intakeAccept(w http.ResponseWriter, r *http.Request, inGroup 
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	scope := intakeScope(inGroup, req.Slug)
-	acc, ok := h.requireIntake(w, r, scope, domain.PermIntakeMerge)
+	scope, acc, ok := h.requireIntake(w, r, inGroup, req.Slug, domain.PermIntakeMerge)
 	if !ok {
 		return
 	}
@@ -259,8 +265,7 @@ func (h *Handlers) intakeEntrySave(w http.ResponseWriter, r *http.Request, inGro
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	scope := intakeScope(inGroup, req.Slug)
-	acc, ok := h.requireIntake(w, r, scope, domain.PermIntakeMerge)
+	scope, acc, ok := h.requireIntake(w, r, inGroup, req.Slug, domain.PermIntakeMerge)
 	if !ok {
 		return
 	}
@@ -303,8 +308,7 @@ func (h *Handlers) intakeEntryDiscard(w http.ResponseWriter, r *http.Request, in
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid request body"})
 		return
 	}
-	scope := intakeScope(inGroup, req.Slug)
-	acc, ok := h.requireIntake(w, r, scope, domain.PermIntakeMerge)
+	scope, acc, ok := h.requireIntake(w, r, inGroup, req.Slug, domain.PermIntakeMerge)
 	if !ok {
 		return
 	}

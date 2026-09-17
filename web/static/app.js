@@ -320,6 +320,110 @@
     });
   }
 
+  // ── 6. Фильтр по ученику на странице группы ──────────────────────────────
+  // Оставляет в каждой таблице только строки выбранного ученика и прячет
+  // контесты, где его нет, — чтобы «посмотреть одного» не значило листать всё.
+  //
+  // Особенность страницы: часть таблиц подгружается лениво. Пока блок не
+  // открыт, в нём не видно ни строк ученика, ни того, что его там нет, поэтому
+  // при активном фильтре остаток догружается (хук standingsLoadAllLazy из
+  // разметки страницы). Блоки прячем своим классом, а не общим .filtered-out:
+  // тот занят фильтром оглавления, и два фильтра не должны спорить.
+  function initStudentFilter() {
+    var bar = document.querySelector("[data-student-filter]");
+    if (!bar) return;
+    var input = bar.querySelector("[data-student-filter-input]");
+    var reset = bar.querySelector("[data-student-filter-reset]");
+    var countNode = bar.querySelector("[data-student-filter-count]");
+    if (!input) return;
+
+    var loadedAll = false;
+
+    function blocks() {
+      return [].slice.call(document.querySelectorAll(".contest-block"));
+    }
+    // Чип оглавления, ведущий на этот блок (у оглавления свой фильтр).
+    function chipFor(block) {
+      if (!block.id) return null;
+      return document.querySelector('[data-toc-target="' + block.id + '"]');
+    }
+
+    function apply() {
+      var q = norm(input.value);
+      var active = !!q;
+      if (reset) reset.hidden = !active;
+
+      // Считаем только контесты: доска почёта строки тоже фильтрует, но в
+      // «в скольких таблицах есть ученик» ей не место — там всегда все.
+      var withStudent = 0, totalContests = 0;
+      blocks().forEach(function (block) {
+        var rows = block.querySelectorAll("tr[data-filter-text]");
+        if (!rows.length) return; // блок без строк (ленивая заглушка) не трогаем
+        var isContest = block.id && block.id.indexOf("contest-") === 0;
+        if (isContest) totalContests++;
+        var shown = 0;
+        [].forEach.call(rows, function (tr) {
+          var match = !active || (tr.getAttribute("data-filter-text") || "").toLowerCase().indexOf(q) !== -1;
+          tr.classList.toggle("filtered-out", !match);
+          if (match) shown++;
+        });
+        // Свёртка длинных таблиц на время поиска раскрывается, иначе строка
+        // ученика ниже порога осталась бы скрытой.
+        [].forEach.call(block.querySelectorAll("table"), function (table) {
+          table.classList.toggle("filter-active", active);
+        });
+        var hide = active && shown === 0;
+        block.classList.toggle("student-hidden", hide);
+        var chip = chipFor(block);
+        if (chip) chip.classList.toggle("student-hidden", hide);
+        if (isContest && !hide) withStudent++;
+      });
+
+      if (countNode) {
+        if (!active) {
+          countNode.textContent = "";
+        } else if (withStudent === 0) {
+          countNode.textContent = "ничего не найдено";
+        } else {
+          countNode.textContent = "в " + withStudent + " из " + totalContests + " " +
+            plural(totalContests, "контеста", "контестов", "контестов");
+        }
+      }
+    }
+
+    function plural(n, one, few, many) {
+      var d10 = n % 10, d100 = n % 100;
+      if (d10 === 1 && d100 !== 11) return one;
+      if (d10 >= 2 && d10 <= 4 && (d100 < 10 || d100 >= 20)) return few;
+      return many;
+    }
+
+    function onInput() {
+      var active = !!norm(input.value);
+      // Первый же ввод догружает отложенные таблицы: без них счёт «в скольких
+      // таблицах есть ученик» был бы неверным.
+      if (active && !loadedAll && typeof window.standingsLoadAllLazy === "function") {
+        loadedAll = true;
+        if (countNode) countNode.textContent = "загружаю таблицы…";
+        window.standingsLoadAllLazy(function (left) {
+          if (countNode && left > 0) countNode.textContent = "загружаю таблицы… осталось " + left;
+        }).then(function () { apply(); });
+      }
+      apply();
+    }
+
+    input.addEventListener("input", onInput);
+    if (reset) reset.addEventListener("click", function () {
+      input.value = "";
+      apply();
+      input.focus();
+    });
+    apply();
+
+    // Строки появляются и после ленивой подгрузки — фильтр применяем заново.
+    window.standingsApplyStudentFilter = apply;
+  }
+
   function sel(s) { return s ? document.querySelector(s) : null; }
 
   function init() {
@@ -328,10 +432,15 @@
     initContestTOC();
     initRowCollapse(document);
     initEjudgeFilters();
+    initStudentFilter();
   }
   // Для динамически вставленных фрагментов (ленивые таблицы контестов).
   window.standingsInitScope = function (scope) {
     initRowCollapse(scope);
+    // В подгруженном блоке появились строки — применяем к ним активный фильтр.
+    if (typeof window.standingsApplyStudentFilter === "function") {
+      window.standingsApplyStudentFilter();
+    }
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

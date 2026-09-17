@@ -110,6 +110,23 @@
 </section>
 {{end}}
 
+{{if .StudentNames}}
+{{/* Фильтр по ученику: оставляет в таблицах только его строки и прячет
+     контесты, где его нет. Часть таблиц подгружается лениво — при активном
+     фильтре они догружаются, иначе картина была бы неполной (см. app.js). */}}
+<div class="filter-bar student-filter" data-student-filter>
+  <label class="student-filter-label" for="student-filter-input">Ученик</label>
+  <input type="search" id="student-filter-input" class="filter-input" data-student-filter-input
+         list="student-filter-names" placeholder="Начните вводить имя…"
+         autocomplete="off" spellcheck="false" />
+  <datalist id="student-filter-names">
+    {{range .StudentNames}}<option value="{{.}}"></option>{{end}}
+  </datalist>
+  <button type="button" class="student-filter-reset" data-student-filter-reset hidden>Сбросить</button>
+  <span class="filter-count" data-student-filter-count></span>
+</div>
+{{end}}
+
 <nav class="contest-toc" data-contest-toc hidden aria-label="Оглавление контестов">
   <div class="contest-toc-head">
     <span class="contest-toc-title">Контесты</span>
@@ -138,7 +155,7 @@
       </thead>
       <tbody>
         {{range .Standings.SolvedSummary}}
-        <tr>
+        <tr data-student="{{.StudentID}}" data-filter-text="{{.PublicName}}">
           <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
           <td class="solved-count">{{.SolvedCountOnPageSites}}</td>
           {{range .SolvedCountBySite}}
@@ -229,6 +246,24 @@
       var sec = btn.closest(".contest-lazy");
       if (sec) load(sec);
     });
+
+    // Фильтру по ученику нужны все таблицы сразу: пока блок не подгружен, в нём
+    // не видно ни строк ученика, ни того, что его там нет. Отдаём наружу способ
+    // догрузить остаток и узнать, когда всё готово.
+    window.standingsLoadAllLazy = function (onProgress) {
+      var pending = lazies.filter(function (sec) { return sec.classList.contains("contest-lazy"); });
+      if (!pending.length) return Promise.resolve(0);
+      var left = pending.length;
+      if (onProgress) onProgress(left);
+      return new Promise(function (resolve) {
+        var timer = setInterval(function () {
+          left = lazies.filter(function (sec) { return sec.classList.contains("contest-lazy"); }).length;
+          if (onProgress) onProgress(left);
+          if (left === 0) { clearInterval(timer); resolve(pending.length); }
+        }, 120);
+        pending.forEach(load);
+      });
+    };
 
     // Якорь на отложенный контест — грузим сразу.
     var hash = (location.hash || "").replace(/^#/, "");

@@ -2816,3 +2816,55 @@ span:not(.flag-review-actions) > .flag-subs-btn {
 .ejudge-filter-toast--error {
   border-color: var(--attempt-text);
 }
+
+/* ── Фильтр по ученику на странице группы ───────────────────────────────── */
+
+/* Своё скрытие блоков/чипов: общий .filtered-out занят фильтром оглавления,
+   и два фильтра не должны отменять друг друга. */
+.student-hidden {
+  display: none !important;
+}
+
+.student-filter {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-bottom: 0.8rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.student-filter-label {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.student-filter .filter-input {
+  flex: 1 1 16rem;
+  max-width: 24rem;
+}
+
+.student-filter-reset {
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 0.3rem 0.65rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.student-filter-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+@media (max-width: 640px) {
+  .student-filter {
+    position: static;
+  }
+}

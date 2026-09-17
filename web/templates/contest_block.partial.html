@@ -80,7 +80,8 @@
         {{$hasProviderStatus := and (eq $contest.ContestType "provider") (hasProviderStatusColumn $contest.Rows)}}
         <tbody class="uv-body-full">
           {{range .Rows}}
-          <tr>
+          {{/* data-student/-filter-text — за них цепляется фильтр по ученику (app.js). */}}
+          <tr data-student="{{.StudentID}}" data-filter-text="{{.PublicName}}">
             <td class="solved-count">{{placeText .Place}}</td>
             <td class="student-name">{{if $tokenValid}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}&token={{$token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
             <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
@@ -93,7 +94,7 @@
         {{if $uv}}
         <tbody class="uv-body-window" hidden>
           {{range $uv.Rows}}
-          <tr>
+          <tr data-student="{{.StudentID}}" data-filter-text="{{.PublicName}}">
             <td class="solved-count">{{placeText .Place}}</td>
             <td class="student-name">{{if $tokenValid}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}&token={{$token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
             <td class="solved-count">{{.Count}}</td>

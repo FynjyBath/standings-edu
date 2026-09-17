@@ -440,6 +440,7 @@ func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug 
 		Access:          acc,
 		TokenValid:      acc.Elevated(),
 		CombinedMembers: h.combinedMemberTitles(slug),
+		StudentNames:    pageStudentNames(standings),
 	}
 	if gf, ok := h.readSourceGroupFile(slug); ok {
 		page.GroupArchived = gf.Archived()
@@ -522,6 +523,39 @@ func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.NotFound(w, r)
+}
+
+// pageStudentNames — публичные имена всех учеников страницы (доска почёта и
+// строки контестов), по алфавиту и без повторов. Нужны фильтру по ученику:
+// подсказать полный список, пока лениво подгружаемые таблицы ещё не открыты.
+func pageStudentNames(standings domain.GeneratedGroupStandings) []string {
+	seen := make(map[string]struct{})
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		seen[name] = struct{}{}
+	}
+	for _, row := range standings.SolvedSummary {
+		add(row.PublicName)
+	}
+	for _, contest := range standings.Contests {
+		for _, row := range contest.Rows {
+			add(row.PublicName)
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i]) < strings.ToLower(out[j])
+	})
+	return out
 }
 
 // combinedMemberTitles возвращает названия групп-участниц объединённой группы
@@ -1144,6 +1178,10 @@ type GroupPageData struct {
 	// CombinedMembers — названия групп-участниц, если это объединённая группа
 	// (для подписи на странице). Пусто — обычная группа.
 	CombinedMembers []string
+	// StudentNames — все ученики страницы по алфавиту, для автодополнения в
+	// фильтре по ученику. Собираются на сервере, а не из отрисованных таблиц:
+	// часть контестов подгружается лениво, и в разметке их строк ещё нет.
+	StudentNames []string
 	// GroupArchived — группа в архиве (update=false): под всеми её таблицами
 	// показываем «последнее обновление» (таблицы не пересобираются).
 	GroupArchived bool

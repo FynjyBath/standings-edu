@@ -229,3 +229,72 @@ func TestEjudgeLoginHiddenFromPublicView(t *testing.T) {
 		t.Fatalf("после публичного вида логин судьи = %q — общие строки испорчены", got)
 	}
 }
+
+// Ячейка «сколько задач из скольки» в сводной ведёт на контест ejudge. Ссылаться
+// на ученика там нельзя, поэтому по токену отдаётся судейская ссылка на контест
+// и сайт, под которым лежит логин, — из них страница соберёт фильтр по ученику.
+// Без токена не должно уезжать ни того, ни другого.
+func TestEjudgeContestLinkInSummaryTotals(t *testing.T) {
+	dataDir, genDir := t.TempDir(), t.TempDir()
+	h := NewHandlers(
+		storage.NewGeneratedLoader(genDir), nil,
+		web.NewTemplateRenderer(filepath.Join("..", "..", "web", "templates")),
+		log.New(io.Discard, "", 0),
+	)
+	if err := h.ConfigureAdmin(AdminConfig{
+		Login: "admin", Password: "pw", ProjectRoot: t.TempDir(), DataDir: dataDir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureSourceDir(dataDir)
+
+	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"),
+		`{"title":"Г1","student_ids":["s1"],"group_secret_token":"tok"}`)
+	writeTestFile(t, filepath.Join(genDir, "standings", "g1.json"), `{
+		"group_slug":"g1","group_title":"Г1","contests":[{
+			"id":"c1","title":"Перебор","score_system":"edu",
+			"summary_total_only":true,
+			"source_url":"https://ej.kod-u.ru/new-client?contest_id=933977",
+			"ejudge_site":"kodu",
+			"tasks":[{"label":"A","url":"https://ej.kod-u.ru/new-client?contest_id=933977&prob_id=1","normalized_url":"https://ej.kod-u.ru/new-client?contest_id=933977&prob_id=1","ejudge_site":"kodu","ejudge_prob":"perebor-1"}],
+			"subcontests":[{"title":"З","task_count":1,"tasks":[{"label":"A","url":"https://ej.kod-u.ru/new-client?contest_id=933977&prob_id=1","ejudge_site":"kodu","ejudge_prob":"perebor-1"}]}],
+			"rows":[{"student_id":"s1","public_name":"Иванов И.","statuses":["solved"],"solved_count":1,
+				"accounts":{"kodu":"ivanov","informatics":"12345"}}]}]}`)
+
+	summary := func(target string) string {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.SetPathValue("group_name", "g1")
+		rec := httptest.NewRecorder()
+		h.GroupSummaryData(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d", target, rec.Code)
+		}
+		return rec.Body.String()
+	}
+
+	staff := summary("/standings/g1/summary-data?token=tok")
+	if !strings.Contains(staff, "new-judge?contest_id=933977") {
+		t.Errorf("по токену ссылка на контест должна вести в режим судьи: %s", staff)
+	}
+	if !strings.Contains(staff, `"ejudge_site":"kodu"`) {
+		t.Error("сайт контеста нужен, чтобы собрать фильтр по логину ученика")
+	}
+	if !strings.Contains(staff, `"kodu":"ivanov"`) {
+		t.Error("логин ученика нужен для фильтра")
+	}
+
+	pub := summary("/standings/g1/summary-data")
+	if strings.Contains(pub, "new-judge") {
+		t.Error("публичная сводная не должна вести в режим судьи")
+	}
+	if strings.Contains(pub, "ivanov") {
+		t.Errorf("логин ejudge утёк в публичный ответ: %s", pub)
+	}
+	if !strings.Contains(pub, `"informatics":"12345"`) {
+		t.Error("аккаунт informatics виден всем — его трогать не надо")
+	}
+	// Ссылка на контест остаётся клиентской: она и ученику полезна.
+	if !strings.Contains(pub, "new-client?contest_id=933977") {
+		t.Error("клиентская ссылка на контест должна остаться")
+	}
+}

@@ -1209,11 +1209,24 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	if frozen {
 		out.FrozenAt = contest.FreezeTime
 	}
-	// Контест «только сумма», добавленный ровно одной informatics-ссылкой: по ней
-	// в сводной колонке суммы дадим ссылку на все посылки ученика по контесту.
+	// Контест «только сумма», добавленный ровно одной ссылкой: по ней в сводной
+	// колонке суммы дадим ссылку на все посылки ученика по контесту.
 	if out.SummaryTotalOnly {
-		if single, ok := singleTaskLink(contest); ok && domain.IsInformaticsURL(single) {
-			out.SourceURL = domain.RewriteInformaticsHost(single, informaticsBase)
+		if single, ok := singleTaskLink(contest); ok {
+			switch {
+			case domain.IsInformaticsURL(single):
+				out.SourceURL = domain.RewriteInformaticsHost(single, informaticsBase)
+			default:
+				// ejudge: ссылаться на ученика нельзя, поэтому ведём в контест,
+				// а отбор по ученику уедет в буфер обмена строкой фильтра.
+				normalized := domain.NormalizeTaskURL(single)
+				if _, isEjudge := domain.ParseEjudgeTaskURL(normalized); isEjudge {
+					if site, _, siteOK := b.sources.ResolveSiteByTaskURL(normalized); siteOK {
+						out.SourceURL = single
+						out.EjudgeSite = site
+					}
+				}
+			}
 		}
 	}
 	// Штраф за задачу без баллов — только для табличек с баллами.
@@ -1227,6 +1240,11 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	// Сайты ejudge, встретившиеся в этом контесте: их логины кладём в строки,
 	// чтобы на странице собрать фильтр «по этому ученику».
 	ejudgeSites := make(map[string]struct{})
+	// Сайт контестной ссылки нужен в строках так же, как сайты задач: из него
+	// собирается фильтр для ячейки суммы, даже если задачи развернуть не вышло.
+	if out.EjudgeSite != "" {
+		ejudgeSites[out.EjudgeSite] = struct{}{}
+	}
 	for _, subcontest := range contest.Subcontests {
 		generatedSubcontest := domain.GeneratedSubcontest{
 			Title: subcontest.Title,

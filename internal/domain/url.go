@@ -359,6 +359,8 @@ func SwapEjudgeLinksToJudge(standings *GeneratedGroupStandings) {
 		for j := range c.Materials {
 			c.Materials[j].URL = EjudgeJudgeURL(c.Materials[j].URL)
 		}
+		// Ссылка «посылки по контесту» в сводной — туда же, в судейский режим.
+		c.SourceURL = EjudgeJudgeURL(c.SourceURL)
 	}
 }
 
@@ -457,6 +459,11 @@ func StripEjudgeFilterData(standings *GeneratedGroupStandings) {
 		c := &standings.Contests[ci]
 
 		sites := make(map[string]struct{})
+		// Контестная ссылка «посылки по контесту» тоже несёт сайт ejudge.
+		if c.EjudgeSite != "" {
+			sites[c.EjudgeSite] = struct{}{}
+			c.EjudgeSite = ""
+		}
 		clear := func(tasks []GeneratedTask) {
 			for j := range tasks {
 				if tasks[j].EjudgeSite != "" {

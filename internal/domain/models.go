@@ -647,10 +647,15 @@ type GeneratedContestStandings struct {
 	// ShortName — краткое название (для колонки «только сумма» в сводной).
 	ShortName string `json:"short_name,omitempty"`
 	// SourceURL — исходная одиночная ссылка контеста, если он добавлен ровно
-	// одной informatics-ссылкой (сборник/глава). По ней в колонке «только сумма»
+	// одной informatics- или ejudge-ссылкой. По ней в колонке «только сумма»
 	// строится ссылка на все посылки ученика по контесту. Пусто — контест из
-	// нескольких ссылок или не informatics.
+	// нескольких ссылок или сайт этого не умеет.
 	SourceURL string `json:"source_url,omitempty"`
+	// EjudgeSite — сайт ejudge контеста из SourceURL: под этим ключом в строке
+	// лежит логин ученика, из которого собирается фильтр прогонов. В судейский
+	// интерфейс нельзя сослаться на ученика, поэтому по клику фильтр копируется
+	// в буфер. Для видов без view.judge_links поле снимается вместе с логинами.
+	EjudgeSite string `json:"ejudge_site,omitempty"`
 	// FrozenAt — таблица заморожена: в неё вошли только посылки до этого момента.
 	// nil — таблица полная.
 	FrozenAt    *time.Time            `json:"frozen_at,omitempty"`
@@ -680,6 +685,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Hidden       bool                  `json:"hidden,omitempty"`
 		ShortName    string                `json:"short_name,omitempty"`
 		SourceURL    string                `json:"source_url,omitempty"`
+		EjudgeSite   string                `json:"ejudge_site,omitempty"`
 		FrozenAt     *time.Time            `json:"frozen_at,omitempty"`
 		Subcontests  []GeneratedSubcontest `json:"subcontests"`
 		Tasks        []GeneratedTask       `json:"tasks"`
@@ -707,6 +713,7 @@ func (c *GeneratedContestStandings) UnmarshalJSON(data []byte) error {
 		Hidden:           raw.Hidden,
 		ShortName:        raw.ShortName,
 		SourceURL:        raw.SourceURL,
+		EjudgeSite:       raw.EjudgeSite,
 		FrozenAt:         raw.FrozenAt,
 		Subcontests:      raw.Subcontests,
 		Tasks:            raw.Tasks,

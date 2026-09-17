@@ -427,13 +427,27 @@
             // по контесту (если есть посылка и сайт поддерживается).
             if (hasActivity && totalTd.textContent && contest.source_url) {
               var contestURL = submissionURL(contest.source_url, row && row.accounts);
+              var contestFilter = "";
+              if (!contestURL && isJudgeURL(contest.source_url)) {
+                // ejudge в судейском режиме: сослаться на ученика нельзя, ведём
+                // в контест, а отбор по нему кладём в буфер. Задачу не
+                // указываем — в ячейке суммы речь про весь контест.
+                var clogin = (row && row.accounts) ? row.accounts[contest.ejudge_site] : "";
+                contestFilter = ejudgeFilter(clogin, "");
+                if (contestFilter) contestURL = contest.source_url;
+              }
               if (contestURL) {
                 var ca = document.createElement("a");
                 ca.className = "cell-link";
                 ca.href = contestURL;
                 ca.target = "_blank";
                 ca.rel = "noopener noreferrer";
-                ca.title = "Посылки ученика по контесту";
+                if (contestFilter) {
+                  ca.setAttribute("data-ejudge-filter", contestFilter);
+                  ca.title = "Контест в режиме судьи · фильтр по ученику скопируется в буфер";
+                } else {
+                  ca.title = "Посылки ученика по контесту";
+                }
                 ca.textContent = totalTd.textContent;
                 totalTd.textContent = "";
                 totalTd.appendChild(ca);

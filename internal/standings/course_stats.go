@@ -169,9 +169,14 @@ type courseModel struct {
 	price     map[string]float64 // цена задачи в «обычных задачах курса»
 	threshold map[string]float64 // b_j: порог понимания, логиты
 	ability   map[string]float64 // θ_i: сила ученика, логиты
-	// ftThreshold — порог задачи по исходу «взял с первой попытки»; сила
-	// ученика для флагов считается отдельно, без проверяемого эпизода.
+	// ftThreshold — порог задачи по исходу «взял с первой попытки»; ftAbility —
+	// то же для ученика. Для флагов сила пересчитывается отдельно, без
+	// проверяемого эпизода (см. firstTryAbilityExcluding).
 	ftThreshold map[string]float64
+	ftAbility   map[string]float64
+	// ftMedian — порог типичной задачи курса: к нему привязывается показатель
+	// уверенности, чтобы он читался как вероятность, а не как логит.
+	ftMedian    float64
 	typAttempts map[string]float64 // типичное число посылок до зачёта
 	total       float64            // сумма цен всех задач курса
 }
@@ -246,7 +251,7 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 	}
 
 	ability, threshold := raschFit(solveObs, courseRaschIters, courseRaschLambda)
-	_, ftThreshold := raschFit(ftObs, courseRaschIters, courseRaschLambda)
+	ftAbility, ftThreshold := raschFit(ftObs, courseRaschIters, courseRaschLambda)
 	_, cost := twoWayMedianFit(costObs, courseFitIters)
 	applyTaskRatings(tasks, ratings, threshold, cost, triedN, costN)
 
@@ -266,9 +271,14 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 		threshold:   threshold,
 		ability:     ability,
 		ftThreshold: ftThreshold,
+		ftAbility:   ftAbility,
 		typAttempts: make(map[string]float64, len(tasks)),
 	}
+	ftLevels := make([]float64, 0, len(tasks))
 	for _, task := range tasks {
+		if v, ok := ftThreshold[task.norm]; ok {
+			ftLevels = append(ftLevels, v)
+		}
 		p := raw[task.norm] / scale
 		if p <= 0 || math.IsNaN(p) || math.IsInf(p, 0) {
 			p = 1
@@ -279,6 +289,7 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 			m.typAttempts[task.norm] = median(s)
 		}
 	}
+	m.ftMedian = median(ftLevels)
 	return m
 }
 
@@ -654,18 +665,6 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, studentID str
 		cs.Front = tasks[lastSolvedIdx].label
 	}
 
-	// Сила: какая доля курса ученику по плечу (шанс взять не ниже половины).
-	// Это ответ на «что он может», отдельно от «сколько он делает».
-	if len(m.threshold) > 0 {
-		reach := 0
-		for _, t := range tasks {
-			if th, ok := m.threshold[t.norm]; ok && m.ability[studentID] >= th {
-				reach++
-			}
-		}
-		cs.Strength = round2(float64(reach) / float64(len(tasks)))
-	}
-
 	// Темп: сколько курса закрыто за календарную неделю продвижения.
 	//
 	// Знаменатель — недели, в которые взята хотя бы одна задача курса, а не все
@@ -692,6 +691,24 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, studentID str
 	}
 
 	cs.LowData = cs.SolvedCount < courseMinSolved || len(activeWeeks) < courseMinWeeks
+
+	// Уверенность: шанс, что этот ученик возьмёт ТИПИЧНУЮ задачу курса с первой
+	// попытки. Модель Раша по исходу «с первой попытки», привязанная к порогу
+	// медианной задачи, — поэтому число читается как вероятность.
+	//
+	// Здесь раньше стояла «сила» — доля курса, которая ученику по плечу, по
+	// модели Раша на исходе «пробовал → решил». Она вырождалась: в этом курсе
+	// 97% начатых задач в итоге берут (ученик долбит, пока не возьмёт), так что
+	// «сможет ли решить» почти детерминировано и разделять людей нечем. На
+	// реальной группе 86% учеников получали ровно 100%, и даже тот, кто не решил
+	// ничего, показывал 98%. «Что может» этими данными не измеряется; «насколько
+	// уверенно берёт» — измеряется, и разброс там настоящий.
+	if !cs.LowData {
+		if th, ok := m.ftAbility[studentID]; ok {
+			cs.Confidence = round2(1 / (1 + math.Exp(-(th - m.ftMedian))))
+		}
+	}
+
 	tempoRaw := 0.0
 	if !cs.LowData && len(activeWeeks) > 0 {
 		tempoRaw = solvedPrice / float64(len(activeWeeks))

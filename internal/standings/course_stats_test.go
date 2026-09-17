@@ -792,3 +792,126 @@ func TestProgressReportingIsOptIn(t *testing.T) {
 		t.Fatalf("после включения ожидали строку прогресса, получили %q", got)
 	}
 }
+
+// Показатель «уверенность» должен РАЗЛИЧАТЬ учеников. Это не придирка: его
+// предшественница — «сила» по модели Раша на исходе «пробовал → решил» —
+// молча вырождалась, потому что в таком курсе почти всё начатое в итоге берут.
+// На реальной группе 86% учеников получали ровно 100%, и заметил это
+// преподаватель, а не тесты.
+func TestConfidenceSeparatesStudents(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(30 * 24 * time.Hour)
+
+	const nTasks = 30
+	tasks := make([]domain.GeneratedTask, nTasks)
+	norms := make([]string, nTasks)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("A%d", i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	statuses := map[string]*accountStatuses{}
+	students := make([]domain.Student, 0)
+	// Ключевое свойство курса: начатое в итоге берут все. Различает учеников
+	// только то, с какой попытки они это делают.
+	add := func(id string, firstTryEvery int) {
+		st := newAccountStatuses()
+		for j, norm := range norms {
+			st.attempted[norm] = struct{}{}
+			st.solved[norm] = struct{}{}
+			at := base.Add(time.Duration(j) * 12 * time.Hour)
+			if j%firstTryEvery == 0 {
+				st.timed[norm] = []source.TimedSubmission{{At: at, Solved: true}}
+			} else {
+				st.timed[norm] = []source.TimedSubmission{
+					{At: at}, {At: at.Add(20 * time.Minute)}, {At: at.Add(40 * time.Minute), Solved: true}}
+			}
+		}
+		statuses[id] = st
+		students = append(students, domain.Student{ID: id})
+	}
+	// Берут с первой попытки: каждую (точный), каждую вторую, каждую пятую…
+	for i := 0; i < 6; i++ {
+		add(fmt.Sprintf("tidy%d", i), 1)
+	}
+	for i := 0; i < 6; i++ {
+		add(fmt.Sprintf("mid%d", i), 2)
+	}
+	for i := 0; i < 6; i++ {
+		add(fmt.Sprintf("rough%d", i), 5)
+	}
+
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
+	tidy, mid, rough := stats["tidy0"].Confidence, stats["mid0"].Confidence, stats["rough0"].Confidence
+	if tidy == 0 || mid == 0 || rough == 0 {
+		t.Fatalf("уверенность должна считаться у всех: %v %v %v", tidy, mid, rough)
+	}
+	if !(tidy > mid && mid > rough) {
+		t.Fatalf("порядок должен сохраняться: точный=%v средний=%v небрежный=%v", tidy, mid, rough)
+	}
+	// Вырождение: если бы все получали одно и то же, показатель был бы бесполезен.
+	seen := map[float64]int{}
+	atMax := 0
+	for _, cs := range stats {
+		if cs.Confidence > 0 {
+			seen[cs.Confidence]++
+			if cs.Confidence >= 0.995 {
+				atMax++
+			}
+		}
+	}
+	if len(seen) < 3 {
+		t.Errorf("показатель не различает учеников: всего %d различных значений", len(seen))
+	}
+	if atMax*2 > len(students) {
+		t.Errorf("половина и больше упёрлись в потолок (%d из %d) — показатель вырождается", atMax, len(students))
+	}
+	if tidy-rough < 0.15 {
+		t.Errorf("разрыв между точным и небрежным слишком мал: %.2f против %.2f", tidy, rough)
+	}
+}
+
+// Без данных уверенность не показывается: раньше ученик, не решивший ничего,
+// получал 98% — модель без наблюдений возвращала уверенный ответ.
+func TestConfidenceHiddenWithoutData(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(30 * 24 * time.Hour)
+	tasks := make([]domain.GeneratedTask, 20)
+	norms := make([]string, 20)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("A%d", i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	statuses := map[string]*accountStatuses{}
+	students := make([]domain.Student, 0)
+	for i := 0; i < 8; i++ {
+		st := newAccountStatuses()
+		for j, norm := range norms {
+			st.attempted[norm] = struct{}{}
+			st.solved[norm] = struct{}{}
+			at := base.Add(time.Duration(j) * 12 * time.Hour)
+			st.timed[norm] = []source.TimedSubmission{{At: at, Solved: j%2 == 0}}
+			if j%2 != 0 {
+				st.timed[norm] = append(st.timed[norm], source.TimedSubmission{At: at.Add(time.Hour), Solved: true})
+			}
+		}
+		statuses[fmt.Sprintf("s%d", i)] = st
+		students = append(students, domain.Student{ID: fmt.Sprintf("s%d", i)})
+	}
+	// Новичок: ни одной посылки.
+	statuses["empty"] = newAccountStatuses()
+	students = append(students, domain.Student{ID: "empty"})
+
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
+	if c := stats["empty"].Confidence; c != 0 {
+		t.Fatalf("без единой посылки уверенности быть не должно, получили %v", c)
+	}
+	if !stats["empty"].LowData {
+		t.Error("ученик без посылок — это «мало данных»")
+	}
+}

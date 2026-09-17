@@ -258,6 +258,10 @@ func (h *Handlers) applyAccessView(standings *domain.GeneratedGroupStandings, sl
 	}
 	if acc.Has(domain.PermViewJudgeLinks) {
 		domain.SwapEjudgeLinksToJudge(standings)
+	} else {
+		// Логины ejudge нужны только для судейского фильтра — без права на
+		// судейские ссылки они в ответе лишние (см. StripEjudgeFilterData).
+		domain.StripEjudgeFilterData(standings)
 	}
 	return unfrozen
 }

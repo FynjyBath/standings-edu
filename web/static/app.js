@@ -266,6 +266,60 @@
     });
   }
 
+  // ── 5. Фильтры прогонов ejudge ───────────────────────────────────────────
+  // В судейский интерфейс ejudge нельзя сослаться на ученика или задачу: вход
+  // адресуется контестом, внутри — прогоны всех участников. Зато там есть поле
+  // фильтра, и нужную строку сервер уже сложил в data-ejudge-filter. При клике
+  // по ссылке кладём её в буфер обмена — остаётся вставить в поле фильтра.
+  //
+  // Обработчик делегированный: ссылки появляются и в лениво подгруженных
+  // таблицах, и в сводной, которая рисуется на клиенте.
+  function initEjudgeFilters() {
+    if (window.__ejudgeFilterReady) return;
+    window.__ejudgeFilterReady = true;
+
+    var hint = null, hintTimer = null;
+    function flash(text, ok) {
+      if (!hint) {
+        hint = document.createElement("div");
+        hint.className = "ejudge-filter-toast";
+        document.body.appendChild(hint);
+      }
+      hint.textContent = text;
+      hint.classList.toggle("ejudge-filter-toast--error", !ok);
+      hint.classList.add("is-visible");
+      if (hintTimer) clearTimeout(hintTimer);
+      hintTimer = setTimeout(function () { hint.classList.remove("is-visible"); }, 2600);
+    }
+    function copy(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      return new Promise(function (resolve, reject) {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
+          document.execCommand("copy"); document.body.removeChild(ta);
+          resolve();
+        } catch (e) { reject(e); }
+      });
+    }
+
+    document.addEventListener("click", function (e) {
+      var link = e.target.closest ? e.target.closest("[data-ejudge-filter]") : null;
+      if (!link) return;
+      var filter = link.getAttribute("data-ejudge-filter") || "";
+      if (!filter) return;
+      // Ссылку не перехватываем: она открывается как обычно (в новой вкладке),
+      // копирование идёт параллельно.
+      copy(filter).then(
+        function () { flash("Фильтр скопирован: " + filter, true); },
+        function () { flash("Не удалось скопировать. Фильтр: " + filter, false); }
+      );
+    });
+  }
+
   function sel(s) { return s ? document.querySelector(s) : null; }
 
   function init() {
@@ -273,6 +327,7 @@
     initSearchableSelects();
     initContestTOC();
     initRowCollapse(document);
+    initEjudgeFilters();
   }
   // Для динамически вставленных фрагментов (ленивые таблицы контестов).
   window.standingsInitScope = function (scope) {

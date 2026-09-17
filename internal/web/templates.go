@@ -72,10 +72,19 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"unixMs":                  func(t time.Time) int64 { return t.UnixMilli() },
 			"join":                    strings.Join,
 			"submissionLink":          submissionLink,
-			"siteName":                siteName,
-			"dayLabel":                dayLabel,
-			"sub":                     func(a, b int) int { return a - b },
-			"barHeight":               barHeight,
+			// taskJudgeFilter — фильтр прогонов ejudge по одной задаче, для
+			// ссылки в заголовке колонки. Пусто — вид не судейский или короткое
+			// имя задачи неизвестно.
+			"taskJudgeFilter": func(t domain.GeneratedTask) string {
+				if !domain.IsEjudgeJudgeURL(t.URL) {
+					return ""
+				}
+				return domain.EjudgeRunFilter("", t.EjudgeProb)
+			},
+			"siteName":  siteName,
+			"dayLabel":  dayLabel,
+			"sub":       func(a, b int) int { return a - b },
+			"barHeight": barHeight,
 			// dict собирает map для передачи нескольких значений в {{template}}
 			// (контекст выносимых блоков, напр. таблицы контеста).
 			"dict": func(kv ...any) map[string]any {
@@ -177,6 +186,12 @@ type TaskCell struct {
 	// SubmissionURL — ссылка на список посылок ученика по этой задаче (если у
 	// него есть посылка и сайт это поддерживает). Пусто — ячейка не кликабельна.
 	SubmissionURL string
+	// JudgeFilter — готовая строка фильтра прогонов ejudge по этому ученику и
+	// этой задаче. Заполняется только в судейском виде (ссылка уже подменена на
+	// new-judge, т.е. у смотрящего есть право view.judge_links): в ejudge нельзя
+	// сослаться на ученика или задачу, поэтому фильтр кладётся в буфер обмена
+	// при переходе. Пусто — не ejudge, не судейский вид или логин неизвестен.
+	JudgeFilter string
 }
 
 // taskCells объединяет статусы, баллы и пометку дорешки в единый набор ячеек.
@@ -194,7 +209,16 @@ func taskCells(contest domain.GeneratedContestStandings, row domain.GeneratedRow
 		// посылки ученика по этой задаче.
 		if s := row.Statuses[i]; s == domain.TaskStatusSolved || s == domain.TaskStatusAttempted {
 			if i < len(contest.Tasks) {
-				cell.SubmissionURL = submissionURL(contest.Tasks[i].URL, row.Accounts)
+				task := contest.Tasks[i]
+				cell.SubmissionURL = submissionURL(task.URL, row.Accounts)
+				// ejudge в судейском виде: ссылка ведёт в контест целиком, а
+				// нужную выборку даёт фильтр — кладём его в буфер обмена.
+				if domain.IsEjudgeJudgeURL(task.URL) {
+					cell.JudgeFilter = domain.EjudgeRunFilter(row.Accounts[task.EjudgeSite], task.EjudgeProb)
+					if cell.JudgeFilter != "" {
+						cell.SubmissionURL = task.URL
+					}
+				}
 			}
 		}
 

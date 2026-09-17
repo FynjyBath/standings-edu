@@ -175,6 +175,29 @@
       return "";
     }
 
+    // ── Фильтры прогонов ejudge ─────────────────────────────────────────
+    // В судейский интерфейс нельзя сослаться на ученика или задачу, поэтому
+    // при переходе кладём в буфер готовую строку фильтра (копирует app.js).
+    // Зеркало серверной логики: domain.EjudgeRunFilter / IsEjudgeJudgeURL.
+    function isJudgeURL(taskURL) {
+      if (!taskURL) return false;
+      var u;
+      try { u = new URL(taskURL); } catch (e) { return false; }
+      var path = u.pathname.toLowerCase().replace(/\/+$/, "");
+      return path === "/new-judge" || path.endsWith("/new-judge");
+    }
+    function filterTerm(field, value) {
+      value = (value || "").trim();
+      if (!value) return "";
+      if (value.indexOf('"') < 0) return field + ' == "' + value + '"';
+      if (value.indexOf("'") < 0) return field + " == '" + value + "'";
+      return ""; // строку с обоими видами кавычек литералом не записать
+    }
+    function ejudgeFilter(login, prob) {
+      return [filterTerm("login", login), filterTerm("prob", prob)]
+        .filter(Boolean).join(" && ");
+    }
+
     function contestSubcontests(contest) {
       if (Array.isArray(contest.subcontests) && contest.subcontests.length > 0) {
         return contest.subcontests;
@@ -319,6 +342,13 @@
               a.target = "_blank";
               a.rel = "noopener noreferrer";
               a.textContent = task.label || "?";
+              if (isJudgeURL(task.url)) {
+                var thf = ejudgeFilter("", task.ejudge_prob);
+                if (thf) {
+                  a.setAttribute("data-ejudge-filter", thf);
+                  a.title = "Открыть контест в режиме судьи; фильтр по этой задаче скопируется в буфер";
+                }
+              }
               th.appendChild(a);
             } else {
               // Ссылки скрыты до начала контеста — показываем только метку.
@@ -462,14 +492,26 @@
 
             // Есть посылка → ячейка ссылается на посылки ученика по задаче.
             if ((status === "solved" || status === "attempted") && td.textContent) {
-              var subURL = submissionURL(tasks[i].url, row && row.accounts);
+              var task = tasks[i];
+              var subURL = submissionURL(task.url, row && row.accounts);
+              var jf = "";
+              if (isJudgeURL(task.url)) {
+                var login = (row && row.accounts) ? row.accounts[task.ejudge_site] : "";
+                jf = ejudgeFilter(login, task.ejudge_prob);
+                if (jf) subURL = task.url;
+              }
               if (subURL) {
                 var a = document.createElement("a");
                 a.className = "cell-link";
                 a.href = subURL;
                 a.target = "_blank";
                 a.rel = "noopener noreferrer";
-                a.title = "Посылки ученика по задаче";
+                if (jf) {
+                  a.setAttribute("data-ejudge-filter", jf);
+                  a.title = "Открыть контест в режиме судьи; фильтр по этому ученику и задаче скопируется в буфер";
+                } else {
+                  a.title = "Посылки ученика по задаче";
+                }
                 a.textContent = td.textContent;
                 td.textContent = "";
                 td.appendChild(a);

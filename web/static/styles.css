@@ -2783,3 +2783,36 @@ span:not(.flag-review-actions) > .flag-subs-btn {
     grid-column: 1;
   }
 }
+
+/* Подсказка о скопированном фильтре прогонов ejudge (см. app.js). Всплывает
+   снизу по клику на судейскую ссылку и сама гаснет. */
+.ejudge-filter-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%) translateY(0.6rem);
+  max-width: min(46rem, calc(100vw - 2rem));
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--surface-strong);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  font-size: 0.86rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  z-index: 60;
+}
+
+.ejudge-filter-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.ejudge-filter-toast--error {
+  border-color: var(--attempt-text);
+}

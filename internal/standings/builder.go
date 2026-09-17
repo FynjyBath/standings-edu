@@ -528,7 +528,8 @@ func (b *Builder) buildGroupStandings(
 			statementRefs := b.expandInformaticsStatementRefs(ctx, pg.group, contest)
 			ejudgeRefs := b.expandEjudgeContestRefs(ctx, pg.group, contest)
 			infoTaskTitles := b.fetchInformaticsTaskTitles(ctx, pg.group, contest)
-			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs, ejudgeRefs, infoTaskTitles)
+			ejudgeProbs := b.ejudgeProblemShortNames(ctx, pg.group, contest)
+			generated := b.buildTaskContestStandings(contest, pg.students, statusByStudent, expanded, statementRefs, ejudgeRefs, infoTaskTitles, ejudgeProbs)
 			generated.GeneratedAt = &now
 			out.Contests = append(out.Contests, generated)
 		case domain.ContestTypeProvider:
@@ -973,6 +974,64 @@ func (b *Builder) expandEjudgeContestRefs(ctx context.Context, group domain.Grou
 	return out
 }
 
+// ejudgeProblemShortNames — КОРОТКИЕ имена задач ejudge по нормализованной
+// ссылке. В судейском интерфейсе ejudge нельзя сослаться на ученика или задачу,
+// зато есть фильтр прогонов, и в его языке задача адресуется коротким именем
+// (в адресе клиента стоит числовой prob_id — это другое). Имена нужны, чтобы
+// сложить готовый фильтр и положить его преподавателю в буфер обмена.
+//
+// Покрывает и задачи, развёрнутые из ссылки на контест, и одиночные ссылки на
+// задачу: список задач контеста кэшируется клиентом, так что это один запрос на
+// контест за генерацию.
+func (b *Builder) ejudgeProblemShortNames(ctx context.Context, group domain.GroupDefinition, contest domain.Contest) map[string]string {
+	sampleByContest := make(map[int]string) // contest_id → любая его ссылка
+	order := make([]int, 0)
+	for _, subcontest := range contest.Subcontests {
+		for _, rawTaskURL := range subcontest.Tasks {
+			parsed, ok := domain.ParseEjudgeTaskURL(rawTaskURL)
+			if !ok {
+				continue
+			}
+			if _, dup := sampleByContest[parsed.ContestID]; dup {
+				continue
+			}
+			sampleByContest[parsed.ContestID] = rawTaskURL
+			order = append(order, parsed.ContestID)
+		}
+	}
+	if len(order) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string)
+	for _, contestID := range order {
+		raw := sampleByContest[contestID]
+		parsed, _ := domain.ParseEjudgeTaskURL(raw)
+		_, client, ok := b.sources.ResolveSiteByTaskURL(raw)
+		if !ok {
+			continue
+		}
+		expander, canExpand := client.(source.EjudgeContestExpander)
+		if !canExpand {
+			continue
+		}
+		problems, err := expander.FetchContestProblems(ctx, contestID)
+		if err != nil {
+			b.logger.Printf("WARN group=%s contest=%s: короткие имена задач ejudge %d недоступны, фильтр будет только по ученику: %v",
+				group.Slug, contest.ID, contestID, err)
+			continue
+		}
+		for _, problem := range problems {
+			if problem.ProbID <= 0 || strings.TrimSpace(problem.ShortName) == "" {
+				continue
+			}
+			taskURL := fmt.Sprintf("https://%s/new-client?contest_id=%d&prob_id=%d", parsed.Host, contestID, problem.ProbID)
+			out[domain.NormalizeTaskURL(taskURL)] = strings.TrimSpace(problem.ShortName)
+		}
+	}
+	return out
+}
+
 // expandedContestProblemURL строит ссылку на задачу из исходной ссылки на
 // контест Codeforces, сохраняя её форму (group/contest/gym): <contestURL>/problem/<idx>.
 func expandedContestProblemURL(contestURL, problemIndex string) string {
@@ -1025,15 +1084,18 @@ func (b *Builder) informaticsBaseURL() string {
 	return provider.BaseURL()
 }
 
-// linkableAccounts — account_id ученика по сайтам, для которых умеем строить
-// ссылку на список его посылок по задаче. Пока только informatics (её user_id).
-// Не включаем остальные сайты, чтобы не публиковать лишние идентификаторы.
-func linkableAccounts(accounts []domain.Account) map[string]string {
+// linkableAccounts — account_id ученика по сайтам, которые нужны странице:
+// informatics (ссылка на список его посылок по задаче) и сайты ejudge из этого
+// контеста (логин для фильтра прогонов в судейском интерфейсе). Остальные сайты
+// не включаем, чтобы не публиковать лишние идентификаторы.
+func linkableAccounts(accounts []domain.Account, ejudgeSites map[string]struct{}) map[string]string {
 	var out map[string]string
 	for _, a := range accounts {
 		site := domain.NormalizeSite(a.Site)
 		if site != "informatics" {
-			continue
+			if _, needed := ejudgeSites[site]; !needed {
+				continue
+			}
 		}
 		id := strings.TrimSpace(a.AccountID)
 		if id == "" {
@@ -1049,7 +1111,7 @@ func linkableAccounts(accounts []domain.Account) map[string]string {
 	return out
 }
 
-func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]expandedEjudgeProblem, infoTaskTitles map[string]string) domain.GeneratedContestStandings {
+func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []domain.Student, statusByStudent map[string]*accountStatuses, expanded map[int]*domain.GeneratedContestStandings, statementRefs map[int][]expandedInformaticsProblem, ejudgeRefs map[string][]expandedEjudgeProblem, infoTaskTitles map[string]string, ejudgeProbs map[string]string) domain.GeneratedContestStandings {
 	isIOI := contest.ScoreSystem.IsIOI()
 
 	var windowStart, windowEnd time.Time
@@ -1112,6 +1174,9 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	}
 
 	columns := make([]taskColumn, 0)
+	// Сайты ejudge, встретившиеся в этом контесте: их логины кладём в строки,
+	// чтобы на странице собрать фильтр «по этому ученику».
+	ejudgeSites := make(map[string]struct{})
 	for _, subcontest := range contest.Subcontests {
 		generatedSubcontest := domain.GeneratedSubcontest{
 			Title: subcontest.Title,
@@ -1128,15 +1193,21 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 				Hidden:        hidden,
 				Name:          strings.TrimSpace(name),
 			}
+			site, client, siteOK := b.sources.ResolveSiteByTaskURL(normalized)
+			// Задача ejudge: запоминаем сайт (под ним лежит логин ученика) и
+			// короткое имя — из них собирается фильтр прогонов для судейского
+			// интерфейса. Логины понадобятся в строках, см. ejudgeSites.
+			if _, isEjudge := domain.ParseEjudgeTaskURL(normalized); isEjudge && siteOK {
+				task.EjudgeSite = site
+				task.EjudgeProb = ejudgeProbs[normalized]
+				ejudgeSites[site] = struct{}{}
+			}
 			generatedSubcontest.Tasks = append(generatedSubcontest.Tasks, task)
 			out.Tasks = append(out.Tasks, task)
 
 			useRealScores := false
-			if isIOI {
-				_, client, ok := b.sources.ResolveSiteByTaskURL(normalized)
-				if ok && client != nil && client.SupportsTaskScores() {
-					useRealScores = true
-				}
+			if isIOI && siteOK && client != nil && client.SupportsTaskScores() {
+				useRealScores = true
 			}
 			columns = append(columns, taskColumn{normalizedURL: normalized, useRealScores: useRealScores})
 		}
@@ -1233,7 +1304,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			PublicName:  student.PublicName,
 			Statuses:    make([]string, len(out.Tasks)),
 			SolvedCount: 0,
-			Accounts:    linkableAccounts(student.Accounts),
+			Accounts:    linkableAccounts(student.Accounts, ejudgeSites),
 		}
 		practice := make([]*int, len(out.Tasks))
 		hasPractice := false
@@ -1389,7 +1460,7 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 	if frozen {
 		fullContest := contest
 		fullContest.FreezeTime = nil
-		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs, ejudgeRefs, infoTaskTitles)
+		full := b.buildTaskContestStandings(fullContest, students, statusByStudent, expanded, statementRefs, ejudgeRefs, infoTaskTitles, ejudgeProbs)
 		out.RowsFull = full.Rows
 	}
 

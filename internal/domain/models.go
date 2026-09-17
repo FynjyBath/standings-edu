@@ -571,6 +571,14 @@ type GeneratedTask struct {
 	// времени решивших), для показа по токену жюри. 0/пусто — определить нельзя
 	// (мало решивших с известным временем: ACMP, никто не решал).
 	Weight float64 `json:"weight,omitempty"`
+	// EjudgeSite/EjudgeProb — для задач ejudge: имя сайта (ejudge_id, под ним
+	// лежит логин ученика в Accounts строки) и КОРОТКОЕ имя задачи в ejudge.
+	// Из них собирается фильтр прогонов для судейского интерфейса
+	// (см. EjudgeRunFilter): по ссылке туда нельзя передать ни ученика, ни
+	// задачу, поэтому фильтр кладётся преподавателю в буфер обмена.
+	// Пусто — задача не из ejudge или короткое имя узнать не удалось.
+	EjudgeSite string `json:"ejudge_site,omitempty"`
+	EjudgeProb string `json:"ejudge_prob,omitempty"`
 }
 
 type GeneratedSubcontest struct {

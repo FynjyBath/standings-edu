@@ -379,3 +379,135 @@ func SwapEjudgeLinksInCourseStats(stats []StudentCourseStats) {
 		}
 	}
 }
+
+// ── Фильтры прогонов ejudge ──────────────────────────────────────────────────
+//
+// В судейском интерфейсе ejudge нельзя сослаться на конкретного ученика или
+// задачу: вход адресуется контестом, а внутри показаны прогоны всех участников.
+// Зато там есть поле «фильтр» на своём языке выражений, и нужную выборку можно
+// подготовить заранее — строку кладём преподавателю в буфер обмена при переходе.
+//
+// Из языка фильтров нам нужны два поля (ejudge, style/filter_expr.html):
+//
+//	login — регистрационное имя участника (строка);
+//	prob  — КОРОТКОЕ ИМЯ задачи (строка), а не числовой prob_id из адреса
+//	        клиентского интерфейса: в языке фильтров prob_id — синоним prob.
+//
+// Строки берутся в двойные кавычки; внутри двойных кавычек своих кавычек быть
+// не может, поэтому значение с кавычкой берётся в одинарные.
+
+// EjudgeRunFilter собирает выражение фильтра прогонов: по ученику, по задаче
+// или по обоим. Пустые части опускаются; нечего фильтровать — пустая строка.
+func EjudgeRunFilter(login, prob string) string {
+	parts := make([]string, 0, 2)
+	if term := ejudgeFilterTerm("login", login); term != "" {
+		parts = append(parts, term)
+	}
+	if term := ejudgeFilterTerm("prob", prob); term != "" {
+		parts = append(parts, term)
+	}
+	return strings.Join(parts, " && ")
+}
+
+// ejudgeFilterTerm — одно сравнение «поле == значение». Значение, которое
+// нельзя представить строковым литералом (есть и кавычка, и апостроф),
+// пропускается: лучше фильтр из одной части, чем синтаксически битый.
+func ejudgeFilterTerm(field, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	hasQuote := strings.Contains(value, `"`)
+	hasApostrophe := strings.Contains(value, "'")
+	switch {
+	case !hasQuote:
+		return field + ` == "` + value + `"`
+	case !hasApostrophe:
+		return field + ` == '` + value + `'`
+	default:
+		return ""
+	}
+}
+
+// IsEjudgeJudgeURL — ссылка ведёт в судейский интерфейс ejudge (new-judge).
+// По ней отличается вид преподавателя от ученического: сервер подменяет ссылки
+// на судейские только при праве view.judge_links (см. SwapEjudgeLinksToJudge).
+func IsEjudgeJudgeURL(rawURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	path := strings.ToLower(strings.TrimRight(u.Path, "/"))
+	return path == "/new-judge" || strings.HasSuffix(path, "/new-judge")
+}
+
+// StripEjudgeFilterData убирает из публичного ответа данные, нужные только для
+// судейского фильтра: логины ejudge в строках и служебные поля задач. Логин —
+// половина учётки участника, и публиковать его всем незачем; без права
+// view.judge_links фильтр всё равно не показывается.
+//
+// Строки в отдаваемой из кэша копии разделяются с оригиналом (CloneForServe их
+// не копирует), поэтому затронутые строки и их карты аккаунтов пересобираются
+// заново, без мутации общих данных.
+func StripEjudgeFilterData(standings *GeneratedGroupStandings) {
+	if standings == nil {
+		return
+	}
+	for ci := range standings.Contests {
+		c := &standings.Contests[ci]
+
+		sites := make(map[string]struct{})
+		clear := func(tasks []GeneratedTask) {
+			for j := range tasks {
+				if tasks[j].EjudgeSite != "" {
+					sites[tasks[j].EjudgeSite] = struct{}{}
+				}
+				tasks[j].EjudgeSite = ""
+				tasks[j].EjudgeProb = ""
+			}
+		}
+		clear(c.Tasks)
+		for j := range c.Subcontests {
+			clear(c.Subcontests[j].Tasks)
+		}
+		if len(sites) == 0 {
+			continue
+		}
+
+		// Затронуты ли строки вообще: у ученика может не быть аккаунта ejudge.
+		affected := false
+		for _, row := range c.Rows {
+			for site := range sites {
+				if _, ok := row.Accounts[site]; ok {
+					affected = true
+					break
+				}
+			}
+			if affected {
+				break
+			}
+		}
+		if !affected {
+			continue
+		}
+
+		rows := make([]GeneratedRow, len(c.Rows))
+		for ri, row := range c.Rows {
+			if len(row.Accounts) > 0 {
+				accounts := make(map[string]string, len(row.Accounts))
+				for site, id := range row.Accounts {
+					if _, drop := sites[site]; drop {
+						continue
+					}
+					accounts[site] = id
+				}
+				if len(accounts) == 0 {
+					accounts = nil
+				}
+				row.Accounts = accounts
+			}
+			rows[ri] = row
+		}
+		c.Rows = rows
+	}
+}

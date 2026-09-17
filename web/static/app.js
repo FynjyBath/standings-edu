@@ -186,6 +186,64 @@
       byId[b.id] = { block: b, chip: chip, text: title.toLowerCase() };
     });
 
+    var totalNode = nav.querySelector("[data-toc-total]");
+    if (totalNode) totalNode.textContent = blocks.length;
+
+    // ── Сворачивание оглавления ───────────────────────────────────────────
+    // У больших групп чипов несколько десятков, и оглавление занимает пол-экрана.
+    // Показываем два ряда, остальное — по кнопке; выбор запоминаем.
+    var toggle = nav.querySelector("[data-toc-toggle]");
+    var storageKey = "nemalo-toc-expanded";
+    var expanded = false;
+    try { expanded = localStorage.getItem(storageKey) === "1"; } catch (e) {}
+    var forcedOpen = false; // раскрыто фильтром, не пользователем
+
+    function hiddenChipCount() {
+      // Чип считается скрытым, если не влезает в свёрнутую высоту.
+      var limit = chipsBox.clientHeight;
+      var n = 0;
+      Object.keys(byId).forEach(function (id) {
+        var chip = byId[id].chip;
+        if (chip.classList.contains("filtered-out") || chip.classList.contains("student-hidden")) return;
+        if (chip.offsetTop + chip.offsetHeight > limit + 1) n++;
+      });
+      return n;
+    }
+
+    function syncToggle() {
+      if (!toggle) return;
+      var open = expanded || forcedOpen;
+      nav.classList.toggle("contest-toc--collapsed", !open);
+      // Помещается целиком — кнопка не нужна.
+      var overflowing = chipsBox.scrollHeight > chipsBox.clientHeight + 1;
+      if (open) {
+        toggle.hidden = false;
+        toggle.textContent = "Свернуть";
+      } else if (overflowing) {
+        toggle.hidden = false;
+        var n = hiddenChipCount();
+        toggle.textContent = n > 0 ? "Ещё " + n : "Показать все";
+      } else {
+        toggle.hidden = true;
+      }
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        expanded = !(expanded || forcedOpen);
+        forcedOpen = false;
+        try { localStorage.setItem(storageKey, expanded ? "1" : "0"); } catch (e) {}
+        syncToggle();
+      });
+    }
+    // Число скрытых чипов меняется при переносе строк и при работе фильтров.
+    if (window.ResizeObserver) {
+      new ResizeObserver(function () { syncToggle(); }).observe(chipsBox);
+    }
+    nav.classList.add("contest-toc--collapsed");
+    syncToggle();
+
     if (filter) {
       filter.addEventListener("input", function () {
         var q = norm(filter.value);
@@ -198,6 +256,10 @@
           if (match) shown++;
         });
         if (empty) empty.hidden = shown !== 0;
+        // На время поиска раскрываем: иначе найденное осталось бы в скрытых
+        // рядах. Пустой запрос возвращает прежнее состояние.
+        forcedOpen = !!q;
+        syncToggle();
       });
     }
 

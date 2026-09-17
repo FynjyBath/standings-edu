@@ -129,9 +129,11 @@
 
 <nav class="contest-toc" data-contest-toc hidden aria-label="Оглавление контестов">
   <div class="contest-toc-head">
-    <span class="contest-toc-title">Контесты</span>
+    <span class="contest-toc-title">Контесты <span class="contest-toc-count" data-toc-total></span></span>
     <input type="search" class="filter-input" data-toc-filter placeholder="Найти контест…" autocomplete="off" spellcheck="false" style="flex:0 1 18rem;" />
     <span class="filter-count" data-toc-empty hidden>ничего не найдено</span>
+    {{/* Оглавление свёрнуто до двух рядов: у больших групп чипов десятки. */}}
+    <button type="button" class="contest-toc-toggle" data-toc-toggle hidden></button>
   </div>
   <div class="contest-toc-chips" data-toc-chips></div>
 </nav>

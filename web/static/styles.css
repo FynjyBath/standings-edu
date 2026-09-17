@@ -2944,3 +2944,109 @@ span:not(.flag-review-actions) > .flag-subs-btn {
 .jury-panel[open] .jury-panel-badge::before {
   content: "Свернуть ▴";
 }
+
+/* ── Прогресс и история действий в админке ──────────────────────────────── */
+
+.admin-progress {
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line) 66%);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface) 94%);
+  border-radius: 12px;
+  padding: 0.8rem 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.admin-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-size: 0.92rem;
+}
+
+.admin-progress-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-progress-bar {
+  position: relative;
+  height: 1.15rem;
+  margin: 0.6rem 0 0.2rem;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.admin-progress-fill {
+  height: 100%;
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface) 45%);
+  /* Ширина приходит с сервера и меняется только при перезагрузке — переход
+     сглаживает скачок, когда страницу обновляют. */
+  transition: width 0.3s ease;
+}
+
+.admin-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.admin-history {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-history-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 0.5rem 0.7rem;
+}
+
+.admin-history-item--error {
+  border-color: color-mix(in srgb, var(--attempt-text) 45%, var(--line) 55%);
+}
+
+.admin-history-item > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+}
+
+.admin-history-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-history-status {
+  font-weight: 800;
+  color: var(--ok-text, var(--accent-strong));
+}
+
+.admin-history-item--error .admin-history-status {
+  color: var(--attempt-text);
+}
+
+.admin-history-item[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+.admin-errors-note {
+  border-left: 3px solid var(--attempt-text);
+  padding: 0.4rem 0.7rem;
+  margin: 0 0 1rem;
+  background: var(--surface);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.9rem;
+}

@@ -2,6 +2,7 @@ package standings
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"testing"
@@ -772,5 +773,22 @@ func TestTaskReviewQueueRanksDisagreement(t *testing.T) {
 	}
 	if review.Rated != 2 || review.Total != 3 {
 		t.Errorf("оценено/всего: %d/%d, ожидалось 2/3", review.Rated, review.Total)
+	}
+}
+
+// Прогресс печатается только когда его попросили: генерацию обычно запускает
+// cron, и сотни таких строк засоряли бы системный журнал.
+func TestProgressReportingIsOptIn(t *testing.T) {
+	var out strings.Builder
+	b := NewBuilder(nil, log.New(&out, "", 0), 4)
+
+	b.progressf("accounts", 1, 10)
+	if out.Len() != 0 {
+		t.Fatalf("по умолчанию прогресс печататься не должен: %q", out.String())
+	}
+	b.ReportProgress(true)
+	b.progressf("accounts", 3, 10)
+	if got := out.String(); !strings.Contains(got, "PROGRESS stage=accounts done=3 total=10") {
+		t.Fatalf("после включения ожидали строку прогресса, получили %q", got)
 	}
 }

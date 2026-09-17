@@ -87,7 +87,8 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 	fullGroupBySlug := mapGroupsBySlug(groupsToUpdate)
 
 	generatedCount := 0
-	for _, group := range buildGroups {
+	for i, group := range buildGroups {
+		p.builder.progressf("groups", i, len(buildGroups))
 		p.logger.Printf("INFO generating standings for group=%s", group.Slug)
 
 		updatedStandings, ok := standingsByGroup[group.Slug]

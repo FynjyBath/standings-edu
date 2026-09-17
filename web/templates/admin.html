@@ -208,25 +208,53 @@
 </section>
 
 <section class="admin-block">
-  <h2>Результат последнего действия</h2>
-  {{if .LastResult}}
-  <div class="admin-result-meta">
-    <div><strong>Action:</strong> {{.LastResult.Action}}</div>
-    <div><strong>Status:</strong> {{if .LastResult.Success}}success{{else}}error{{end}}</div>
-    <div><strong>Exit code:</strong> {{.LastResult.ExitCode}}</div>
-    <div><strong>Started:</strong> <span data-localtime="{{.LastResult.StartedAtISO}}" data-sec="1">{{.LastResult.StartedAt}}</span></div>
-    <div><strong>Duration:</strong> {{.LastResult.Duration}}</div>
-  </div>
-  {{if .LastResult.Errors}}
-  <ul class="admin-errors">
-    {{range .LastResult.Errors}}
-    <li>{{.}}</li>
-    {{end}}
-  </ul>
+  <h2>Недавние действия</h2>
+
+  {{if .Busy}}
+  <p class="admin-errors-note">Другое действие уже идёт — новое не запустилось. Дождитесь окончания и повторите.</p>
   {{end}}
-  <pre class="admin-log">{{.LastResult.Output}}</pre>
+
+  {{if .Progress}}
+  {{/* Прогресс обновляется при перезагрузке страницы: без опроса с клиента и
+       нагрузки на сервер между заходами. */}}
+  <div class="admin-progress">
+    <div class="admin-progress-head">
+      <strong>{{.Progress.Action}}</strong> — {{.Progress.StageTitle}}
+      {{if .Progress.Known}}<span class="admin-progress-count">{{.Progress.Done}} из {{.Progress.Total}}</span>{{end}}
+      <span class="grade-weight">идёт {{.Progress.Elapsed}}</span>
+    </div>
+    {{if .Progress.Known}}
+    <div class="admin-progress-bar" role="progressbar" aria-valuenow="{{.Progress.Percent}}" aria-valuemin="0" aria-valuemax="100">
+      <div class="admin-progress-fill" style="width:{{.Progress.Percent}}%;"></div>
+      <span class="admin-progress-label">{{.Progress.Percent}}%</span>
+    </div>
+    {{end}}
+    <p class="empty-hint">Действие выполняется в фоне — страницу можно закрыть. Чтобы увидеть, докуда дошло, обновите её.</p>
+  </div>
+  {{end}}
+
+  {{if .Actions}}
+  <div class="admin-history">
+    {{range $i, $a := .Actions}}
+    <details class="admin-history-item{{if not $a.Success}} admin-history-item--error{{end}}"{{if eq $i 0}} open{{end}}>
+      <summary>
+        <span class="admin-history-status">{{if $a.Success}}✓{{else}}✕{{end}}</span>
+        <b>{{$a.Action}}</b>
+        <span data-localtime="{{$a.StartedAtISO}}" data-sec="1">{{$a.StartedAt}}</span>
+        <span class="grade-weight">{{$a.Duration}}{{if not $a.Success}} · код {{$a.ExitCode}}{{end}}</span>
+      </summary>
+      {{if $a.Errors}}
+      <ul class="admin-errors">
+        {{range $a.Errors}}<li>{{.}}</li>{{end}}
+      </ul>
+      {{end}}
+      <pre class="admin-log">{{$a.Output}}</pre>
+    </details>
+    {{end}}
+  </div>
+  <p class="empty-hint">Помнятся последние {{len .Actions}} действий с момента запуска сервера. Полная история — в <a href="/standings/admin/logs">журнале</a>.</p>
   {{else}}
-  <p class="empty-hint">Действия через админку ещё не запускались.</p>
+  {{if not .Progress}}<p class="empty-hint">Действия через админку ещё не запускались.</p>{{end}}
   {{end}}
 </section>
 

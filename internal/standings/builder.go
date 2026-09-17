@@ -41,6 +41,22 @@ type Builder struct {
 	sources       *source.Registry
 	logger        *log.Logger
 	maxConcurrent int
+	// reportProgress — печатать ли машиночитаемые строки прогресса.
+	reportProgress bool
+}
+
+// ReportProgress включает печать машиночитаемых строк прогресса. По умолчанию
+// выключено: генерацию чаще всего запускает cron, и сотни таких строк засоряли
+// бы системный журнал. Админка включает их себе и в показанный вывод не
+// пропускает (см. httpapi.progressWriter).
+func (b *Builder) ReportProgress(on bool) { b.reportProgress = on }
+
+// progressf печатает строку прогресса, если он включён.
+func (b *Builder) progressf(stage string, done, total int) {
+	if !b.reportProgress {
+		return
+	}
+	b.logger.Printf("PROGRESS stage=%s done=%d total=%d", stage, done, total)
 }
 
 func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int) *Builder {
@@ -417,6 +433,10 @@ func (b *Builder) collectStudentsTaskStatuses(ctx context.Context, students []do
 	statusesMu := sync.Mutex{}
 	sem := make(chan struct{}, b.maxConcurrent)
 	wg := sync.WaitGroup{}
+	// Опрос аккаунтов — самая долгая часть генерации, по ней и считаем прогресс.
+	// Строку читает админка (см. httpapi.parseProgressLine) и в показанный вывод
+	// не пропускает.
+	fetched := 0
 
 	for key, t := range targetByKey {
 		wg.Add(1)
@@ -433,11 +453,17 @@ func (b *Builder) collectStudentsTaskStatuses(ctx context.Context, students []do
 			statuses, err := b.fetchAccountStatuses(ctx, t.site, t.accountID)
 			if err != nil {
 				b.logger.Printf("WARN site=%s account_id=%s fetch error: %v", t.site, t.accountID, err)
+				statusesMu.Lock()
+				fetched++
+				b.progressf("accounts", fetched, len(targetByKey))
+				statusesMu.Unlock()
 				return
 			}
 
 			statusesMu.Lock()
 			statusesByKey[key] = statuses
+			fetched++
+			b.progressf("accounts", fetched, len(targetByKey))
 			statusesMu.Unlock()
 		}(key, t)
 	}

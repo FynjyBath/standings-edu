@@ -27,6 +27,7 @@ func main() {
 		moodleCreds      = flag.String("moodle-creds-file", "./data/credentials/moodle_credentials.json", "path to optional moodle credentials JSON (base_url + token or username/password)")
 		informaticsState = flag.String("informatics-state", "", "path to persisted informatics run_id state file (default: <out>/cache/informatics_runs_state.json)")
 		codeforcesState  = flag.String("codeforces-state", "", "path to persisted codeforces submission_id state file (default: <out>/cache/codeforces_user_status_state.json)")
+		progress         = flag.Bool("progress", false, "печатать машиночитаемые строки прогресса (их читает админка)")
 		refreshTasks     = flag.Bool("refresh-tasks", false, "re-fetch contest task lists/titles from sites instead of using the on-disk tasks cache")
 	)
 	flag.Parse()
@@ -104,6 +105,7 @@ func main() {
 	loader := storage.NewSourceLoader(*dataDir)
 	writer := storage.NewGeneratedWriter(*outDir)
 	builder := standings.NewBuilder(registry, logger, *parallelism)
+	builder.ReportProgress(*progress)
 	pipeline := standings.NewPipeline(loader, writer, builder, logger)
 
 	if err := pipeline.Run(ctx, *onlyGroup); err != nil {

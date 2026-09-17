@@ -46,8 +46,10 @@ type adminState struct {
 	cfg      AdminConfig
 	actionMu sync.Mutex
 
-	resultMu   sync.RWMutex
-	lastResult *AdminActionResult
+	resultMu sync.RWMutex
+	// history — завершённые действия, новейшее в конце (adminHistoryLimit).
+	history  []AdminActionResult
+	progress adminProgressState
 }
 
 type AdminActionResult struct {
@@ -68,7 +70,13 @@ type AdminPageData struct {
 	Groups           []AdminGroupLink
 	CombinedGroups   []AdminCombinedGroup
 	SelectableGroups []AdminGroupLink
-	LastResult       *AdminActionResult
+	// Actions — недавние действия, новейшее сверху.
+	Actions []AdminActionResult
+	// Progress — действие, идущее прямо сейчас (иначе nil). Обновляется при
+	// обычной перезагрузке страницы, без опроса с клиента.
+	Progress *AdminActionProgress
+	// Busy — попытка запустить действие пришлась на занятый сервер.
+	Busy bool
 	// Accesses — блок глобальных доступов (тот же редактор, что у группы).
 	Accesses AccessEditorData
 	// HasArchivedGroups/ArchivedCount — архивные (обычные) группы: свёрнутый
@@ -312,7 +320,7 @@ func (h *Handlers) AdminAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
+func (h *Handlers) AdminPage(w http.ResponseWriter, r *http.Request) {
 	groupLinks, err := h.listAdminGroupLinks()
 	if err != nil {
 		h.logger.Printf("ERROR list admin groups: %v", err)
@@ -326,7 +334,9 @@ func (h *Handlers) AdminPage(w http.ResponseWriter, _ *http.Request) {
 		Groups:           groupLinks,
 		CombinedGroups:   combinedGroups,
 		SelectableGroups: selectableGroups,
-		LastResult:       h.lastAdminResult(),
+		Actions:          h.adminHistory(),
+		Progress:         h.adminProgress(),
+		Busy:             r.URL.Query().Get("busy") == "1",
 		Accesses:         h.buildAccessEditor(true, "", "/api/admin/global-accesses/save", h.loadGlobalAccesses()),
 	}
 	for _, g := range groupLinks {
@@ -381,10 +391,12 @@ func (h *Handlers) AdminActionGenerate(w http.ResponseWriter, r *http.Request) {
 	// refresh_tasks=1 — перечитать состав задач (оглавления сборников, названия)
 	// с сайтов, минуя дисковый кэш; без него генерация быстрая, из кэша.
 	refreshTasks := r.FormValue("refresh_tasks") == "1"
-	result := h.runAdminAction("generate", func() AdminActionResult {
+	if !h.startAdminAction("generate", func() AdminActionResult {
 		return h.executeGenerateAction(refreshTasks, "")
-	})
-	h.setAdminResult(result)
+	}) {
+		http.Redirect(w, r, "/standings/admin?busy=1", http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
@@ -548,10 +560,12 @@ func (h *Handlers) AdminGroupCreate(w http.ResponseWriter, r *http.Request) {
 	formLink := strings.TrimSpace(r.FormValue("form_link"))
 	shortName := strings.TrimSpace(r.FormValue("short_name"))
 
-	result := h.runAdminAction("create_group", func() AdminActionResult {
+	if !h.startAdminAction("create_group", func() AdminActionResult {
 		return h.executeCreateGroupAction(slug, name, formLink, shortName)
-	})
-	h.setAdminResult(result)
+	}) {
+		http.Redirect(w, r, "/standings/admin?busy=1", http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, "/standings/admin", http.StatusSeeOther)
 }
 
@@ -737,6 +751,28 @@ func (h *Handlers) AdminIntakeEntryDiscard(w http.ResponseWriter, r *http.Reques
 	h.intakeEntryDiscard(w, r, false)
 }
 
+// startAdminAction запускает действие в фоне и сразу отдаёт управление: иначе
+// браузер висел бы всю генерацию, а прогресс показывать было бы негде — страницу
+// в это время не открыть. Возвращает false, если другое действие уже идёт.
+func (h *Handlers) startAdminAction(action string, runner func() AdminActionResult) bool {
+	if h.admin == nil {
+		h.setAdminResult(newAdminResult(action, false, -1, time.Now(), "", []string{"admin is not configured"}))
+		return true
+	}
+	if !h.admin.actionMu.TryLock() {
+		return false
+	}
+	h.admin.progress.start(action)
+	go func() {
+		defer h.admin.actionMu.Unlock()
+		defer h.admin.progress.finish()
+		h.setAdminResult(runner())
+	}()
+	return true
+}
+
+// runAdminAction — синхронный запуск для вызовов, которым нужен результат
+// (панель группы отвечает по нему JSON-ом).
 func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult) AdminActionResult {
 	started := time.Now()
 	if h.admin == nil {
@@ -746,6 +782,8 @@ func (h *Handlers) runAdminAction(action string, runner func() AdminActionResult
 		return newAdminResult(action, false, -1, started, "", []string{"another admin action is already running"})
 	}
 	defer h.admin.actionMu.Unlock()
+	h.admin.progress.start(action)
+	defer h.admin.progress.finish()
 	return runner()
 }
 
@@ -759,6 +797,9 @@ func (h *Handlers) executeGenerateAction(refreshTasks bool, onlyGroup string) Ad
 		"-generated-dir", h.admin.cfg.GeneratedDir,
 		"-informatics-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "informatics_credentials.json"),
 		"-codeforces-creds-file", filepath.Join(h.admin.cfg.DataDir, "credentials", "codeforces_credentials.json"),
+		// Прогресс нужен только тут: строки перехватываются и показываются
+		// полосой, в вывод не попадают. Cron запускает генерацию без него.
+		"-progress",
 	}
 	if strings.TrimSpace(onlyGroup) != "" {
 		args = append(args, "-group", strings.TrimSpace(onlyGroup))
@@ -792,6 +833,13 @@ func (h *Handlers) runCommandSequence(action string, commands []adminCommand) Ad
 	}
 
 	var output bytes.Buffer
+	// Строки прогресса из вывода команды забираем себе и в показанный вывод не
+	// пропускаем: их сотни, и читать их человеку незачем.
+	sink := &progressWriter{out: &output}
+	if h.admin != nil {
+		sink.on = h.admin.progress.update
+	}
+	defer sink.Flush()
 	exitCode := 0
 	errorsList := make([]string, 0)
 
@@ -805,8 +853,8 @@ func (h *Handlers) runCommandSequence(action string, commands []adminCommand) Ad
 
 		cmd := exec.Command(command.Path, command.Args...)
 		cmd.Dir = h.admin.cfg.ProjectRoot
-		cmd.Stdout = &output
-		cmd.Stderr = &output
+		cmd.Stdout = sink
+		cmd.Stderr = sink
 
 		err := cmd.Run()
 		if err != nil {
@@ -823,35 +871,45 @@ func (h *Handlers) runCommandSequence(action string, commands []adminCommand) Ad
 	return newAdminResult(action, success, exitCode, started, output.String(), errorsList)
 }
 
-func (h *Handlers) lastAdminResult() *AdminActionResult {
+func (h *Handlers) adminHistory() []AdminActionResult {
 	if h.admin == nil {
 		return nil
 	}
 	h.admin.resultMu.RLock()
 	defer h.admin.resultMu.RUnlock()
-	if h.admin.lastResult == nil {
-		return nil
+	out := make([]AdminActionResult, 0, len(h.admin.history))
+	// Новейшее сверху: смотрят обычно последнее.
+	for i := len(h.admin.history) - 1; i >= 0; i-- {
+		item := h.admin.history[i]
+		if len(item.Errors) > 0 {
+			item.Errors = append([]string(nil), item.Errors...)
+		}
+		out = append(out, item)
 	}
-	resultCopy := *h.admin.lastResult
-	if len(resultCopy.Errors) > 0 {
-		resultCopy.Errors = append([]string(nil), resultCopy.Errors...)
-	}
-	return &resultCopy
+	return out
 }
 
+func (h *Handlers) adminProgress() *AdminActionProgress {
+	if h.admin == nil {
+		return nil
+	}
+	return h.admin.progress.snapshot()
+}
 func (h *Handlers) setAdminResult(result AdminActionResult) {
 	if h.admin == nil {
 		return
 	}
-	h.admin.resultMu.Lock()
-	defer h.admin.resultMu.Unlock()
 	resultCopy := result
 	if len(resultCopy.Errors) > 0 {
 		resultCopy.Errors = append([]string(nil), resultCopy.Errors...)
 	}
-	h.admin.lastResult = &resultCopy
+	h.admin.resultMu.Lock()
+	defer h.admin.resultMu.Unlock()
+	h.admin.history = append(h.admin.history, resultCopy)
+	if len(h.admin.history) > adminHistoryLimit {
+		h.admin.history = h.admin.history[len(h.admin.history)-adminHistoryLimit:]
+	}
 }
-
 func (h *Handlers) listEditableFiles() ([]string, error) {
 	if h.admin == nil {
 		return nil, fmt.Errorf("admin is not configured")

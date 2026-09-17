@@ -486,6 +486,25 @@
     window.standingsApplyStudentFilter = apply;
   }
 
+  // ── 7. Запоминание свёрнутых блоков ─────────────────────────────────────
+  // <details data-remember="ключ"> сохраняет своё состояние между страницами:
+  // панель группы нужна изредка, но тому, кто ей пользуется, разворачивать её
+  // каждый раз заново — лишняя работа.
+  function initRememberedDetails() {
+    var blocks = document.querySelectorAll("details[data-remember]");
+    [].forEach.call(blocks, function (node) {
+      var key = "nemalo-open-" + node.getAttribute("data-remember");
+      try {
+        var saved = localStorage.getItem(key);
+        if (saved === "1") node.open = true;
+        else if (saved === "0") node.open = false;
+      } catch (e) {}
+      node.addEventListener("toggle", function () {
+        try { localStorage.setItem(key, node.open ? "1" : "0"); } catch (e) {}
+      });
+    });
+  }
+
   function sel(s) { return s ? document.querySelector(s) : null; }
 
   function init() {
@@ -495,6 +514,7 @@
     initRowCollapse(document);
     initEjudgeFilters();
     initStudentFilter();
+    initRememberedDetails();
   }
   // Для динамически вставленных фрагментов (ленивые таблицы контестов).
   window.standingsInitScope = function (scope) {

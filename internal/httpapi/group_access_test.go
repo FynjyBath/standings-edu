@@ -347,3 +347,33 @@ func TestContestsGlobalPerm(t *testing.T) {
 		t.Fatalf("определение глобального контеста изменилось: %s", blob)
 	}
 }
+
+// Панель группы свёрнута: место на странице занимают таблицы, а панель нужна
+// изредка. Заголовок с ролью при этом виден — иначе её бы не нашли.
+func TestJuryPanelCollapsedByDefault(t *testing.T) {
+	h, _ := juryTestSetup(t)
+
+	rec := accessGet(t, h.GroupStandingsPage, "/standings/g1?token="+tokAdmin, "g1")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("страница группы: code=%d", rec.Code)
+	}
+	if !strings.Contains(body, `<details class="jury-panel"`) {
+		t.Error("панель должна быть сворачиваемым <details>")
+	}
+	// Открытый <details> помечается атрибутом open — его быть не должно.
+	if strings.Contains(body, `<details class="jury-panel" data-remember="jury-panel" open`) {
+		t.Error("панель не должна быть развёрнута по умолчанию")
+	}
+	for _, want := range []string{
+		"Панель группы",        // заголовок виден в свёрнутом виде
+		"jury-panel-badge",     // «Развернуть ▾»
+		`data-remember=`,       // состояние запоминается
+		`id="jury-status"`,     // статус действий остаётся в шапке
+		`class="jury-actions"`, // само содержимое на месте
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("на странице нет %q", want)
+		}
+	}
+}

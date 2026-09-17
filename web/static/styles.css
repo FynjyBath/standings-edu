@@ -2910,3 +2910,37 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   color: var(--accent-strong);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line) 55%);
 }
+
+/* ── Свёрнутая панель группы ────────────────────────────────────────────── */
+
+/* Тот же приём, что у доски почёта: <details> с бейджем вместо маркера. */
+.jury-panel > .jury-panel-head {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.jury-panel > .jury-panel-head::-webkit-details-marker {
+  display: none;
+}
+
+.jury-panel[open] > .jury-panel-head {
+  margin-bottom: 0.7rem;
+}
+
+/* Заголовок и бейдж — одной группой слева, статус остаётся справа. */
+.jury-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.jury-panel-badge::before {
+  content: "Развернуть ▾";
+}
+
+.jury-panel[open] .jury-panel-badge::before {
+  content: "Свернуть ▴";
+}

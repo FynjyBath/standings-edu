@@ -42,11 +42,16 @@
 </section>
 
 {{if .Access.HasPanel}}
-<section class="jury-panel">
-  <div class="jury-panel-head">
-    <h2><span class="jury-panel-icon" aria-hidden="true">🛠</span> Панель группы <span class="panel-role-badge">{{.Access.Title}}</span></h2>
+{{/* Панель свёрнута: она нужна изредка, а места занимала больше таблиц.
+     Состояние запоминается (data-remember, см. app.js). */}}
+<details class="jury-panel" data-remember="jury-panel">
+  <summary class="jury-panel-head">
+    <div class="jury-panel-title">
+      <h2><span class="jury-panel-icon" aria-hidden="true">🛠</span> Панель группы <span class="panel-role-badge">{{.Access.Title}}</span></h2>
+      <span class="pinned-badge jury-panel-badge" aria-hidden="true"></span>
+    </div>
     <span id="jury-status" class="admin-editor-status"></span>
-  </div>
+  </summary>
   <div class="jury-actions">
     {{if .Access.CanEditGrades}}
     <div class="jury-action">
@@ -107,7 +112,7 @@
   </div>
   {{end}}
   <p class="jury-panel-foot">Изменения появятся в таблицах после ближайшей генерации.</p>
-</section>
+</details>
 {{end}}
 
 {{if .StudentNames}}

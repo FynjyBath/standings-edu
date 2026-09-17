@@ -13,10 +13,10 @@
   </div>
   <div class="stat-grid" style="margin-top:0.7rem;">
     {{if .LowData}}
-    <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">скорость (нужно ≥5 решённых и ≥2 ч)</span></div>
+    <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">темп (нужно ≥5 решённых задач и ≥2 недель занятий)</span></div>
     {{else}}
-    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Tempo}}</span><span class="stat-label">темп: сколько курса за неделю занятий, ×1 — как типичный ученик</span></div>
-    {{if .Strength}}<div class="stat-card"><span class="stat-value">{{pct .Strength}}%</span><span class="stat-label">сила: доля задач курса, которые по плечу</span></div>{{end}}
+    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Tempo}}</span><span class="stat-label">темп: сколько курса за неделю занятий, ×1 — как типичный ученик группы</span></div>
+    {{if .Strength}}<div class="stat-card"><span class="stat-value">{{pct .Strength}}%</span><span class="stat-label">сила: доля курса, которая по плечу (шанс взять не ниже половины)</span></div>{{end}}
     {{if .TempoRecent}}<div class="stat-card"><span class="stat-value">×{{numText .TempoRecent}}</span><span class="stat-label">темп, взвешенный по времени (свежее — важнее)</span></div>{{end}}
     {{end}}
     <div class="stat-card"><span class="stat-value">{{numText .JudgeHours}}</span><span class="stat-label">часов на судье (время между посылками, не время над задачами)</span></div>
@@ -96,7 +96,7 @@
 
 {{if $p.CourseStats}}{{template "tempoLegend"}}{{end}}
 
-<!-- Темп группы: сессии, эмпирические веса, взвешенная скорость (docs/course_speed.pdf) -->
+<!-- Темп группы: цена задач по порогу и числу посылок, темп и сила (docs/course_speed.pdf) -->
 {{range $p.CourseStats}}
 <section class="contest-block course-tempo-section">
   <h2><span class="course-scope-group">Темп группы: {{.GroupTitle}}</span><span class="course-scope-global">Темп по всем группам: {{.GroupTitle}}</span></h2>

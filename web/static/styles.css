@@ -3050,3 +3050,45 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   border-radius: 0 8px 8px 0;
   font-size: 0.9rem;
 }
+
+/* ── Легенда показателей: разбивка по смыслу ────────────────────────────── */
+
+.metric-legend-body {
+  padding: 0.7rem 0.9rem 0.85rem;
+}
+
+.metric-legend-intro {
+  margin: 0 0 0.7rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.metric-legend-intro--foot {
+  margin: 0.8rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent 30%);
+}
+
+.metric-legend-section {
+  font-weight: 800;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent-strong);
+  margin: 0.9rem 0 0.35rem;
+}
+
+.metric-legend-section:first-of-type {
+  margin-top: 0;
+}
+
+.metric-legend-body .metric-legend-grid {
+  padding: 0;
+}
+
+/* Подсказка «как читать вместе» — без термина слева, во всю ширину. */
+.metric-desc--hint {
+  color: var(--muted);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--line) 60%);
+  padding-left: 0.6rem;
+}

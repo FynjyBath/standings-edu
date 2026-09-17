@@ -109,3 +109,61 @@ func TestGroupPageStudentFilterHiddenWithoutStudents(t *testing.T) {
 		t.Error("без учеников панель фильтра показывать незачем")
 	}
 }
+
+// Легенда показателей должна описывать ту модель, которая считается сейчас.
+// Она разъезжается с кодом молча: шаблон соберётся с любым текстом.
+func TestTempoLegendMatchesCurrentModel(t *testing.T) {
+	dataDir, genDir := t.TempDir(), t.TempDir()
+	h := NewHandlers(
+		storage.NewGeneratedLoader(genDir), nil,
+		web.NewTemplateRenderer(filepath.Join("..", "..", "web", "templates")),
+		log.New(io.Discard, "", 0),
+	)
+	if err := h.ConfigureAdmin(AdminConfig{
+		Login: "admin", Password: "pw", ProjectRoot: t.TempDir(), DataDir: dataDir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureSourceDir(dataDir)
+	// Легенда — для преподавателя, страница открывается по праву view.participants.
+	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"),
+		`{"title":"Г1","student_ids":["s1"],"accesses":[{"id":"a1","title":"Жюри",
+		  "enabled":true,"auth":"token","token":"tok","perms":["view.participants"]}]}`)
+	writeTestFile(t, filepath.Join(genDir, "standings", "g1.json"),
+		`{"group_slug":"g1","group_title":"Г1","contests":[]}`)
+
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1/participants?token=tok", nil)
+	req.SetPathValue("group_name", "g1")
+	rec := httptest.NewRecorder()
+	h.GroupParticipantsPage(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("страница участников: code=%d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, want := range []string{
+		"Что означают показатели",
+		"обычных задачах курса",     // единица цены — не минуты
+		"сколько делает",            // темп
+		"что может",                 // сила
+		"не</b> время над задачами", // часы на судье
+		"5 решённых задач и 2 недель занятий",
+		"для этого ученика на этих задачах слишком маловероятна", // флаг
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("в легенде нет %q", want)
+		}
+	}
+	// Формулировки снятой модели не должны вернуться.
+	for _, stale := range []string{
+		"скорость относительно группы",
+		"активному времени",
+		"пулемёт",
+		"пачки решений",
+		"≥2 ч активного времени",
+	} {
+		if strings.Contains(body, stale) {
+			t.Errorf("в легенде осталось от старой модели: %q", stale)
+		}
+	}
+}

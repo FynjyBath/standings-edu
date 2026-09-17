@@ -642,8 +642,8 @@ func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request
 		}
 		switch ka {
 		case 0:
-			if ra.Course.Speed != rb.Course.Speed {
-				return ra.Course.Speed > rb.Course.Speed
+			if ra.Course.Tempo != rb.Course.Tempo {
+				return ra.Course.Tempo > rb.Course.Tempo
 			}
 		case 1:
 			if ra.Course.Progress != rb.Course.Progress {
@@ -667,11 +667,11 @@ func (h *Handlers) renderParticipantsPage(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// participantSortKey: 0 — есть скорость, 1 — есть курс-статы без скорости,
+// participantSortKey: 0 — есть темп, 1 — есть курс-статы без темпа,
 // 2 — нет данных по курсу.
 func participantSortKey(r ParticipantRow) int {
 	switch {
-	case r.Course != nil && !r.Course.LowData && r.Course.Speed > 0:
+	case r.Course != nil && !r.Course.LowData && r.Course.Tempo > 0:
 		return 0
 	case r.Course != nil:
 		return 1

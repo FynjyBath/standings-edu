@@ -2,7 +2,6 @@ package standings
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -43,30 +42,6 @@ func TestBuildStudentTaskTimesSessions(t *testing.T) {
 	}
 	if tt.solvedAt["b"].IsZero() {
 		t.Fatal("solvedAt[b] должен быть заполнен")
-	}
-}
-
-// Веса: медиана времени решивших + сглаживание к типичной задаче.
-func TestCourseWeights(t *testing.T) {
-	tasks := []courseTask{{norm: "x"}, {norm: "y"}}
-	statuses := map[string]*accountStatuses{}
-	times := map[string]studentTaskTime{}
-	// 7 учеников решили x за 10 минут; y никто не решил.
-	for i := 0; i < 7; i++ {
-		id := fmt.Sprintf("s%d", i)
-		st := newAccountStatuses()
-		st.solved["x"] = struct{}{}
-		statuses[id] = st
-		times[id] = studentTaskTime{taskMin: map[string]float64{"x": 10}}
-	}
-	w := courseWeights(tasks, times, statuses)
-	// ŵ_x=10 (n=7), w̄=10 → w_x = (7*10+5*10)/12 = 10.
-	if w["x"] != 10 {
-		t.Fatalf("w[x] = %v, want 10", w["x"])
-	}
-	// y: n=0 → w̄ = 10.
-	if w["y"] != 10 {
-		t.Fatalf("w[y] = %v, want 10 (сглаживание к типичной)", w["y"])
 	}
 }
 
@@ -159,56 +134,6 @@ func TestComputeCourseStats(t *testing.T) {
 	}
 }
 
-// Скорость и «форма»: у ровного ученика с достаточными данными v ≈ 1.
-func TestComputeCourseStatsSpeedCalibration(t *testing.T) {
-	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
-	now := base.Add(14 * 24 * time.Hour)
-
-	// Курс из 8 задач одним контестом (порядок внутри контеста слева направо).
-	tasks := make([]domain.GeneratedTask, 8)
-	norms := make([]string, 8)
-	for i := range tasks {
-		norms[i] = fmt.Sprintf("t%d", i)
-		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
-	}
-	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
-
-	students := make([]domain.Student, 0)
-	statuses := map[string]*accountStatuses{}
-	// 9 одинаковых учеников: решают все 8 задач по 30 минут, две сессии по 4 задачи.
-	for i := 0; i < 9; i++ {
-		id := fmt.Sprintf("s%d", i)
-		students = append(students, domain.Student{ID: id})
-		st := newAccountStatuses()
-		for j, norm := range norms {
-			day := j / 4 // две сессии в разные дни
-			min := float64(30 * (j%4 + 1))
-			at := base.Add(time.Duration(day) * 72 * time.Hour).Add(time.Duration(min) * time.Minute)
-			st.timed[norm] = []source.TimedSubmission{{At: at, Solved: true}}
-			st.solved[norm] = struct{}{}
-			st.attempted[norm] = struct{}{}
-		}
-		statuses[id] = st
-	}
-	stats := computeCourseStats(std, students, statuses, now, nil)
-	cs := stats["s0"]
-	if cs.LowData {
-		t.Fatalf("данных достаточно: %+v", cs)
-	}
-	// После нормировки на медиану когорты у медианного (здесь — любого из
-	// одинаковых) ученика скорость ровно ×1.
-	if cs.Speed != 1 {
-		t.Fatalf("калибровка: у медианного ученика v=1, got %v", cs.Speed)
-	}
-	if cs.SpeedRecent <= 0 {
-		t.Fatalf("speed_recent должен посчитаться: %+v", cs)
-	}
-	if cs.Progress != 1 || cs.ForecastWeeks != 0 {
-		t.Fatalf("курс пройден: progress=%v forecast=%v", cs.Progress, cs.ForecastWeeks)
-	}
-}
-
 // newCheaterCohort — общая фикстура детекторов: курс из 10 задач одним
 // контестом, 8 «нормальных» учеников (решают каждую задачу за ~20 минут со
 // второй попытки — first-try rate 0, все задачи «нелёгкие») и «читер» (первые
@@ -288,68 +213,6 @@ func TestDetectCourseFlags(t *testing.T) {
 	}
 }
 
-// Решённое БЕЗ зафиксированного времени (ACMP, исключённый эпизод флага) не
-// участвует в скорости: вес без минут в знаменателе раздувал бы её. У ученика с
-// теми же временами, что у когорты, плюс пачкой «безвременных» решений скорость
-// должна остаться ×1, как у всех.
-func TestSpeedIgnoresSolvedWithoutTime(t *testing.T) {
-	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
-	now := base.Add(14 * 24 * time.Hour)
-
-	tasks := make([]domain.GeneratedTask, 12)
-	norms := make([]string, 12)
-	for i := range tasks {
-		norms[i] = fmt.Sprintf("t%d", i)
-		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
-	}
-	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
-
-	students := make([]domain.Student, 0)
-	statuses := map[string]*accountStatuses{}
-	// Когорта: первые 8 задач решаются по 30 минут (две сессии), с временем.
-	solveTimed := func(st *accountStatuses) {
-		for j := 0; j < 8; j++ {
-			day := j / 4
-			min := float64(30 * (j%4 + 1))
-			at := base.Add(time.Duration(day) * 72 * time.Hour).Add(time.Duration(min) * time.Minute)
-			st.timed[norms[j]] = []source.TimedSubmission{{At: at, Solved: true}}
-			st.solved[norms[j]] = struct{}{}
-			st.attempted[norms[j]] = struct{}{}
-		}
-	}
-	for i := 0; i < 9; i++ {
-		id := fmt.Sprintf("s%d", i)
-		students = append(students, domain.Student{ID: id})
-		st := newAccountStatuses()
-		solveTimed(st)
-		statuses[id] = st
-	}
-	// Испытуемый: те же 8 с временем + 4 решённые БЕЗ посылок с временем.
-	mixed := newAccountStatuses()
-	solveTimed(mixed)
-	for j := 8; j < 12; j++ {
-		mixed.solved[norms[j]] = struct{}{}
-		mixed.attempted[norms[j]] = struct{}{}
-	}
-	students = append(students, domain.Student{ID: "mixed"})
-	statuses["mixed"] = mixed
-
-	stats := computeCourseStats(std, students, statuses, now, nil)
-	cs := stats["mixed"]
-	if cs.LowData {
-		t.Fatalf("данных достаточно: %+v", cs)
-	}
-	// Времена как у когорты → скорость ровно ×1; «безвременные» решения дают
-	// прогресс, но не скорость.
-	if cs.Speed != 1 {
-		t.Fatalf("безвременные решения не должны раздувать скорость: ×%v, want ×1", cs.Speed)
-	}
-	if cs.SolvedCount != 12 || cs.Progress <= stats["s0"].Progress {
-		t.Fatalf("прогресс должен учитывать все решённые: %+v", cs)
-	}
-}
-
 // Исходы проверки и подсчёт темпа: «перенос» и «нарушение» исключают посылки
 // эпизода (активное время падает, флаг не детектируется заново, прогресс цел),
 // «сам решил» и старые записи без исхода не исключают ничего.
@@ -394,11 +257,11 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 	if !hasFlag(legit["cheat"]) {
 		t.Fatalf("при «сам решил» флаг должен детектироваться: %+v", legit["cheat"].Flags)
 	}
-	if legit["cheat"].ActiveHours <= noRev["cheat"].ActiveHours {
-		t.Fatalf("«сам решил» должен вернуть время эпизода: %v <= %v", legit["cheat"].ActiveHours, noRev["cheat"].ActiveHours)
+	if legit["cheat"].JudgeHours <= noRev["cheat"].JudgeHours {
+		t.Fatalf("«сам решил» должен вернуть время эпизода: %v <= %v", legit["cheat"].JudgeHours, noRev["cheat"].JudgeHours)
 	}
-	if old := run(""); old["cheat"].ActiveHours != legit["cheat"].ActiveHours {
-		t.Fatalf("старая запись без исхода = «сам решил»: %v != %v", old["cheat"].ActiveHours, legit["cheat"].ActiveHours)
+	if old := run(""); old["cheat"].JudgeHours != legit["cheat"].JudgeHours {
+		t.Fatalf("старая запись без исхода = «сам решил»: %v != %v", old["cheat"].JudgeHours, legit["cheat"].JudgeHours)
 	}
 
 	// «Перенос» и «нарушение»: эпизод исключён (как и до разметки), а флаг
@@ -410,14 +273,14 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 			if hasFlag(cs) {
 				t.Fatalf("исключённый эпизод не должен флаговаться снова: %+v", cs.Flags)
 			}
-			if cs.ActiveHours != noRev["cheat"].ActiveHours {
-				t.Fatalf("время как в базлайне (эпизод исключён): %v != %v", cs.ActiveHours, noRev["cheat"].ActiveHours)
+			if cs.JudgeHours != noRev["cheat"].JudgeHours {
+				t.Fatalf("время как в базлайне (эпизод исключён): %v != %v", cs.JudgeHours, noRev["cheat"].JudgeHours)
 			}
 			if cs.SolvedCount != noRev["cheat"].SolvedCount || cs.SolvedCount != legit["cheat"].SolvedCount {
 				t.Fatalf("прогресс не должен зависеть от разметки: %d", cs.SolvedCount)
 			}
 			// Честные ученики не затронуты ни одним из режимов.
-			if after["s0"].ActiveHours != noRev["s0"].ActiveHours || after["s0"].ActiveHours != legit["s0"].ActiveHours {
+			if after["s0"].JudgeHours != noRev["s0"].JudgeHours || after["s0"].JudgeHours != legit["s0"].JudgeHours {
 				t.Fatalf("честный ученик не должен меняться: %+v", after["s0"])
 			}
 		})
@@ -565,63 +428,6 @@ func TestFlagReviewSoftMatchByTasks(t *testing.T) {
 	}
 }
 
-// Пачка мгновенных решений ловится и без first-try (решения со второй посылки,
-// но интервалы крошечные).
-func TestDetectCourseFlagsBurst(t *testing.T) {
-	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
-	now := base.Add(24 * time.Hour)
-	tasks := make([]domain.GeneratedTask, 6)
-	norms := make([]string, 6)
-	for i := range tasks {
-		norms[i] = fmt.Sprintf("b%d", i)
-		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
-	}
-	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
-
-	students := []domain.Student{}
-	statuses := map[string]*accountStatuses{}
-	// Когорта: ~20 минут на задачу, у половины first-try (rate 1.0 — лёгкие по
-	// first-try, чтобы серию не ловить, а поймать именно пулемёт).
-	for i := 0; i < 8; i++ {
-		id := fmt.Sprintf("s%d", i)
-		students = append(students, domain.Student{ID: id})
-		st := newAccountStatuses()
-		cur := base
-		for _, norm := range norms {
-			st.timed[norm] = []source.TimedSubmission{{At: cur.Add(20 * time.Minute), Solved: true}}
-			st.solved[norm] = struct{}{}
-			st.attempted[norm] = struct{}{}
-			cur = cur.Add(20 * time.Minute)
-		}
-		statuses[id] = st
-	}
-	// Пулемётчик: НЕ first-try (по 2 посылки), но 5 решений с паузами 2 мин.
-	mg := newAccountStatuses()
-	for i := 0; i < 5; i++ {
-		at := base.Add(time.Duration(2*i) * time.Minute)
-		mg.timed[norms[i]] = []source.TimedSubmission{
-			{At: at.Add(-30 * time.Second)}, // быстрая неудачная
-			{At: at, Solved: true},
-		}
-		mg.solved[norms[i]] = struct{}{}
-		mg.attempted[norms[i]] = struct{}{}
-	}
-	students = append(students, domain.Student{ID: "mg"})
-	statuses["mg"] = mg
-
-	stats := computeCourseStats(std, students, statuses, now, nil)
-	found := false
-	for _, f := range stats["mg"].Flags {
-		if strings.Contains(f.Text, "задач за") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("пулемёт должен быть пойман: %+v", stats["mg"].Flags)
-	}
-}
-
 // courseDisplayWeights: типичное время (медиана активного времени решивших) в
 // минутах, только для задач с ≥3 решившими с известным временем; stampTaskWeights
 // проставляет его и в плоский список, и в подконтесты.
@@ -677,323 +483,163 @@ func TestCourseDisplayWeights(t *testing.T) {
 	}
 }
 
-// Скорость считается только по времени решённых задач (время на нерешённых её
-// не занижает), а «фантомно быстрые» решения (одинокая AC-посылка в сессии, где
-// модель видит лишь δ0) упираются в floor α·вес → скорость не выше ×(1/α).
-func TestSpeedSolvedOnlyWithFloor(t *testing.T) {
-	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
-	const nTasks = 15
+// Цена задачи должна слышать порог понимания, а не только возню с отладкой.
+// Две задачи, одинаковые по числу посылок: первую берут все, вторую — половина.
+// Прежняя модель (медиана времени) ставила их вровень.
+func TestTaskPriceHearsThreshold(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	tasks := []courseTask{{norm: "easy"}, {norm: "hard"}}
 
-	tasks := make([]domain.GeneratedTask, 0, nTasks)
-	norms := make([]string, 0, nTasks)
-	for i := 0; i < nTasks; i++ {
-		norm := fmt.Sprintf("t%02d", i)
-		norms = append(norms, norm)
-		tasks = append(tasks, domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norm})
-	}
-	std := domain.GeneratedGroupStandings{
-		GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}},
-	}
-
-	// «Ровный» ученик: каждая задача — отдельная сессия из 3 посылок 0/+20/+40
-	// мин → активное время задачи = δ0(10) + 20 + 20 = 50 мин. Вес задач ≈ 50.
-	steady := func() *accountStatuses {
-		st := newAccountStatuses()
-		for i, norm := range norms {
-			s0 := base.Add(time.Duration(i) * 2 * time.Hour)
-			st.timed[norm] = []source.TimedSubmission{
-				{At: s0}, {At: s0.Add(20 * time.Minute)}, {At: s0.Add(40 * time.Minute), Solved: true},
-			}
-			st.solved[norm] = struct{}{}
-			st.attempted[norm] = struct{}{}
-		}
-		return st
-	}
-
-	students := make([]domain.Student, 0)
 	statuses := map[string]*accountStatuses{}
-	for i := 0; i < 6; i++ {
-		id := fmt.Sprintf("bg%d", i)
-		students = append(students, domain.Student{ID: id})
-		statuses[id] = steady()
-	}
-
-	// «Утопающий»: решает как ровный, но дополнительно утопил ~3.5 часа в
-	// нерешённой задаче x (посылки каждые 30 мин одной сессией).
-	wasted := steady()
-	xSubs := []source.TimedSubmission{}
-	for d := 0.0; d <= 210; d += 30 {
-		xSubs = append(xSubs, source.TimedSubmission{At: base.Add(100 * time.Hour).Add(time.Duration(d) * time.Minute)})
-	}
-	wasted.timed["x"] = xSubs
-	wasted.attempted["x"] = struct{}{}
-	students = append(students, domain.Student{ID: "wasted"})
-	statuses["wasted"] = wasted
-	// x — тоже задача курса (иначе её время и так бы не считалось).
-	std.Contests[0].Tasks = append(std.Contests[0].Tasks, domain.GeneratedTask{Label: "X", NormalizedURL: "x"})
-
-	// «Фантом»: каждая задача — своя сессия из двух посылок в минуту (обдумал
-	// заранее, сел и сдал) → модель видит δ0 + 1 ≈ 11 мин на задачу при весе
-	// ≈ 50. Вторая посылка — чтобы не словить флаг «подряд с первой попытки»
-	// (тот исключил бы эпизоды из темпа — отдельный механизм).
-	phantom := newAccountStatuses()
-	for i, norm := range norms {
-		at := base.Add(time.Duration(i) * 3 * time.Hour)
-		phantom.timed[norm] = []source.TimedSubmission{{At: at}, {At: at.Add(time.Minute), Solved: true}}
-		phantom.solved[norm] = struct{}{}
-		phantom.attempted[norm] = struct{}{}
-	}
-	// Внекурсовая активность с обычными паузами, чтобы личный δ0 фантома не
-	// схлопнулся в 1 мин (δ0 — медиана внутрисессионных пауз ученика).
-	warm := []source.TimedSubmission{}
 	for i := 0; i < 20; i++ {
-		warm = append(warm, source.TimedSubmission{At: base.Add(-200 * time.Hour).Add(time.Duration(i) * 30 * time.Minute)})
-	}
-	phantom.timed["warmup"] = warm
-	phantom.attempted["warmup"] = struct{}{}
-	students = append(students, domain.Student{ID: "phantom"})
-	statuses["phantom"] = phantom
-
-	now := base.Add(30 * 24 * time.Hour)
-	stats := computeCourseStats(std, students, statuses, now, nil)
-
-	bg, ws, ph := stats["bg0"], stats["wasted"], stats["phantom"]
-	if bg == nil || ws == nil || ph == nil {
-		t.Fatal("nil stats")
-	}
-	if bg.LowData || ws.LowData || ph.LowData {
-		t.Fatalf("не должно быть low-data: bg=%v ws=%v ph=%v", bg.LowData, ws.LowData, ph.LowData)
-	}
-	// Время в нерешённой x не занижает скорость: «утопающий» равен ровному.
-	if ws.Speed != bg.Speed {
-		t.Fatalf("время на нерешённых не должно менять скорость: wasted=%v bg=%v", ws.Speed, bg.Speed)
-	}
-	// Но активные часы у «утопающего» больше — время видно там.
-	if ws.ActiveHours <= bg.ActiveHours {
-		t.Fatalf("часы утопающего должны быть больше: %v vs %v", ws.ActiveHours, bg.ActiveHours)
-	}
-	// «Фантом» упирается в floor: скорость ≈ ×(1/α), а не 50/11 ≈ 4.5.
-	want := 1.0 / courseSpeedFloorAlpha
-	if ph.Speed < want-0.3 || ph.Speed > want+0.2 {
-		t.Fatalf("фантом должен быть ограничен ×%.1f: got %v", want, ph.Speed)
-	}
-}
-
-// Прогноз масштабируется КПД: у ученика, топящего половину времени в
-// нерешённом, прогноз в ~2 раза длиннее, чем у ровного с тем же темпом решения.
-func TestForecastScaledByEfficiency(t *testing.T) {
-	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
-	const nTasks = 12
-
-	tasks := make([]domain.GeneratedTask, 0, nTasks)
-	norms := make([]string, 0, nTasks)
-	for i := 0; i < nTasks; i++ {
-		norm := fmt.Sprintf("t%02d", i)
-		norms = append(norms, norm)
-		tasks = append(tasks, domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norm})
-	}
-	std := domain.GeneratedGroupStandings{
-		GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}},
-	}
-
-	// Решает первые 6 задач (по 50 мин: 3 посылки 0/20/40), по одной в неделю —
-	// чтобы недельная активность посчиталась (нужно ≥2 положительных недель).
-	solveHalf := func() *accountStatuses {
 		st := newAccountStatuses()
-		for i := 0; i < 6; i++ {
-			s0 := base.Add(time.Duration(i) * 7 * 24 * time.Hour)
-			st.timed[norms[i]] = []source.TimedSubmission{
-				{At: s0}, {At: s0.Add(20 * time.Minute)}, {At: s0.Add(40 * time.Minute), Solved: true},
-			}
-			st.solved[norms[i]] = struct{}{}
-			st.attempted[norms[i]] = struct{}{}
-		}
-		return st
-	}
-
-	students := make([]domain.Student, 0)
-	statuses := map[string]*accountStatuses{}
-	for i := 0; i < 6; i++ {
-		id := fmt.Sprintf("bg%d", i)
-		students = append(students, domain.Student{ID: id})
-		statuses[id] = solveHalf()
-	}
-
-	// «Утопающий»: то же самое + каждую неделю ещё ~50 мин бьётся над
-	// нерешаемой задачей x (той же сессией, посылки каждые 25 мин).
-	drown := solveHalf()
-	for i := 0; i < 6; i++ {
-		s0 := base.Add(time.Duration(i) * 7 * 24 * time.Hour).Add(40 * time.Minute)
-		drown.timed["x"] = append(drown.timed["x"],
-			source.TimedSubmission{At: s0.Add(25 * time.Minute)},
-			source.TimedSubmission{At: s0.Add(50 * time.Minute)})
-	}
-	drown.attempted["x"] = struct{}{}
-	students = append(students, domain.Student{ID: "drown"})
-	statuses["drown"] = drown
-	std.Contests[0].Tasks = append(std.Contests[0].Tasks, domain.GeneratedTask{Label: "X", NormalizedURL: "x"})
-
-	now := base.Add(6 * 7 * 24 * time.Hour)
-	stats := computeCourseStats(std, students, statuses, now, nil)
-	bg, dr := stats["bg0"], stats["drown"]
-	if bg == nil || dr == nil || bg.LowData || dr.LowData {
-		t.Fatalf("нет статов или low-data: %+v %+v", bg, dr)
-	}
-	if bg.ForecastWeeks <= 0 || dr.ForecastWeeks <= 0 {
-		t.Fatalf("прогнозы должны посчитаться: bg=%v dr=%v", bg.ForecastWeeks, dr.ForecastWeeks)
-	}
-	// Скорость решения у обоих одинаковая; у «утопающего» КПД ~1/2, но и часов
-	// в неделю вдвое больше — календарный прогноз должен быть ~равным (расхождение
-	// только от округления WeeklyHours до 0.1 ч). Без КПД-поправки его прогноз
-	// был бы вдвое короче (~3.5 против ~7 недель).
-	if dr.WeeklyHours <= bg.WeeklyHours {
-		t.Fatalf("у утопающего должно быть больше часов в неделю: dr=%v bg=%v", dr.WeeklyHours, bg.WeeklyHours)
-	}
-	if diff := dr.ForecastWeeks - bg.ForecastWeeks; diff < -0.5 || diff > 0.5 {
-		t.Fatalf("прогнозы должны быть ~равны (КПД компенсирует лишние часы): dr=%v bg=%v", dr.ForecastWeeks, bg.ForecastWeeks)
-	}
-}
-
-// Детектор «пачечной сдачи»: сессия с ≥4 решёнными задачами курса при медианном
-// времени < 50% типичного даёт флаг; честная плотная сессия (t/w ≈ 1) — нет.
-func TestDetectBatchSubmissionFlag(t *testing.T) {
-	base := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
-	const nTasks = 10
-
-	tasks := make([]domain.GeneratedTask, 0, nTasks)
-	norms := make([]string, 0, nTasks)
-	for i := 0; i < nTasks; i++ {
-		norm := fmt.Sprintf("t%02d", i)
-		norms = append(norms, norm)
-		tasks = append(tasks, domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norm})
-	}
-	std := domain.GeneratedGroupStandings{
-		GroupSlug: "g", GroupTitle: "Г",
-		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}},
-	}
-
-	// Фон: решают каждую задачу за ~20 минут (2 посылки: промах + AC), отдельными
-	// сессиями → вес ≈ 20, first-try rate = 0 (стрик-детектор не мешает).
-	students := make([]domain.Student, 0)
-	statuses := map[string]*accountStatuses{}
-	for i := 0; i < 7; i++ {
-		id := fmt.Sprintf("bg%d", i)
-		students = append(students, domain.Student{ID: id})
-		st := newAccountStatuses()
-		for j, norm := range norms {
-			s0 := base.Add(time.Duration(j) * 2 * time.Hour)
-			st.timed[norm] = []source.TimedSubmission{
-				{At: s0}, {At: s0.Add(20 * time.Minute), Solved: true},
-			}
-			st.solved[norm] = struct{}{}
+		// «easy» берут все, «hard» — только каждый второй; обеим по 2 посылки.
+		put := func(norm string, solved bool, at time.Time) {
 			st.attempted[norm] = struct{}{}
+			st.timed[norm] = []source.TimedSubmission{{At: at}, {At: at.Add(10 * time.Minute), Solved: solved}}
+			if solved {
+				st.solved[norm] = struct{}{}
+			}
 		}
-		statuses[id] = st
+		put("easy", true, base)
+		put("hard", i%2 == 0, base.Add(time.Hour))
+		statuses[fmt.Sprintf("s%d", i)] = st
 	}
-
-	// «Пачечник»: 6 задач одной сессией, на каждую по 2 посылки (промах + AC
-	// через 2 и 4 мин) — не first-try и паузы больше «пулемётных», но времени
-	// ~4 мин/задачу при типичных 20.
-	batch := newAccountStatuses()
-	cur := base.Add(100 * time.Hour)
-	for i := 0; i < 6; i++ {
-		batch.timed[norms[i]] = []source.TimedSubmission{
-			{At: cur.Add(4 * time.Minute)}, {At: cur.Add(8 * time.Minute), Solved: true},
-		}
-		batch.solved[norms[i]] = struct{}{}
-		batch.attempted[norms[i]] = struct{}{}
-		cur = cur.Add(8 * time.Minute)
+	m := fitCourseModel(tasks, statuses)
+	if !(m.price["hard"] > m.price["easy"]) {
+		t.Fatalf("задача, которую берёт половина, должна стоить дороже: easy=%.2f hard=%.2f",
+			m.price["easy"], m.price["hard"])
 	}
-	students = append(students, domain.Student{ID: "batch"})
-	statuses["batch"] = batch
-
-	now := base.Add(30 * 24 * time.Hour)
-	stats := computeCourseStats(std, students, statuses, now, nil)
-
-	var batchFlags []domain.CourseFlag
-	for _, f := range stats["batch"].Flags {
-		if strings.Contains(f.Text, "одной сессией") {
-			batchFlags = append(batchFlags, f)
-		}
-	}
-	if len(batchFlags) != 1 {
-		t.Fatalf("у пачечника должен быть ровно один флаг пачки: %+v", stats["batch"].Flags)
-	}
-	if got := len(batchFlags[0].TaskURLs); got != 6 {
-		t.Fatalf("в эпизоде должно быть 6 задач: %d", got)
-	}
-	// Честные плотные сессии фона флаг не получают.
-	for _, f := range stats["bg0"].Flags {
-		if strings.Contains(f.Text, "одной сессией") {
-			t.Fatalf("у честного ученика не должно быть флага пачки: %+v", f)
-		}
+	// Единица — «обычная задача курса»: медианная задача стоит около 1.
+	if med := median([]float64{m.price["easy"], m.price["hard"]}); med < 0.9 || med > 1.1 {
+		t.Fatalf("медианная задача должна стоить ≈1, получили %.2f", med)
 	}
 }
 
-// Коррекция весов на редкость решения: задача, решённая 4 из 8 дошедших, дорожает
-// в (8/4)^0.5 ≈ 1.41 раза; задача, решённая всеми дошедшими, — нет. Нормировка
-// по дошедшим: задача в конце курса, до которой дошли немногие, не дорожает
-// только из-за позиции.
-func TestCourseWeightsRarityCorrection(t *testing.T) {
-	tasks := []courseTask{{norm: "easy"}, {norm: "hard"}, {norm: "tail"}}
+// Темп — про то, сколько человек прошёл, а не про то, как аккуратно он сдаёт.
+// Прежняя «скорость» ставила прошедшего весь курс ниже того, кто взял горстку
+// задач с первой попытки, потому что мерила промежутки между посылками.
+func TestTempoRewardsProgressNotTidySubmissions(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(20 * 7 * 24 * time.Hour)
+
+	tasks := make([]domain.GeneratedTask, 20)
+	norms := make([]string, 20)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
 	statuses := map[string]*accountStatuses{}
-	times := map[string]studentTaskTime{}
-	// 8 учеников: все решили easy за 10 мин; 4 решили hard за 10 мин;
-	// из них 2 решили tail за 10 мин (фронт этих двоих — tail).
-	for i := 0; i < 8; i++ {
-		id := fmt.Sprintf("s%d", i)
+	students := make([]domain.Student, 0)
+	// Фон: по 10 задач за 5 недель, по две посылки на задачу.
+	add := func(id string, count, weeks, subsPer int) {
 		st := newAccountStatuses()
-		tm := map[string]float64{"easy": 10}
-		st.solved["easy"] = struct{}{}
-		if i < 4 {
-			st.solved["hard"] = struct{}{}
-			tm["hard"] = 10
-		}
-		if i < 2 {
-			st.solved["tail"] = struct{}{}
-			tm["tail"] = 10
+		for j := 0; j < count; j++ {
+			wk := j * weeks / count
+			at := base.Add(time.Duration(wk) * 7 * 24 * time.Hour).Add(time.Duration(j) * time.Hour)
+			subs := make([]source.TimedSubmission, 0, subsPer)
+			for k := 0; k < subsPer-1; k++ {
+				subs = append(subs, source.TimedSubmission{At: at.Add(time.Duration(k*5) * time.Minute)})
+			}
+			subs = append(subs, source.TimedSubmission{At: at.Add(time.Duration(subsPer*5) * time.Minute), Solved: true})
+			st.timed[norms[j]] = subs
+			st.solved[norms[j]] = struct{}{}
+			st.attempted[norms[j]] = struct{}{}
 		}
 		statuses[id] = st
-		times[id] = studentTaskTime{taskMin: tm}
+		students = append(students, domain.Student{ID: id})
 	}
-	w := courseWeights(tasks, times, statuses)
+	for i := 0; i < 6; i++ {
+		add(fmt.Sprintf("bg%d", i), 10, 5, 3)
+	}
+	// Прошёл весь курс за 10 недель, но отлаживает помногу.
+	add("marathon", 20, 10, 6)
+	// Взял 6 задач за 6 недель, зато каждую с первой попытки.
+	add("tidy", 6, 6, 1)
 
-	// easy: решили 8 из 8 дошедших → без коррекции (сглаженный ≈ 10).
-	if w["easy"] < 9.9 || w["easy"] > 10.1 {
-		t.Fatalf("easy: вес должен остаться ~10: %v", w["easy"])
+	stats := computeCourseStats(std, students, statuses, now, nil)
+	marathon, tidy := stats["marathon"].Tempo, stats["tidy"].Tempo
+	if marathon <= 0 || tidy <= 0 {
+		t.Fatalf("темп должен считаться у обоих: marathon=%v tidy=%v", marathon, tidy)
 	}
-	// hard: дошли 8 (фронт ≥ hard у решивших hard и tail... фронт «дошёл» у всех 8:
-	// фронт первых четырёх — hard/tail, у остальных — easy (не дошли).
-	// Дошли до hard: 4 (фронт hard) + 2 (фронт tail)... у i<4 фронт ≥ hard.
-	// reached(hard) = 4? Нет: фронт s0..s3 — hard или tail (≥1), s4..s7 — easy (0).
-	// reached(hard)=4, solved=4 → p=1 → без коррекции.
-	if w["hard"] < 9.9 || w["hard"] > 10.1 {
-		t.Fatalf("hard: все дошедшие решили → без коррекции: %v", w["hard"])
+	if !(marathon > tidy) {
+		t.Fatalf("прошедший весь курс должен иметь темп выше: marathon=%v tidy=%v", marathon, tidy)
 	}
-	// tail: дошли 2 (фронт tail), решили 2 → p=1, но reached=2 < minReached →
-	// коррекции нет (шумно).
-	if w["tail"] < 9.9 || w["tail"] > 10.1 {
-		t.Fatalf("tail: мало дошедших → без коррекции: %v", w["tail"])
+	if stats["marathon"].SolvedCount != 20 {
+		t.Fatalf("marathon должен пройти весь курс, решено %d", stats["marathon"].SolvedCount)
 	}
+}
 
-	// Теперь редкость: до hard дошли 8 (у всех фронт ≥ hard), решили 4.
-	for i := 4; i < 8; i++ {
+// Флаг меряет невероятность для КОНКРЕТНОГО ученика: одна и та же серия у
+// сильного — норма, у слабого — сигнал.
+func TestFlagsWeighStudentsOwnRecord(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(30 * 24 * time.Hour)
+
+	tasks := make([]domain.GeneratedTask, 24)
+	norms := make([]string, 24)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("%c", 'A'+i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	statuses := map[string]*accountStatuses{}
+	students := make([]domain.Student, 0)
+	// solve: решает первые count задач; firstTryUpto — сколько из них с первой.
+	solve := func(id string, count, firstTryUpto int) {
+		st := newAccountStatuses()
+		for j := 0; j < count; j++ {
+			at := base.Add(time.Duration(j) * 8 * time.Hour)
+			if j < firstTryUpto {
+				st.timed[norms[j]] = []source.TimedSubmission{{At: at, Solved: true}}
+			} else {
+				st.timed[norms[j]] = []source.TimedSubmission{{At: at}, {At: at.Add(20 * time.Minute), Solved: true}}
+			}
+			st.solved[norms[j]] = struct{}{}
+			st.attempted[norms[j]] = struct{}{}
+		}
+		statuses[id] = st
+		students = append(students, domain.Student{ID: id})
+	}
+	// Когорта: 12 человек, эти задачи почти никто не берёт с первой попытки.
+	for i := 0; i < 12; i++ {
+		solve(fmt.Sprintf("s%d", i), 20, 0)
+	}
+	// Сильный: стабильно берёт с первой попытки — для него серия ожидаема.
+	solve("strong", 20, 20)
+	// Слабый: 16 задач мучил, а потом 5 подряд взял с первой.
+	weak := newAccountStatuses()
+	for j := 0; j < 16; j++ {
+		at := base.Add(time.Duration(j) * 8 * time.Hour)
+		weak.timed[norms[j]] = []source.TimedSubmission{{At: at}, {At: at.Add(30 * time.Minute), Solved: true}}
+		weak.solved[norms[j]] = struct{}{}
+		weak.attempted[norms[j]] = struct{}{}
+	}
+	for j := 16; j < 21; j++ {
+		at := base.Add(20 * 24 * time.Hour).Add(time.Duration(j-16) * 3 * time.Minute)
+		weak.timed[norms[j]] = []source.TimedSubmission{{At: at, Solved: true}}
+		weak.solved[norms[j]] = struct{}{}
+		weak.attempted[norms[j]] = struct{}{}
+	}
+	statuses["weak"] = weak
+	students = append(students, domain.Student{ID: "weak"})
+
+	stats := computeCourseStats(std, students, statuses, now, nil)
+	if n := len(stats["weak"].Flags); n == 0 {
+		t.Fatalf("серия, нетипичная для этого ученика, должна дать флаг")
+	}
+	if n := len(stats["strong"].Flags); n != 0 {
+		t.Fatalf("тому, кто всегда берёт с первой попытки, флаг не нужен: %+v", stats["strong"].Flags)
+	}
+	for i := 0; i < 12; i++ {
 		id := fmt.Sprintf("s%d", i)
-		st := statuses[id]
-		st.solved["tail"] = struct{}{} // фронт сдвигается на tail — дошли до hard, но не решили её
-		tm := times[id].taskMin
-		tm["tail"] = 10
-	}
-	w = courseWeights(tasks, times, statuses)
-	// hard: reached=8, solved=4 → множитель (8/4)^0.5 = √2 ≈ 1.41.
-	want := 10 * math.Sqrt2
-	if math.Abs(w["hard"]-want) > 0.5 {
-		t.Fatalf("hard: вес должен вырасти до ~%.1f: %v", want, w["hard"])
-	}
-	// easy: решили все 8 дошедших — по-прежнему без коррекции.
-	if w["easy"] < 9.9 || w["easy"] > 10.1 {
-		t.Fatalf("easy: вес должен остаться ~10: %v", w["easy"])
+		if n := len(stats[id].Flags); n != 0 {
+			t.Fatalf("у обычного ученика %s флагов быть не должно: %+v", id, stats[id].Flags)
+		}
 	}
 }

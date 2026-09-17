@@ -448,10 +448,10 @@ func TestGlobalCourseCohort(t *testing.T) {
 	}
 }
 
-// Глобальный вариант отличается от группового: та же скорость ученика,
-// пересчитанная по более широкой (и более медленной) когорте, центрируется
+// Глобальный вариант отличается от группового: тот же темп ученика,
+// пересчитанный по более широкой (и более медленной) когорте, центрируется
 // иначе — относительно медленной когорты ученик выглядит быстрее.
-func TestComputeCourseStatsGlobalCohortShiftsSpeed(t *testing.T) {
+func TestComputeCourseStatsGlobalCohortShiftsTempo(t *testing.T) {
 	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
 	now := base.Add(14 * 24 * time.Hour)
 
@@ -465,13 +465,15 @@ func TestComputeCourseStatsGlobalCohortShiftsSpeed(t *testing.T) {
 		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
 
 	statuses := map[string]*accountStatuses{}
-	// solveEvery добавляет ученика, решающего все задачи по minPerTask минут.
-	solveEvery := func(id string, minPerTask float64) domain.Student {
+	// solveEvery: ученик решает все 8 задач, растянув их на weeks недель.
+	// Темп — курс за календарную неделю занятий, поэтому «быстрый» это тот,
+	// кто уложился в меньшее число недель, а не тот, кто меньше отлаживал.
+	solveEvery := func(id string, weeks int) domain.Student {
 		st := newAccountStatuses()
 		for j, norm := range norms {
-			day := j / 4
-			at := base.Add(time.Duration(day) * 72 * time.Hour).Add(time.Duration(float64(j%4+1)*minPerTask) * time.Minute)
-			st.timed[norm] = []source.TimedSubmission{{At: at, Solved: true}}
+			wk := j * weeks / len(norms)
+			at := base.Add(time.Duration(wk) * 7 * 24 * time.Hour).Add(time.Duration(j%4+1) * 20 * time.Minute)
+			st.timed[norm] = []source.TimedSubmission{{At: at}, {At: at.Add(10 * time.Minute), Solved: true}}
 			st.solved[norm] = struct{}{}
 			st.attempted[norm] = struct{}{}
 		}
@@ -479,28 +481,28 @@ func TestComputeCourseStatsGlobalCohortShiftsSpeed(t *testing.T) {
 		return domain.Student{ID: id}
 	}
 
-	// Группа: 5 «быстрых» учеников (по 20 мин/задача), наш герой среди них.
+	// Группа: 5 «быстрых» (уложились в 2 недели), наш герой среди них.
 	group := make([]domain.Student, 0)
 	for i := 0; i < 5; i++ {
-		group = append(group, solveEvery(fmt.Sprintf("fast%d", i), 20))
+		group = append(group, solveEvery(fmt.Sprintf("fast%d", i), 2))
 	}
-	// Ещё 6 «медленных» из другой группы (по 60 мин/задача) — только в глобале.
+	// Ещё 6 «медленных» из другой группы (растянули на 6 недель) — только в глобале.
 	global := append([]domain.Student(nil), group...)
 	for i := 0; i < 6; i++ {
-		global = append(global, solveEvery(fmt.Sprintf("slow%d", i), 40))
+		global = append(global, solveEvery(fmt.Sprintf("slow%d", i), 6))
 	}
 
 	byGroup := computeCourseStats(std, group, statuses, now, nil)
 	byGlobal := computeCourseStats(std, global, statuses, now, nil)
 
-	g := byGroup["fast0"].Speed
-	gl := byGlobal["fast0"].Speed
+	g := byGroup["fast0"].Tempo
+	gl := byGlobal["fast0"].Tempo
 	if g <= 0 || gl <= 0 {
-		t.Fatalf("скорости должны считаться: group=%v global=%v", g, gl)
+		t.Fatalf("темп должен считаться: group=%v global=%v", g, gl)
 	}
 	// В группе быстрых герой ≈ медиана (×1); в глобале с медленными он выше ×1.
 	if !(gl > g) {
-		t.Fatalf("в более широкой медленной когорте скорость должна вырасти: group=%v global=%v", g, gl)
+		t.Fatalf("в более широкой медленной когорте темп должен вырасти: group=%v global=%v", g, gl)
 	}
 }
 

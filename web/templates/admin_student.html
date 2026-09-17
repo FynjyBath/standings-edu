@@ -15,21 +15,22 @@
     {{if .LowData}}
     <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">скорость (нужно ≥5 решённых и ≥2 ч)</span></div>
     {{else}}
-    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Speed}}</span><span class="stat-label">скорость: &lt;1 — ниже среднего, &gt;1 — выше</span></div>
-    {{if .SpeedRecent}}<div class="stat-card"><span class="stat-value">×{{numText .SpeedRecent}}</span><span class="stat-label">скорость, взвешенная по времени (свежее — важнее)</span></div>{{end}}
+    <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Tempo}}</span><span class="stat-label">темп: сколько курса за неделю занятий, ×1 — как типичный ученик</span></div>
+    {{if .Strength}}<div class="stat-card"><span class="stat-value">{{pct .Strength}}%</span><span class="stat-label">сила: доля задач курса, которые по плечу</span></div>{{end}}
+    {{if .TempoRecent}}<div class="stat-card"><span class="stat-value">×{{numText .TempoRecent}}</span><span class="stat-label">темп, взвешенный по времени (свежее — важнее)</span></div>{{end}}
     {{end}}
-    <div class="stat-card"><span class="stat-value">{{numText .ActiveHours}}</span><span class="stat-label">активных часов в группе</span></div>
-    {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">≈{{numText .WeeklyHours}}</span><span class="stat-label">часов в неделю (среднее по активным неделям за 8 недель)</span></div>{{end}}
+    <div class="stat-card"><span class="stat-value">{{numText .JudgeHours}}</span><span class="stat-label">часов на судье (время между посылками, не время над задачами)</span></div>
+    {{if .WeeklyHours}}<div class="stat-card"><span class="stat-value">≈{{numText .WeeklyHours}}</span><span class="stat-label">часов на судье в неделю (медиана по активным неделям за 8)</span></div>{{end}}
     {{if .ForecastWeeks}}<div class="stat-card"><span class="stat-value">≈{{numText .ForecastWeeks}}</span><span class="stat-label">недель до конца материала группы</span></div>{{end}}
   </div>
   {{if .Stuck}}
   <p class="course-signal course-signal--stuck">⚠ Застрял:
-    {{range .Stuck}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Активного времени {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}} <b>×{{numText .Ratio}}</b></span> {{end}}
+    {{range .Stuck}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Посылок {{numText .Attempts}} — ×{{numText .Ratio}} от обычного числа{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}} <b>×{{numText .Ratio}}</b></span> {{end}}
   </p>
   {{end}}
   {{if .Abandoned}}
   <p class="course-signal">↩ Пропустил (стоит вернуться):
-    {{range .Abandoned}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}потрачено {{numText .Minutes}} мин, не решена · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+    {{range .Abandoned}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="{{if .Name}}{{.Name}} · {{end}}{{numText .Attempts}} посылок, не решена · клик — посылки ученика по задаче">{{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
   </p>
   {{end}}
 {{end}}{{end}}

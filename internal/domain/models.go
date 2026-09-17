@@ -1030,30 +1030,41 @@ type StudentCourseStats struct {
 	// SolvedCount/TotalCount — решено задач курса / всего задач с весом.
 	SolvedCount int `json:"solved_count"`
 	TotalCount  int `json:"total_count"`
-	// Speed — скорость за всё время (×типичного темпа когорты); ноль — мало
-	// данных. Считается по времени решённых задач (время на нерешённых скорость
-	// не занижает) с floor α·вес на задачу от «фантомно быстрых» решений.
-	Speed float64 `json:"speed,omitempty"`
-	// SpeedRecent — «текущая форма» с экспоненциальным забыванием (полупериод 28 дней).
-	SpeedRecent float64 `json:"speed_recent,omitempty"`
-	// ActiveHours — активное время на задачах курса, часов.
-	ActiveHours float64 `json:"active_hours"`
+	// SolvedPrice/TotalPrice — решено и всего в «обычных задачах курса»
+	// (медианная задача = 1.0). Цена считается по порогу понимания и числу
+	// посылок, а не по минутам: минут в данных судьи нет.
+	SolvedPrice float64 `json:"solved_price,omitempty"`
+	TotalPrice  float64 `json:"total_price,omitempty"`
+	// Tempo — сколько курса ученик закрывает за календарную неделю занятий
+	// (×медианы когорты); ноль — мало данных. Отвечает на «сколько делает».
+	Tempo float64 `json:"tempo,omitempty"`
+	// TempoRecent — тот же темп с экспоненциальным забыванием (полупериод 28 дней).
+	TempoRecent float64 `json:"tempo_recent,omitempty"`
+	// Strength — доля задач курса, которые ученику по плечу (шанс взять не ниже
+	// половины, по модели Раша), 0..1. Отвечает на «что может» — отдельно от
+	// «сколько делает»: одно число не может отвечать за оба вопроса.
+	Strength float64 `json:"strength,omitempty"`
+	// JudgeHours — время между посылками по задачам курса, часов. Это время на
+	// судье (отладка), а НЕ время работы над задачами: обдумывание до первой
+	// посылки судья не показывает.
+	JudgeHours float64 `json:"judge_hours"`
 	// WeeklyHours — типичная недельная активность (медиана за 8 недель), часов.
 	WeeklyHours float64 `json:"weekly_hours,omitempty"`
 	// ForecastWeeks — прогноз до конца курса (недель); ноль — не оценить.
 	ForecastWeeks float64 `json:"forecast_weeks,omitempty"`
 	// Front — самая дальняя решённая задача курса («Контест · A»).
 	Front string `json:"front,omitempty"`
-	// Stuck — текущие «застревания»: активного времени уже больше z*×типичного.
+	// Stuck — текущие «застревания»: посылок уже в z* раз больше типичного,
+	// а задача всё ещё не взята.
 	Stuck []CourseTaskSignal `json:"stuck,omitempty"`
 	// Abandoned — задачи с попытками, брошенные (дальше решено ≥2 задач курса).
 	Abandoned []CourseTaskSignal `json:"abandoned,omitempty"`
 	// LowData — данных мало (активного времени/решённых меньше порога): скорость
 	// не показываем, только прогресс.
 	LowData bool `json:"low_data,omitempty"`
-	// Flags — эпизоды с признаками нечестности (серия «с первой попытки»,
-	// пачка мгновенных решений и т.п.). Сигнал для личной проверки
-	// преподавателем, не вердикт.
+	// Flags — серии решений «с первой попытки», слишком невероятные для этого
+	// ученика на этих задачах. Сигнал для личной проверки преподавателем,
+	// не вердикт.
 	Flags []CourseFlag `json:"flags,omitempty"`
 	// Global — тот же темп, но посчитанный по «глобальной» когорте: union
 	// составов всех групп, где есть эти контесты (как одна большая группа).
@@ -1215,11 +1226,11 @@ func (s StudentCourseStats) OpenFlags() []CourseFlag {
 
 // CourseTaskSignal — сигнальная задача курса для преподавателя.
 type CourseTaskSignal struct {
-	Label   string  `json:"label"` // «Контест · A»
-	Name    string  `json:"name,omitempty"`
-	URL     string  `json:"url,omitempty"`
-	Ratio   float64 `json:"ratio,omitempty"`   // T_ij / w_j (для застреваний)
-	Minutes float64 `json:"minutes,omitempty"` // активное время на задаче
+	Label    string  `json:"label"` // «Контест · A»
+	Name     string  `json:"name,omitempty"`
+	URL      string  `json:"url,omitempty"`
+	Ratio    float64 `json:"ratio,omitempty"`    // посылок / типичного числа посылок
+	Attempts float64 `json:"attempts,omitempty"` // сколько посылок сделано
 }
 
 type GeneratedStudentProfile struct {

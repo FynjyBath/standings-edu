@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,31 +12,32 @@ import (
 	"standings-edu/internal/source"
 )
 
-// Темп прохождения курса: сессии по посылкам, эмпирические веса задач,
-// взвешенная скорость. Базовая модель и параметры — docs/course_speed.pdf;
-// поверх неё: знаменатель скорости — только время решённых задач, с floor
-// α·вес на задачу (см. courseSpeedFloorAlpha).
+// Темп прохождения курса. Модель и её обоснование — docs/course_speed.pdf.
+//
+// Важное ограничение данных, из которого следует всё остальное: судья отдаёт
+// только моменты посылок. Промежуток между посылками — это время ОТЛАДКИ, а не
+// время работы над задачей: кто думает час и сдаёт с первой попытки, оставляет
+// в данных ноль. Так решается почти половина задач. Поэтому цена задачи и сила
+// ученика считаются по тому, что наблюдается, — по исходу попытки и числу
+// попыток (course_fit.go), а не по восстановленным «минутам».
 const (
-	courseSessionGapMin = 45.0  // τ: разрыв сессии, минут
-	courseDelta0MaxMin  = 10.0  // δ0: максимум надбавки на «вход» в сессию, минут
-	courseWeightN0      = 5.0   // n0: сила сглаживания весов к типичной задаче
-	courseHalfLifeDays  = 28.0  // H: полупериод забывания «текущей формы»
-	courseStuckRatio    = 3.0   // z*: порог сигнала «застрял»
-	courseMinActiveMin  = 120.0 // минимум активного времени для показа скорости
-	courseMinSolved     = 5     // минимум решённых для показа скорости
-	courseMaxSignals    = 4     // сколько застреваний/брошенных показывать
-	// α: floor времени решённой задачи — засчитывается не меньше α·веса. Ограждает
-	// скорость от «фантомно быстрых» решений (обдумывание до первой посылки сессии
-	// модель не видит и кредитует только δ0): по одной задаче скорость не может
-	// выйти выше ×(1/α) от типичной.
-	courseSpeedFloorAlpha = 1.0 / 2.0
-	// Коррекция весов на редкость решения (survivorship bias): задачу, которую
-	// решают немногие из дошедших, решают сильные и быстрые — медиана их времени
-	// занижает сложность. Вес умножается на (reached/solved)^β, не выше cap;
-	// при меньше minReached дошедших доля слишком шумная — без коррекции.
-	courseRarityBeta       = 0.5
-	courseRarityCap        = 3.0
-	courseRarityMinReached = 5
+	courseSessionGapMin = 45.0 // τ: разрыв сессии, минут
+	courseDelta0MaxMin  = 10.0 // δ0: максимум надбавки на «вход» в сессию, минут
+	courseHalfLifeDays  = 28.0 // H: полупериод забывания «текущей формы»
+	courseStuckRatio    = 3.0  // z*: во столько раз больше посылок, чем обычно, — «застрял»
+	courseMinSolved     = 5    // минимум решённых для показа темпа
+	courseMinWeeks      = 2    // минимум активных недель для показа темпа
+	courseMaxSignals    = 4    // сколько застреваний/брошенных показывать
+
+	// Цена задачи складывается из двух осей: трудоёмкости (сколько посылок
+	// уходит) и порога понимания (какая доля пробовавших её берёт). Взаимная
+	// связь этих осей всего +0.44 — это разные вещи, и одна цена, собранная
+	// только из первой, ставила «Улитку» вровень с рядовым упражнением.
+	courseCostShare      = 0.6
+	courseThresholdShare = 0.4
+	courseFitIters       = 40  // итераций чередования медиан
+	courseRaschIters     = 200 // итераций покоординатного Ньютона
+	courseRaschLambda    = 1.0 // регуляризация: без неё «решили все» уводит порог в −∞
 )
 
 // courseTask — задача курса в порядке прохождения (контесты снизу вверх,
@@ -155,75 +157,122 @@ func median(xs []float64) float64 {
 	return (s[n/2-1] + s[n/2]) / 2
 }
 
-// courseWeights — эмпирические веса задач: медиана активного времени решивших,
-// с байесовским сглаживанием к типичной задаче курса и коррекцией на редкость
-// решения (см. courseRarityBeta): задачи, которые решают немногие из дошедших,
-// дороже, чем говорит медиана времени их (сильных и быстрых) решателей.
-func courseWeights(tasks []courseTask, times map[string]studentTaskTime, statusByStudent map[string]*accountStatuses) map[string]float64 {
-	raw := make(map[string]float64, len(tasks))   // ŵ_j
-	count := make(map[string]float64, len(tasks)) // n_j
-	for _, task := range tasks {
-		samples := make([]float64, 0)
-		for sid, tt := range times {
-			st := statusByStudent[sid]
-			if st == nil {
-				continue
-			}
-			if _, solved := st.solved[task.norm]; !solved {
-				continue
-			}
-			if t := tt.taskMin[task.norm]; t > 0 {
-				samples = append(samples, t)
-			}
-		}
-		raw[task.norm] = median(samples)
-		count[task.norm] = float64(len(samples))
-	}
-	// w̄ — медиана ненулевых ŵ; если данных нет вовсе — условная «задача в 20 мин».
-	nonzero := make([]float64, 0, len(raw))
-	for _, w := range raw {
-		if w > 0 {
-			nonzero = append(nonzero, w)
-		}
-	}
-	wbar := median(nonzero)
-	if wbar <= 0 {
-		wbar = 20
-	}
-	out := make(map[string]float64, len(tasks))
-	for _, task := range tasks {
-		n := count[task.norm]
-		out[task.norm] = (n*raw[task.norm] + courseWeightN0*wbar) / (n + courseWeightN0)
-	}
+// courseModel — подогнанные по когорте величины курса.
+type courseModel struct {
+	price     map[string]float64 // цена задачи в «обычных задачах курса»
+	threshold map[string]float64 // b_j: порог понимания, логиты
+	ability   map[string]float64 // θ_i: сила ученика, логиты
+	// ftThreshold — порог задачи по исходу «взял с первой попытки»; сила
+	// ученика для флагов считается отдельно, без проверяемого эпизода.
+	ftThreshold map[string]float64
+	typAttempts map[string]float64 // типичное число посылок до зачёта
+	total       float64            // сумма цен всех задач курса
+}
 
-	// Коррекция на редкость решения. «Дошёл» — фронт ученика (последняя решённая
-	// по порядку курса) не раньше задачи: нормируем на дошедших, а не на всю
-	// когорту, иначе поздние задачи дорожали бы просто за позицию в курсе.
-	// Ученики без единой решённой задачи курса ни до чего не дошли.
-	reached := make([]int, len(tasks))
-	solvedN := make([]int, len(tasks))
-	for sid := range times {
-		st := statusByStudent[sid]
+// attemptsToAC — сколько посылок ученик потратил до первой зачтённой.
+// Второе значение false, если посылок с временем нет (ACMP времени не отдаёт).
+func attemptsToAC(st *accountStatuses, norm string) (int, bool) {
+	subs := st.timed[norm]
+	if len(subs) == 0 {
+		return 0, false
+	}
+	ordered := append([]source.TimedSubmission(nil), subs...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].At.Before(ordered[j].At) })
+	for i, sub := range ordered {
+		if sub.Solved {
+			return i + 1, true
+		}
+	}
+	return len(ordered), false
+}
+
+// fitCourseModel подгоняет цену задач и силу учеников по когорте.
+//
+// Три набора наблюдений, все — из того, что судья действительно сообщает:
+//   - «взял / не взял» среди пробовавших   → порог понимания задачи;
+//   - число посылок до зачёта              → трудоёмкость задачи;
+//   - «взял с первой попытки»              → база для флагов.
+//
+// Обе двусторонние модели отделяют силу ученика от свойства задачи: если
+// задачу взяли только сильные, это видно по их θ, а не выдаётся за лёгкость.
+// Поэтому прежняя поправка на редкость решения больше не нужна — и она
+// поправляла несуществующее: состав решивших по силе вдоль курса не меняется.
+func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatuses) courseModel {
+	solveObs := make([]binObs, 0)
+	ftObs := make([]binObs, 0)
+	costObs := make([]fitObs, 0)
+	attemptSamples := make(map[string][]float64)
+
+	ids := make([]string, 0, len(statusByStudent))
+	for id := range statusByStudent {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		st := statusByStudent[id]
 		if st == nil {
 			continue
 		}
-		front := -1
-		for j, task := range tasks {
-			if _, ok := st.solved[task.norm]; ok {
-				front = j
-				solvedN[j]++
+		for _, task := range tasks {
+			_, tried := st.attempted[task.norm]
+			_, solved := st.solved[task.norm]
+			if !tried && !solved {
+				continue
+			}
+			solveObs = append(solveObs, binObs{row: id, col: task.norm, ok: solved})
+			if !solved {
+				continue
+			}
+			if k, ok := attemptsToAC(st, task.norm); ok && k > 0 {
+				costObs = append(costObs, fitObs{row: id, col: task.norm, val: math.Log(float64(k))})
+				attemptSamples[task.norm] = append(attemptSamples[task.norm], float64(k))
+			}
+			if first, ok := firstSubmission(st, task.norm); ok {
+				ftObs = append(ftObs, binObs{row: id, col: task.norm, ok: first.Solved})
 			}
 		}
-		for j := 0; j <= front; j++ {
-			reached[j]++
+	}
+
+	ability, threshold := raschFit(solveObs, courseRaschIters, courseRaschLambda)
+	_, ftThreshold := raschFit(ftObs, courseRaschIters, courseRaschLambda)
+	_, cost := twoWayMedianFit(costObs, courseFitIters)
+
+	zCost, zThr := robustZ(cost), robustZ(threshold)
+	raw := make(map[string]float64, len(tasks))
+	for _, task := range tasks {
+		raw[task.norm] = math.Exp(courseCostShare*zCost[task.norm] + courseThresholdShare*zThr[task.norm])
+	}
+	// Единица измерения — «обычная задача этого курса»: медианная задача стоит
+	// 1.0. Минуты как единица здесь были бы обманом — их в данных нет.
+	scale := median(mapValues(raw))
+	if scale <= 0 {
+		scale = 1
+	}
+	m := courseModel{
+		price:       make(map[string]float64, len(tasks)),
+		threshold:   threshold,
+		ability:     ability,
+		ftThreshold: ftThreshold,
+		typAttempts: make(map[string]float64, len(tasks)),
+	}
+	for _, task := range tasks {
+		p := raw[task.norm] / scale
+		if p <= 0 || math.IsNaN(p) || math.IsInf(p, 0) {
+			p = 1
+		}
+		m.price[task.norm] = p
+		m.total += p
+		if s := attemptSamples[task.norm]; len(s) >= courseWeightMinSolvers {
+			m.typAttempts[task.norm] = median(s)
 		}
 	}
-	for j, task := range tasks {
-		if reached[j] < courseRarityMinReached || solvedN[j] == 0 {
-			continue
-		}
-		p := float64(solvedN[j]) / float64(reached[j])
-		out[task.norm] *= math.Min(courseRarityCap, math.Pow(1/p, courseRarityBeta))
+	return m
+}
+
+func mapValues(m map[string]float64) []float64 {
+	out := make([]float64, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
 	}
 	return out
 }
@@ -324,8 +373,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		}
 		times[s.ID] = buildStudentTaskTimes(st)
 	}
-	weights := courseWeights(tasks, times, statusByStudent)
-	ftRate, ftN := cohortFirstTryRates(tasks, times, statusByStudent)
+	model := fitCourseModel(tasks, statusByStudent)
 
 	flagsByStudent := make(map[string][]domain.CourseFlag, len(students))
 	for _, s := range students {
@@ -333,7 +381,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		if st == nil {
 			st = newAccountStatuses()
 		}
-		flagsByStudent[s.ID] = detectCourseFlags(tasks, weights, times[s.ID], st, ftRate, ftN)
+		flagsByStudent[s.ID] = detectCourseFlags(s.ID, tasks, model, times[s.ID], st)
 	}
 
 	// Фаза 2: дополнительно без эпизодов флагов, не размеченных «сам решил».
@@ -346,12 +394,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 			}
 			times[id] = buildStudentTaskTimes(st)
 		}
-		weights = courseWeights(tasks, times, statusByStudent)
-	}
-
-	totalWeight := 0.0
-	for _, t := range tasks {
-		totalWeight += weights[t.norm]
+		model = fitCourseModel(tasks, statusByStudent)
 	}
 
 	out := make(map[string]*domain.StudentCourseStats, len(students))
@@ -360,11 +403,11 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		if st == nil {
 			st = newAccountStatuses()
 		}
-		cs := computeStudentCourseStats(std, tasks, weights, totalWeight, times[s.ID], st, now)
+		cs := computeStudentCourseStats(std, s.ID, tasks, model, times[s.ID], st, now)
 		cs.Flags = flagsByStudent[s.ID]
 		out[s.ID] = cs
 	}
-	normalizeCourseSpeeds(out)
+	normalizeCourseTempo(out)
 	return out
 }
 
@@ -492,163 +535,167 @@ func applyEpisodeExclusions(students []domain.Student, statusByStudent map[strin
 // нормировки означало бы недостижимого идеального ученика. После деления на
 // медиану валидных скоростей медианный ученик получает ровно ×1 — как и
 // обещает подпись «от типичного темпа». Ранжирование не меняется.
-func normalizeCourseSpeeds(stats map[string]*domain.StudentCourseStats) {
+// normalizeCourseTempo перецентрирует темп на когорту: медианный ученик
+// получает ровно ×1. Маленькую когорту не трогаем — медиана по трём людям
+// ничего не значит.
+func normalizeCourseTempo(stats map[string]*domain.StudentCourseStats) {
 	valid := make([]float64, 0, len(stats))
 	for _, cs := range stats {
-		if cs != nil && !cs.LowData && cs.Speed > 0 {
-			valid = append(valid, cs.Speed)
+		if cs != nil && !cs.LowData && cs.Tempo > 0 {
+			valid = append(valid, cs.Tempo)
 		}
 	}
 	const minCohort = 5
 	m := median(valid)
 	if len(valid) < minCohort || m <= 0 {
-		return // маленькая когорта — оставляем сырую шкалу
+		return
 	}
 	for _, cs := range stats {
 		if cs == nil {
 			continue
 		}
-		if cs.Speed > 0 {
-			cs.Speed = round2(cs.Speed / m)
+		if cs.Tempo > 0 {
+			cs.Tempo = round2(cs.Tempo / m)
 		}
-		if cs.SpeedRecent > 0 {
-			cs.SpeedRecent = round2(cs.SpeedRecent / m)
+		if cs.TempoRecent > 0 {
+			cs.TempoRecent = round2(cs.TempoRecent / m)
 		}
 	}
 }
 
-func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []courseTask, weights map[string]float64, totalWeight float64, tt studentTaskTime, st *accountStatuses, now time.Time) *domain.StudentCourseStats {
+// isoWeek — ключ календарной недели.
+func isoWeek(t time.Time) int {
+	y, w := t.ISOWeek()
+	return y*100 + w
+}
+
+func computeStudentCourseStats(std domain.GeneratedGroupStandings, studentID string, tasks []courseTask, m courseModel, tt studentTaskTime, st *accountStatuses, now time.Time) *domain.StudentCourseStats {
 	cs := &domain.StudentCourseStats{
 		GroupSlug:  std.GroupSlug,
 		GroupTitle: std.GroupTitle,
 		TotalCount: len(tasks),
+		TotalPrice: round1(m.total),
 	}
-	courseSet := make(map[string]int, len(tasks)) // norm -> индекс в курсе
-	for i, t := range tasks {
-		courseSet[t.norm] = i
+	courseSet := make(map[string]struct{}, len(tasks))
+	for _, t := range tasks {
+		courseSet[t.norm] = struct{}{}
 	}
 
-	solvedWeight := 0.0
-	speedWeight := 0.0 // вес решённых С зафиксированным временем — числитель скорости
-	activeMin := 0.0
-	// Знаменатель скорости — время ТОЛЬКО решённых задач (время, утопленное в
-	// нерешённых, скорость не занижает — оно видно в активных часах и сигналах),
-	// с floor: t̃ = max(t, α·вес), чтобы «фантомно быстрые» решения (обдумывание
-	// до первой посылки сессии невидимо) не разгоняли скорость выше ×(1/α).
-	solvedFlooredMin := 0.0
-	// floorScale[norm] = t̃/t решённой задачи — тем же множителем масштабируются
-	// кванты сессий в EWMA текущей формы, чтобы обе скорости были согласованы.
-	floorScale := make(map[string]float64)
+	solvedPrice := 0.0
+	judgeMin := 0.0
 	lastSolvedIdx := -1
 	solvedIdxs := make([]int, 0)
 	for i, t := range tasks {
-		activeMin += tt.taskMin[t.norm]
+		judgeMin += tt.taskMin[t.norm]
 		if _, ok := st.solved[t.norm]; ok {
-			solvedWeight += weights[t.norm]
+			solvedPrice += m.price[t.norm]
 			cs.SolvedCount++
 			solvedIdxs = append(solvedIdxs, i)
 			if i > lastSolvedIdx {
 				lastSolvedIdx = i
 			}
-			// В скорость идут только решения с временем: задача без посылок с
-			// временем (ACMP, исключённый эпизод флага) даёт вес в числитель,
-			// не дав ни минуты в знаменатель, — и раздувала бы скорость.
-			if tm := tt.taskMin[t.norm]; tm > 0 {
-				speedWeight += weights[t.norm]
-				floored := math.Max(tm, courseSpeedFloorAlpha*weights[t.norm])
-				solvedFlooredMin += floored
-				floorScale[t.norm] = floored / tm
-			}
 		}
 	}
-	if totalWeight > 0 {
-		cs.Progress = solvedWeight / totalWeight
+	if m.total > 0 {
+		cs.Progress = solvedPrice / m.total
 	}
-	cs.ActiveHours = round1(activeMin / 60)
+	cs.SolvedPrice = round1(solvedPrice)
+	cs.JudgeHours = round1(judgeMin / 60)
 	if lastSolvedIdx >= 0 {
 		cs.Front = tasks[lastSolvedIdx].label
 	}
 
-	// Скорости.
-	cs.LowData = activeMin < courseMinActiveMin || cs.SolvedCount < courseMinSolved
-	if !cs.LowData && solvedFlooredMin > 0 {
-		cs.Speed = round2(speedWeight / solvedFlooredMin)
-
-		// Текущая форма: EWMA по сессиям (вклад сессии — время на РЕШЁННЫХ
-		// задачах курса с floor-масштабом и вес задач курса, решённых в этой
-		// сессии) — та же семантика, что у основной скорости.
-		num, den := 0.0, 0.0
-		for si := range tt.sessions {
-			s := &tt.sessions[si]
-			gamma := math.Pow(2, -now.Sub(s.end).Hours()/24/courseHalfLifeDays)
-			dur := 0.0
-			for norm, m := range s.quantum {
-				if _, ok := courseSet[norm]; !ok {
-					continue
-				}
-				if sc, solvedTimed := floorScale[norm]; solvedTimed {
-					dur += m * sc
-				}
+	// Сила: какая доля курса ученику по плечу (шанс взять не ниже половины).
+	// Это ответ на «что он может», отдельно от «сколько он делает».
+	if len(m.threshold) > 0 {
+		reach := 0
+		for _, t := range tasks {
+			if th, ok := m.threshold[t.norm]; ok && m.ability[studentID] >= th {
+				reach++
 			}
-			w := 0.0
-			for norm, at := range tt.solvedAt {
-				if _, ok := courseSet[norm]; !ok {
-					continue
-				}
-				if sessionContains(tt.sessions, si, at) {
-					w += weights[norm]
-				}
-			}
-			num += gamma * w
-			den += gamma * dur
 		}
-		if den >= 60 { // минимум час «эффективного» недавнего времени
-			cs.SpeedRecent = round2(num / den)
+		cs.Strength = round2(float64(reach) / float64(len(tasks)))
+	}
+
+	// Темп: сколько курса закрыто за календарную неделю продвижения.
+	//
+	// Знаменатель — недели, в которые взята хотя бы одна задача курса, а не все
+	// недели с посылками. Разница огромна: у преподавателя, который годами
+	// что-то шлёт на судью, недель с посылками 294, а недель с решённой задачей
+	// 76 — по первому знаменателю прошедший весь курс оказывался в хвосте
+	// группы. Неделя с одной случайной посылкой — это не неделя занятий.
+	// Безуспешные усилия при этом не теряются: они видны в часах на судье и в
+	// сигнале «застрял».
+	activeWeeks := make(map[int]time.Time)
+	solvedByWeek := make(map[int]float64)
+	for norm, at := range tt.solvedAt {
+		if _, ok := courseSet[norm]; !ok {
+			continue
+		}
+		if _, ok := st.solved[norm]; !ok {
+			continue
+		}
+		wk := isoWeek(at)
+		solvedByWeek[wk] += m.price[norm]
+		if prev, ok := activeWeeks[wk]; !ok || at.After(prev) {
+			activeWeeks[wk] = at
 		}
 	}
 
-	// Недельная активность на курсе (медиана положительных недель за 8 недель).
+	cs.LowData = cs.SolvedCount < courseMinSolved || len(activeWeeks) < courseMinWeeks
+	tempoRaw := 0.0
+	if !cs.LowData && len(activeWeeks) > 0 {
+		tempoRaw = solvedPrice / float64(len(activeWeeks))
+		cs.Tempo = round2(tempoRaw)
+
+		// Текущая форма: те же недели с экспоненциальным забыванием.
+		num, den := 0.0, 0.0
+		for wk, last := range activeWeeks {
+			gamma := math.Pow(2, -now.Sub(last).Hours()/24/courseHalfLifeDays)
+			num += gamma * solvedByWeek[wk]
+			den += gamma
+		}
+		if den > 0 {
+			cs.TempoRecent = round2(num / den)
+		}
+	}
+
+	// Недельная занятость на судье (медиана положительных недель за 8 недель).
 	weekMin := make([]float64, 8)
 	for si := range tt.sessions {
 		s := &tt.sessions[si]
-		age := now.Sub(s.end).Hours() / 24 / 7
-		wk := int(age)
+		wk := int(now.Sub(s.end).Hours() / 24 / 7)
 		if wk < 0 || wk >= 8 {
 			continue
 		}
-		for norm, m := range s.quantum {
+		for norm, mins := range s.quantum {
 			if _, ok := courseSet[norm]; ok {
-				weekMin[wk] += m
+				weekMin[wk] += mins
 			}
 		}
 	}
 	positive := make([]float64, 0, 8)
-	for _, m := range weekMin {
-		if m > 0 {
-			positive = append(positive, m)
+	for _, mins := range weekMin {
+		if mins > 0 {
+			positive = append(positive, mins)
 		}
 	}
 	if len(positive) >= 2 {
 		cs.WeeklyHours = round1(median(positive) / 60)
 	}
 
-	// Прогноз до конца курса. SpeedRecent — темп по продуктивному времени
-	// (решённые задачи), а будущие занятия содержат и время на нерешаемое,
-	// поэтому остаток масштабируем историческим КПД E — долей активного
-	// времени, ушедшей в решённые (клип на 1: floor может превысить
-	// наблюдаемое время). Без E прогноз был бы систематически оптимистичен.
-	if cs.SpeedRecent > 0 && cs.WeeklyHours > 0 && totalWeight > solvedWeight && activeMin > 0 {
-		if eff := math.Min(1, solvedFlooredMin/activeMin); eff > 0 {
-			remainMin := (totalWeight - solvedWeight) / cs.SpeedRecent / eff
-			cs.ForecastWeeks = round1(remainMin / 60 / cs.WeeklyHours)
-		}
+	// Прогноз: остаток курса по текущему недельному темпу. Никаких поправок на
+	// КПД не нужно — темп уже измерен в неделях, а не в «продуктивных минутах».
+	if recent := num2(cs.TempoRecent, tempoRaw); recent > 0 && m.total > solvedPrice {
+		cs.ForecastWeeks = round1((m.total - solvedPrice) / recent)
 	}
 
-	// Сигналы: застревания и брошенные.
+	// Сигналы. «Застрял» теперь считается в посылках: ученик долбит задачу
+	// заметно больше раз, чем обычно на неё уходит, и всё ещё не взял.
 	type sig struct {
 		task  courseTask
 		ratio float64
-		min   float64
+		att   float64
 		idx   int
 	}
 	stuck := make([]sig, 0)
@@ -660,12 +707,10 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 		if _, tried := st.attempted[t.norm]; !tried {
 			continue
 		}
-		m := tt.taskMin[t.norm]
-		w := weights[t.norm]
-		if w > 0 && m/w > courseStuckRatio {
-			stuck = append(stuck, sig{task: t, ratio: m / w, min: m, idx: i})
+		k := float64(len(st.timed[t.norm]))
+		if typ := m.typAttempts[t.norm]; typ > 0 && k > 0 && k/typ > courseStuckRatio {
+			stuck = append(stuck, sig{task: t, ratio: k / typ, att: k, idx: i})
 		}
-		// Брошена: дальше по курсу решено ≥2 задач.
 		later := 0
 		for _, si := range solvedIdxs {
 			if si > i {
@@ -673,23 +718,31 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, tasks []cours
 			}
 		}
 		if later >= 2 {
-			abandoned = append(abandoned, sig{task: t, min: m, idx: i})
+			abandoned = append(abandoned, sig{task: t, att: k, idx: i})
 		}
 	}
 	sort.Slice(stuck, func(a, b int) bool { return stuck[a].ratio > stuck[b].ratio })
 	sort.Slice(abandoned, func(a, b int) bool { return abandoned[a].idx < abandoned[b].idx })
-	for _, s := range trimSigs(stuck) {
+	for _, sg := range trimSigs(stuck) {
 		cs.Stuck = append(cs.Stuck, domain.CourseTaskSignal{
-			Label: s.task.label, Name: s.task.name, URL: s.task.url,
-			Ratio: round1(s.ratio), Minutes: round1(s.min),
+			Label: sg.task.label, Name: sg.task.name, URL: sg.task.url,
+			Ratio: round1(sg.ratio), Attempts: sg.att,
 		})
 	}
-	for _, s := range trimSigs(abandoned) {
+	for _, sg := range trimSigs(abandoned) {
 		cs.Abandoned = append(cs.Abandoned, domain.CourseTaskSignal{
-			Label: s.task.label, Name: s.task.name, URL: s.task.url, Minutes: round1(s.min),
+			Label: sg.task.label, Name: sg.task.name, URL: sg.task.url, Attempts: sg.att,
 		})
 	}
 	return cs
+}
+
+// num2 — первое положительное из двух.
+func num2(a, b float64) float64 {
+	if a > 0 {
+		return a
+	}
+	return b
 }
 
 func trimSigs[T any](s []T) []T {
@@ -716,67 +769,23 @@ func round1(x float64) float64 { return math.Round(x*10) / 10 }
 func round2(x float64) float64 { return math.Round(x*100) / 100 }
 
 // ── Признаки нечестности ─────────────────────────────────────────────────────
-// Детекторы подозрительных паттернов в посылках. Это сигналы для ЛИЧНОЙ
-// проверки преподавателем, не вердикт: формулировки нейтральные, с числами.
+// Сигнал для ЛИЧНОЙ проверки преподавателем, не вердикт.
+//
+// Раньше детекторов было четыре, с абсолютными порогами, и они помечали 69%
+// учеников — то есть не помечали ничего. Главный из них, «пачечная сдача»,
+// срабатывал на обычной учёбе: если решить четыре задачи за один присест,
+// сессия делится между ними, и личное время оказывается меньше типичного ПО
+// ПОСТРОЕНИЮ.
+//
+// Теперь вопрос один и он правильный: насколько эта серия невероятна ИМЕННО
+// для этого ученика на ЭТИХ задачах. Сильный, взявший пять лёгких задач с
+// первой попытки, не помечается — для него это ожидаемо. Слабый, взявший пять
+// трудных, помечается.
 const (
-	// Серия «с первой попытки»: столько подряд решённых first-try НЕЛЁГКИХ
-	// задач (когортный first-try ниже courseEasyFirstTryRate) даёт флаг.
-	courseFlagStreakLen     = 5
-	courseEasyFirstTryRate  = 0.6
-	courseFirstTryMinCohort = 5 // меньше решивших — сложность задачи неизвестна
-	// «Пулемёт»: столько решений подряд с паузами не больше courseBurstGapMin
-	// минут, при суммарном типичном времени от courseBurstMinWeight минут.
-	courseBurstLen       = 4
-	courseBurstGapMin    = 3.0
-	courseBurstMinWeight = 40.0
-	// «Резко быстрее типичного»: окно из courseFastWindow подряд решённых, где
-	// личное время меньше courseFastShare от типичного (вес окна значим).
-	courseFastWindow    = 5
-	courseFastShare     = 0.1
-	courseFastMinWeight = 30.0
-	// «Пачечная сдача»: в одной сессии решено от courseBatchLen задач курса при
-	// медианном личном времени меньше courseBatchShare от типичного — решения
-	// написаны до сессии, сдана только очередь посылок (пачки с промежуточными
-	// ошибками не ловятся ни серией first-try, ни «пулемётом»).
-	courseBatchLen       = 4
-	courseBatchShare     = 0.5
-	courseBatchMinWeight = 30.0
-	// Перерыв больше этого рвёт серию first-try: эпизод — компактная вспышка,
-	// а не растянутый на месяцы стиль решения.
-	courseStreakMaxGapDays = 14.0
+	courseFlagEpisodeMin  = 4    // минимум решений подряд с первой попытки
+	courseFlagWindowHours = 6.0  // разрыв, рвущий эпизод
+	courseFlagAlpha       = 0.02 // бюджет ложных срабатываний на ученика
 )
-
-// cohortFirstTryRates считает по когорте долю решивших задачу с первой посылки.
-// Возвращает map[norm]p и map[norm]n (число решивших с известными посылками).
-func cohortFirstTryRates(tasks []courseTask, times map[string]studentTaskTime, statusByStudent map[string]*accountStatuses) (map[string]float64, map[string]int) {
-	p := make(map[string]float64, len(tasks))
-	n := make(map[string]int, len(tasks))
-	for _, task := range tasks {
-		ft, total := 0, 0
-		for sid, st := range statusByStudent {
-			if st == nil {
-				continue
-			}
-			if _, solved := st.solved[task.norm]; !solved {
-				continue
-			}
-			first, ok := firstSubmission(st, task.norm)
-			if !ok {
-				continue
-			}
-			_ = sid
-			total++
-			if first.Solved {
-				ft++
-			}
-		}
-		n[task.norm] = total
-		if total > 0 {
-			p[task.norm] = float64(ft) / float64(total)
-		}
-	}
-	return p, n
-}
 
 // firstSubmission — самая ранняя посылка ученика по задаче.
 func firstSubmission(st *accountStatuses, norm string) (source.TimedSubmission, bool) {
@@ -800,157 +809,175 @@ type solvedCourseEvent struct {
 	firstTry bool
 }
 
-// detectCourseFlags ищет подозрительные эпизоды в решениях задач курса — за всю
-// историю, без окна давности: флаги не забываются, преподаватель разбирает их
-// сам (проверенные сереют/подсвечиваются, но остаются).
-func detectCourseFlags(tasks []courseTask, weights map[string]float64, tt studentTaskTime, st *accountStatuses, ftRate map[string]float64, ftN map[string]int) []domain.CourseFlag {
-	// Хронология решений задач курса.
+// detectCourseFlags ищет серии решений «с первой попытки», слишком невероятные
+// для этого ученика. Порог — α, делённое на число его эпизодов-кандидатов:
+// у того, кто решает много, отдельная серия должна быть тем экстремальнее, чем
+// больше у него было возможностей на такую серию наткнуться. Это и есть бюджет
+// ложных срабатываний: на данных курса он даёт ~5% помеченных вместо 69%.
+func detectCourseFlags(studentID string, tasks []courseTask, m courseModel, tt studentTaskTime, st *accountStatuses) []domain.CourseFlag {
 	events := make([]solvedCourseEvent, 0)
 	for _, task := range tasks {
 		at, solved := tt.solvedAt[task.norm]
 		if !solved {
 			continue
 		}
+		if _, ok := st.solved[task.norm]; !ok {
+			continue
+		}
 		first, ok := firstSubmission(st, task.norm)
 		events = append(events, solvedCourseEvent{task: task, at: at, firstTry: ok && first.Solved})
 	}
-	sort.Slice(events, func(i, j int) bool { return events[i].at.Before(events[j].at) })
 	if len(events) == 0 {
 		return nil
 	}
+	sort.Slice(events, func(i, j int) bool { return events[i].at.Before(events[j].at) })
 
-	flags := make([]domain.CourseFlag, 0)
-	used := make(map[string]struct{}) // задачи, уже вошедшие в какой-то флаг
-
-	appendFlag := func(text string, evs []solvedCourseEvent) {
-		f := domain.CourseFlag{Text: text, At: evs[0].at, Until: evs[len(evs)-1].at}
-		for _, e := range evs {
-			used[e.task.norm] = struct{}{}
-			if len(f.Tasks) < 6 {
-				f.Tasks = append(f.Tasks, e.task.label)
-			}
-			// TaskURLs — без ограничения: по ним эпизод исключается из темпа.
-			f.TaskURLs = append(f.TaskURLs, e.task.norm)
+	// Эпизод — непрерывная по времени серия решений с первой попытки. Любое
+	// решение не с первой попытки или разрыв больше окна серию рвут.
+	episodes := make([][]solvedCourseEvent, 0)
+	cur := make([]solvedCourseEvent, 0)
+	flush := func() {
+		if len(cur) >= courseFlagEpisodeMin {
+			episodes = append(episodes, append([]solvedCourseEvent(nil), cur...))
 		}
-		// Ключ — отпечаток состава эпизода: стабилен при перетестировании
-		// (время первого решения на сайтах может сдвигаться).
-		f.Key = domain.CourseFlagKey(f.TaskURLs)
-		flags = append(flags, f)
-	}
-	overlaps := func(evs []solvedCourseEvent) bool {
-		hit := 0
-		for _, e := range evs {
-			if _, ok := used[e.task.norm]; ok {
-				hit++
-			}
-		}
-		return hit*2 >= len(evs) // больше половины уже покрыто другим флагом
-	}
-
-	// 1. Серия «с первой попытки» на нелёгких задачах: непрерывная по хронологии
-	// цепочка first-try решений, среди которых достаточно нелёгких. Большой
-	// перерыв (courseStreakMaxGapDays) тоже рвёт цепочку: «серия» через месяцы —
-	// не эпизод, а просто стиль решения, и склеенные через годы серии делали
-	// список посылок эпизода бессмысленным.
-	streak := make([]solvedCourseEvent, 0)
-	hard := 0
-	flushStreak := func() {
-		if hard >= courseFlagStreakLen && !overlaps(streak) {
-			appendFlag(fmt.Sprintf("%d задач подряд с первой попытки (из них %d — где это редкость)", len(streak), hard), streak)
-		}
-		streak = streak[:0]
-		hard = 0
+		cur = cur[:0]
 	}
 	for _, e := range events {
 		if !e.firstTry {
-			flushStreak()
+			flush()
 			continue
 		}
-		if len(streak) > 0 && e.at.Sub(streak[len(streak)-1].at).Hours() > 24*courseStreakMaxGapDays {
-			flushStreak()
+		if len(cur) > 0 && e.at.Sub(cur[len(cur)-1].at).Hours() > courseFlagWindowHours {
+			flush()
 		}
-		streak = append(streak, e)
-		if n := ftN[e.task.norm]; n >= courseFirstTryMinCohort && ftRate[e.task.norm] < courseEasyFirstTryRate {
-			hard++
-		}
+		cur = append(cur, e)
 	}
-	flushStreak()
+	flush()
+	if len(episodes) == 0 {
+		return nil
+	}
 
-	// 2. «Пулемёт»: подряд решённые с крошечными паузами при значимом типичном
-	// времени — похоже на вставку готовых решений.
-	i := 0
-	for i < len(events) {
-		j := i
-		for j+1 < len(events) && events[j+1].at.Sub(events[j].at).Minutes() <= courseBurstGapMin {
-			j++
+	// Порог с поправкой на число проверок у этого ученика.
+	logThreshold := math.Log(courseFlagAlpha / float64(len(episodes)))
+	flags := make([]domain.CourseFlag, 0)
+	for _, ep := range episodes {
+		// Силу ученика оцениваем по ОСТАЛЬНОЙ его работе, без этого эпизода:
+		// иначе подозрительная серия сама себя и объясняет — модель решает, что
+		// человек просто сильный, и тем громче, чем меньше у него другой
+		// истории. Проверяемая гипотеза именно такая: мог ли ЭТОТ ученик, судя
+		// по всему остальному, выдать такую серию случайно.
+		exclude := make(map[string]struct{}, len(ep))
+		for _, e := range ep {
+			exclude[e.task.norm] = struct{}{}
 		}
-		if run := events[i : j+1]; len(run) >= courseBurstLen {
-			wsum := 0.0
-			for _, e := range run {
-				wsum += weights[e.task.norm]
+		ability := firstTryAbilityExcluding(m, tasks, st, exclude)
+
+		logP, expected := 0.0, 0.0
+		for _, e := range ep {
+			p := courseFirstTryChance(m, ability, e.task.norm)
+			logP += math.Log(p)
+			expected += p
+		}
+		if logP >= logThreshold {
+			continue
+		}
+		f := domain.CourseFlag{At: ep[0].at, Until: ep[len(ep)-1].at}
+		for _, e := range ep {
+			if len(f.Tasks) < 6 {
+				f.Tasks = append(f.Tasks, e.task.label)
 			}
-			if wsum >= courseBurstMinWeight && !overlaps(run) {
-				span := run[len(run)-1].at.Sub(run[0].at).Minutes()
-				appendFlag(fmt.Sprintf("%d задач за %.0f мин (обычно на них уходит ~%.0f мин)", len(run), span, wsum), run)
+			f.TaskURLs = append(f.TaskURLs, e.task.norm)
+		}
+		f.Text = fmt.Sprintf("%d задач подряд с первой попытки — для этого ученика ожидалось ~%.1f (шанс 1 к %s)",
+			len(ep), expected, formatOdds(math.Exp(logP)))
+		f.Key = domain.CourseFlagKey(f.TaskURLs)
+		flags = append(flags, f)
+	}
+	if len(flags) == 0 {
+		return nil
+	}
+	return flags
+}
+
+// courseFirstTryChance — шанс взять задачу с первой попытки при данной силе.
+// Задача без подгонки даёт ½: нейтрально, невероятности эпизод не наберёт.
+func courseFirstTryChance(m courseModel, ability float64, norm string) float64 {
+	b, ok := m.ftThreshold[norm]
+	if !ok {
+		return 0.5
+	}
+	p := 1 / (1 + math.Exp(-(ability - b)))
+	return math.Max(1e-6, math.Min(1-1e-6, p))
+}
+
+// firstTryAbilityExcluding переоценивает силу ученика «с первой попытки» по его
+// решениям ВНЕ переданных задач, при зафиксированных порогах задач. Одномерный
+// Ньютон — считается мгновенно.
+//
+// Если другой истории нет вовсе, судить не по чему: берём нулевую силу, то есть
+// меряем эпизод по мерке среднего ученика когорты. Это и правильно по смыслу, и
+// закрывает вырожденный случай «в данных только подозрительная серия».
+func firstTryAbilityExcluding(m courseModel, tasks []courseTask, st *accountStatuses, exclude map[string]struct{}) float64 {
+	type obs struct {
+		b  float64
+		ok bool
+	}
+	rest := make([]obs, 0, len(tasks))
+	for _, task := range tasks {
+		if _, skip := exclude[task.norm]; skip {
+			continue
+		}
+		if _, solved := st.solved[task.norm]; !solved {
+			continue
+		}
+		b, known := m.ftThreshold[task.norm]
+		if !known {
+			continue
+		}
+		first, ok := firstSubmission(st, task.norm)
+		if !ok {
+			continue
+		}
+		rest = append(rest, obs{b: b, ok: first.Solved})
+	}
+	if len(rest) == 0 {
+		return 0
+	}
+	theta := 0.0
+	for it := 0; it < courseRaschIters; it++ {
+		g, h := 0.0, 0.0
+		for _, o := range rest {
+			p := 1 / (1 + math.Exp(-(theta - o.b)))
+			y := 0.0
+			if o.ok {
+				y = 1
 			}
+			g += y - p
+			h += p * (1 - p)
 		}
-		i = j + 1
-	}
-
-	// 3. Резко быстрее типичного: окно подряд решённых, где личного активного
-	// времени меньше десятой доли типичного.
-	for i := 0; i+courseFastWindow <= len(events); i++ {
-		win := events[i : i+courseFastWindow]
-		tsum, wsum := 0.0, 0.0
-		for _, e := range win {
-			tsum += tt.taskMin[e.task.norm]
-			wsum += weights[e.task.norm]
-		}
-		if wsum >= courseFastMinWeight && tsum < courseFastShare*wsum && !overlaps(win) {
-			appendFlag(fmt.Sprintf("%d задач при ~%.0f мин работы (обычно ~%.0f мин)", len(win), tsum, wsum), win)
-		}
-	}
-
-	// 4. Пачечная сдача: много решений курса одной сессией при медианном личном
-	// времени заметно меньше типичного. События отсортированы по времени, сессии
-	// тоже — индекс сессии двигается монотонно.
-	bySession := make(map[int][]solvedCourseEvent)
-	si := 0
-	for _, e := range events {
-		for si < len(tt.sessions) && !sessionContains(tt.sessions, si, e.at) {
-			si++
-		}
-		if si >= len(tt.sessions) {
+		g -= courseRaschLambda * theta
+		h += courseRaschLambda
+		if h < 1e-9 {
 			break
 		}
-		bySession[si] = append(bySession[si], e)
+		theta += math.Max(-1, math.Min(1, g/h))
 	}
-	sessionIDs := make([]int, 0, len(bySession))
-	for id := range bySession {
-		sessionIDs = append(sessionIDs, id)
-	}
-	sort.Ints(sessionIDs)
-	for _, id := range sessionIDs {
-		run := bySession[id]
-		if len(run) < courseBatchLen {
-			continue
-		}
-		ratios := make([]float64, 0, len(run))
-		wsum := 0.0
-		for _, e := range run {
-			w := weights[e.task.norm]
-			if w > 0 {
-				ratios = append(ratios, tt.taskMin[e.task.norm]/w)
-			}
-			wsum += w
-		}
-		if len(ratios) < courseBatchLen || wsum < courseBatchMinWeight || overlaps(run) {
-			continue
-		}
-		if m := median(ratios); m < courseBatchShare {
-			appendFlag(fmt.Sprintf("%d задач сданы одной сессией при времени ~%.0f%% от типичного", len(run), m*100), run)
-		}
-	}
+	return theta
+}
 
-	return flags
+// formatOdds печатает 1/p как «40 000» — с разделителями, без хвоста.
+func formatOdds(p float64) string {
+	if p <= 0 {
+		return "∞"
+	}
+	n := int64(math.Round(1 / p))
+	s := strconv.FormatInt(n, 10)
+	out := make([]byte, 0, len(s)+len(s)/3)
+	for i, c := range []byte(s) {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ' ')
+		}
+		out = append(out, c)
+	}
+	return string(out)
 }

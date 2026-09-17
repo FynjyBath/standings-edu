@@ -22,42 +22,44 @@
         <tr>
           <th class="student-col">Ученик</th>
           <th class="sortable" data-sort="progress" title="Доля пройденного (по сложности задач)">Прогресс</th>
-          <th class="sortable count-col" data-sort="speed" title="×1 — средний темп по группе; меньше — медленнее, больше — быстрее">Скорость</th>
-          <th class="sortable count-col" data-sort="recent" title="Скорость, взвешенная по времени: свежие занятия важнее">По времени</th>
-          <th class="sortable count-col" data-sort="hours" title="Активные часы на задачах группы (без перерывов между занятиями)">Часов</th>
-          <th class="sortable count-col" data-sort="weekly" title="Среднее по активным неделям за 8 недель">≈ч/нед</th>
+          <th class="sortable count-col" data-sort="tempo" title="Сколько курса закрывается за календарную неделю занятий. ×1 — как у типичного ученика группы">Темп</th>
+          <th class="sortable count-col" data-sort="recent" title="Тот же темп, но свежие недели весят больше">По времени</th>
+          <th class="sortable count-col" data-sort="strength" title="Доля задач курса, которые ученику по плечу: шанс взять не ниже половины">Сила</th>
+          <th class="sortable count-col" data-sort="hours" title="Время между посылками — работа на судье. Обдумывание до первой посылки судья не показывает, поэтому это не «время над задачами»">Часов на судье</th>
+          <th class="sortable count-col" data-sort="weekly" title="Часов на судье в неделю: медиана по активным неделям за 8 недель">≈ч/нед</th>
           <th title="Самая дальняя решённая задача группы">Сейчас на</th>
-          <th title="Застрял: активного времени уже в несколько раз больше типичного. Пропустил: были попытки, ушёл дальше.">Сигналы</th>
+          <th title="Застрял: посылок уже в несколько раз больше, чем обычно уходит, а задача не взята. Пропустил: были попытки, ушёл дальше.">Сигналы</th>
         </tr>
       </thead>
       <tbody id="participants-tbody">
         {{range .Rows}}
         <tr data-filter-text="{{.PublicName}}"
-            {{if .Course}}data-progress="{{.Course.Progress}}" data-speed="{{if .Course.LowData}}-1{{else}}{{.Course.Speed}}{{end}}" data-recent="{{.Course.SpeedRecent}}" data-hours="{{.Course.ActiveHours}}" data-weekly="{{.Course.WeeklyHours}}"{{else}}data-progress="-1" data-speed="-1" data-recent="-1" data-hours="-1" data-weekly="-1"{{end}}>
+            {{if .Course}}data-progress="{{.Course.Progress}}" data-tempo="{{if .Course.LowData}}-1{{else}}{{.Course.Tempo}}{{end}}" data-recent="{{.Course.TempoRecent}}" data-strength="{{.Course.Strength}}" data-hours="{{.Course.JudgeHours}}" data-weekly="{{.Course.WeeklyHours}}"{{else}}data-progress="-1" data-tempo="-1" data-recent="-1" data-strength="-1" data-hours="-1" data-weekly="-1"{{end}}>
           <td class="student-name"><a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}{{if $.Token}}&token={{$.Token}}{{end}}">{{.PublicName}}</a></td>
           {{if .Course}}
           <td class="progress-cell">
-            <div class="course-progress course-progress--mini" title="Решено {{.Course.SolvedCount}} из {{.Course.TotalCount}}">
+            <div class="course-progress course-progress--mini" title="Решено {{.Course.SolvedCount}} из {{.Course.TotalCount}} — {{numText .Course.SolvedPrice}} из {{numText .Course.TotalPrice}} обычных задач курса">
               <div class="course-progress-fill" style="width:{{pct .Course.Progress}}%;"></div>
               <span class="course-progress-label">{{pct .Course.Progress}}%</span>
             </div>
           </td>
           <td class="solved-count">
-            {{if .Course.LowData}}<span class="grade-weight" title="Нужно ≥5 решённых и ≥2 ч активного времени">мало данных</span>
-            {{else}}<span class="speed-pill {{if ge .Course.Speed 1.2}}speed-pill--hi{{else if lt .Course.Speed 0.8}}speed-pill--lo{{end}}">×{{numText .Course.Speed}}</span>{{end}}
+            {{if .Course.LowData}}<span class="grade-weight" title="Нужно ≥5 решённых задач и ≥2 недель занятий">мало данных</span>
+            {{else}}<span class="speed-pill {{if ge .Course.Tempo 1.2}}speed-pill--hi{{else if lt .Course.Tempo 0.8}}speed-pill--lo{{end}}" title="{{numText .Course.SolvedPrice}} обычных задач курса за все недели занятий">×{{numText .Course.Tempo}}</span>{{end}}
           </td>
-          <td class="solved-count">{{if .Course.SpeedRecent}}×{{numText .Course.SpeedRecent}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
-          <td class="solved-count">{{numText .Course.ActiveHours}}</td>
+          <td class="solved-count">{{if .Course.TempoRecent}}×{{numText .Course.TempoRecent}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
+          <td class="solved-count">{{if .Course.Strength}}{{pct .Course.Strength}}%{{else}}<span class="grade-weight">—</span>{{end}}</td>
+          <td class="solved-count">{{numText .Course.JudgeHours}}</td>
           <td class="solved-count">{{if .Course.WeeklyHours}}≈{{numText .Course.WeeklyHours}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
           <td class="course-front-cell" title="{{.Course.Front}}">{{.Course.Front}}</td>
           <td class="signals-cell">
             {{$acc := .Accounts}}
             {{with .Course.OpenFlags}}<span class="course-chip course-chip--flag" title="Подозрительные паттерны посылок — откройте профиль: {{range $i, $f := .}}{{if $i}}; {{end}}{{$f.Text}}{{end}}">🚩 {{len .}}</span> {{end}}
-            {{range .Course.Stuck}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Застрял: {{numText .Minutes}} мин — ×{{numText .Ratio}} от типичного{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика">⚠ {{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
-            {{range .Course.Abandoned}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="Пропустил ({{numText .Minutes}} мин попыток){{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика">↩ {{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+            {{range .Course.Stuck}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip course-chip--stuck" title="Застрял: {{numText .Attempts}} посылок — ×{{numText .Ratio}} от обычного числа{{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика">⚠ {{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
+            {{range .Course.Abandoned}}{{$u := submissionLink .URL $acc}}{{if not $u}}{{$u = .URL}}{{end}}<span class="course-chip" title="Пропустил ({{numText .Attempts}} посылок){{if .Name}} · {{.Name}}{{end}} · клик — посылки ученика">↩ {{if $u}}<a href="{{$u}}" target="_blank" rel="noopener noreferrer">{{.Label}}</a>{{else}}{{.Label}}{{end}}</span> {{end}}
           </td>
           {{else}}
-          <td colspan="7"><span class="grade-weight">{{if .HasProfile}}нет посылок по группе{{else}}профиль появится после генерации{{end}}</span></td>
+          <td colspan="8"><span class="grade-weight">{{if .HasProfile}}нет посылок по группе{{else}}профиль появится после генерации{{end}}</span></td>
           {{end}}
         </tr>
         {{end}}
@@ -77,7 +79,7 @@
     var table = document.getElementById("participants-table");
     if (!table) return;
     var tbody = document.getElementById("participants-tbody");
-    var current = { key: "speed", desc: true };
+    var current = { key: "tempo", desc: true };
     function apply() {
       var rows = [].slice.call(tbody.rows);
       rows.sort(function (a, b) {

@@ -782,13 +782,13 @@ func TestProgressReportingIsOptIn(t *testing.T) {
 	var out strings.Builder
 	b := NewBuilder(nil, log.New(&out, "", 0), 4)
 
-	b.progressf("accounts", 1, 10)
+	b.progressf("accounts", 1, 10, "")
 	if out.Len() != 0 {
 		t.Fatalf("по умолчанию прогресс печататься не должен: %q", out.String())
 	}
 	b.ReportProgress(true)
-	b.progressf("accounts", 3, 10)
-	if got := out.String(); !strings.Contains(got, "PROGRESS stage=accounts done=3 total=10") {
+	b.progressf("accounts", 3, 10, "acmp")
+	if got := out.String(); !strings.Contains(got, "PROGRESS stage=accounts done=3 total=10 note=acmp") {
 		t.Fatalf("после включения ожидали строку прогресса, получили %q", got)
 	}
 }

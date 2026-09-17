@@ -14,13 +14,17 @@ import (
 // Строки прогресса пишет генератор, а разбирает админка — формат у них общий,
 // иначе прогресс молча перестанет считаться.
 func TestProgressLineRoundTrip(t *testing.T) {
-	line := FormatProgress("accounts", 17, 210)
-	stage, done, total, ok := parseProgressLine("2026/09/17 16:00:00 " + line)
+	line := FormatProgress("tables", 17, 210, "smip_2026_p4")
+	stage, done, total, note, ok := parseProgressLine("2026/09/17 16:00:00 " + line)
 	if !ok {
 		t.Fatalf("строка не разобралась: %q", line)
 	}
-	if stage != "accounts" || done != 17 || total != 210 {
-		t.Fatalf("разобралось как stage=%q done=%d total=%d", stage, done, total)
+	if stage != "tables" || done != 17 || total != 210 || note != "smip_2026_p4" {
+		t.Fatalf("разобралось как stage=%q done=%d total=%d note=%q", stage, done, total, note)
+	}
+	// Пометка необязательна — этапы без неё тоже должны разбираться.
+	if _, _, _, note, ok := parseProgressLine(FormatProgress("profiles", 0, 0, "")); !ok || note != "" {
+		t.Fatalf("этап без пометки: ok=%v note=%q", ok, note)
 	}
 }
 
@@ -28,7 +32,7 @@ func TestProgressLineRoundTrip(t *testing.T) {
 func TestProgressWriterStripsProgressLines(t *testing.T) {
 	var out bytes.Buffer
 	seen := make([][3]any, 0)
-	w := &progressWriter{out: &out, on: func(stage string, done, total int) {
+	w := &progressWriter{out: &out, on: func(stage string, done, total int, _ string) {
 		seen = append(seen, [3]any{stage, done, total})
 	}}
 	chunks := []string{
@@ -61,7 +65,7 @@ func TestProgressWriterStripsProgressLines(t *testing.T) {
 func TestProgressWriterHandlesSplitLines(t *testing.T) {
 	var out bytes.Buffer
 	var last [3]any
-	w := &progressWriter{out: &out, on: func(s string, d, tt int) { last = [3]any{s, d, tt} }}
+	w := &progressWriter{out: &out, on: func(s string, d, tt int, _ string) { last = [3]any{s, d, tt} }}
 	for _, c := range []string{"PROGRESS stage=gr", "oups done=7 tot", "al=42\n"} {
 		_, _ = w.Write([]byte(c))
 	}
@@ -176,7 +180,7 @@ func TestProgressStateConcurrent(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			for k := 0; k < 200; k++ {
-				st.update("accounts", k, 200)
+				st.update("accounts", k, 200, "acmp")
 				_ = st.snapshot()
 			}
 		}(i)
@@ -185,5 +189,53 @@ func TestProgressStateConcurrent(t *testing.T) {
 	st.finish()
 	if st.snapshot() != nil {
 		t.Error("после завершения прогресса быть не должно")
+	}
+}
+
+// Смена этапа сбрасывает счётчик: иначе полоса застывала бы на «165 из 165,
+// 100%» всё время, пока идёт следующий, ещё не отчитавшийся этап, — и читалась
+// бы как «готово, но висит».
+func TestProgressStageChangeResetsCount(t *testing.T) {
+	var st adminProgressState
+	st.start("generate")
+	st.update("accounts", 165, 165, "informatics")
+	if p := st.snapshot(); p.Percent() != 100 {
+		t.Fatalf("конец этапа должен показывать 100%%, показывает %d", p.Percent())
+	}
+	st.update("tables", 0, 42, "all_ku")
+	p := st.snapshot()
+	if p.Stage != "tables" || p.Done != 0 || p.Total != 42 || p.Percent() != 0 {
+		t.Fatalf("новый этап должен начинаться с нуля: %+v (%d%%)", p, p.Percent())
+	}
+	if p.Note != "all_ku" {
+		t.Errorf("пометка должна показывать, что обрабатывается: %q", p.Note)
+	}
+}
+
+// Застывший прогресс должен отличаться от только что сдвинувшегося: без этого
+// «165 из 165» одинаково выглядит и через секунду, и через десять минут.
+func TestProgressStallDetection(t *testing.T) {
+	fresh := AdminActionProgress{UpdatedAt: time.Now()}
+	if fresh.Stalled() {
+		t.Error("только что обновлённый прогресс не застыл")
+	}
+	old := AdminActionProgress{UpdatedAt: time.Now().Add(-stalledAfter - time.Minute)}
+	if !old.Stalled() {
+		t.Error("давно не двигавшийся прогресс должен помечаться застывшим")
+	}
+	if got := old.StalledFor(); got == "" || strings.HasPrefix(got, "-") {
+		t.Errorf("время простоя должно быть положительным, получили %q", got)
+	}
+}
+
+// Каждый этап генерации должен иметь человеческое название: иначе в полосе
+// появится сырой идентификатор из кода.
+func TestEveryStageHasTitle(t *testing.T) {
+	for _, stage := range []string{"accounts", "tables", "profiles", "tempo", "review", "write"} {
+		p := AdminActionProgress{Stage: stage}
+		title := p.StageTitle()
+		if title == "" || title == "выполняется" {
+			t.Errorf("этап %q без названия: %q", stage, title)
+		}
 	}
 }

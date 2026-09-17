@@ -51,12 +51,18 @@ type Builder struct {
 // пропускает (см. httpapi.progressWriter).
 func (b *Builder) ReportProgress(on bool) { b.reportProgress = on }
 
-// progressf печатает строку прогресса, если он включён.
-func (b *Builder) progressf(stage string, done, total int) {
+// progressf печатает строку прогресса, если он включён. note — что именно
+// сейчас обрабатывается (группа, сайт): когда этап подвисает, по ней видно, на
+// чём именно.
+func (b *Builder) progressf(stage string, done, total int, note string) {
 	if !b.reportProgress {
 		return
 	}
-	b.logger.Printf("PROGRESS stage=%s done=%d total=%d", stage, done, total)
+	if note == "" {
+		b.logger.Printf("PROGRESS stage=%s done=%d total=%d", stage, done, total)
+		return
+	}
+	b.logger.Printf("PROGRESS stage=%s done=%d total=%d note=%s", stage, done, total, note)
 }
 
 func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int) *Builder {
@@ -102,7 +108,10 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	}
 
 	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
-	for _, pg := range prepared {
+	for i, pg := range prepared {
+		// Сборка таблиц: здесь ещё ходят в сеть за названиями задач и составом
+		// сборников, поэтому этап может быть долгим на холодном кэше.
+		b.progressf("tables", i, len(prepared), pg.group.Slug)
 		standings, buildErr := b.buildGroupStandings(ctx, data, pg, statusByStudent)
 		if buildErr != nil {
 			return nil, nil, nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
@@ -111,6 +120,7 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	}
 
 	now := time.Now().UTC()
+	b.progressf("profiles", 0, 0, "")
 	profiles := b.buildStudentProfiles(students, statusByStudent, now)
 
 	// Темп курса по каждой группе — в профили учеников (для преподавателя).
@@ -120,11 +130,12 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 	// когортой считаются один раз — глобальный темп и типичное время задач.
 	globalCache := make(map[string]map[string]*domain.StudentCourseStats)
 	weightCache := make(map[string]map[string]float64)
-	for _, pg := range prepared {
+	for i, pg := range prepared {
 		std, ok := result[pg.group.Slug]
 		if !ok {
 			continue
 		}
+		b.progressf("tempo", i, len(prepared), pg.group.Slug)
 		stats := computeCourseStats(std, pg.students, statusByStudent, now, reviewIdx, data.TaskRatings)
 
 		// Когорта курса — union составов всех групп, где есть эти контесты.
@@ -184,6 +195,7 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 			}
 		}
 	}
+	b.progressf("review", 0, 0, "")
 	review := buildTaskReview(tasksByNorm, statusByStudent, data.TaskRatings, now)
 
 	return result, profiles, review, nil
@@ -455,7 +467,7 @@ func (b *Builder) collectStudentsTaskStatuses(ctx context.Context, students []do
 				b.logger.Printf("WARN site=%s account_id=%s fetch error: %v", t.site, t.accountID, err)
 				statusesMu.Lock()
 				fetched++
-				b.progressf("accounts", fetched, len(targetByKey))
+				b.progressf("accounts", fetched, len(targetByKey), t.site)
 				statusesMu.Unlock()
 				return
 			}
@@ -463,7 +475,7 @@ func (b *Builder) collectStudentsTaskStatuses(ctx context.Context, students []do
 			statusesMu.Lock()
 			statusesByKey[key] = statuses
 			fetched++
-			b.progressf("accounts", fetched, len(targetByKey))
+			b.progressf("accounts", fetched, len(targetByKey), t.site)
 			statusesMu.Unlock()
 		}(key, t)
 	}

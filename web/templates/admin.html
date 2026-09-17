@@ -221,6 +221,7 @@
     <div class="admin-progress-head">
       <strong>{{.Progress.Action}}</strong> — {{.Progress.StageTitle}}
       {{if .Progress.Known}}<span class="admin-progress-count">{{.Progress.Done}} из {{.Progress.Total}}</span>{{end}}
+      {{if .Progress.Note}}<span class="grade-weight">· {{.Progress.Note}}</span>{{end}}
       <span class="grade-weight">идёт {{.Progress.Elapsed}}</span>
     </div>
     {{if .Progress.Known}}
@@ -229,7 +230,11 @@
       <span class="admin-progress-label">{{.Progress.Percent}}%</span>
     </div>
     {{end}}
+    {{if .Progress.Stalled}}
+    <p class="admin-errors-note">Не двигается {{.Progress.StalledFor}}. Этап «{{.Progress.StageTitle}}» — самый долгий обычно опрос аккаунтов: сайт мог начать отвечать медленно или упереться в ограничение частоты запросов. Если ждать надоело, перезапустите сервер — генерация идёт отдельным процессом и данные не пострадают, незаписанные группы просто останутся от прошлой генерации.</p>
+    {{else}}
     <p class="empty-hint">Действие выполняется в фоне — страницу можно закрыть. Чтобы увидеть, докуда дошло, обновите её.</p>
+    {{end}}
   </div>
   {{end}}
 

@@ -14,6 +14,10 @@ import (
 // задаче промахнулись». Здесь считаются две величины, которые в данных
 // действительно наблюдаются: исход попытки и число попыток.
 
+// raschTolerance — порог сходимости: дальше знаки меняются в четвёртом знаке,
+// а на цену задачи это не влияет вовсе.
+const raschTolerance = 1e-4
+
 // fitObs — наблюдение для двусторонней модели: val = row + col + шум.
 type fitObs struct {
 	row, col string
@@ -38,19 +42,24 @@ func twoWayMedianFit(obs []fitObs, iters int) (rows, cols map[string]float64) {
 	}
 	buf := make([]float64, 0, len(obs))
 	for it := 0; it < iters; it++ {
+		maxDelta := 0.0
 		for c, idx := range byCol {
 			buf = buf[:0]
 			for _, i := range idx {
 				buf = append(buf, obs[i].val-rows[obs[i].row])
 			}
+			before := cols[c]
 			cols[c] = median(buf)
+			maxDelta = math.Max(maxDelta, math.Abs(cols[c]-before))
 		}
 		for r, idx := range byRow {
 			buf = buf[:0]
 			for _, i := range idx {
 				buf = append(buf, obs[i].val-cols[obs[i].col])
 			}
+			before := rows[r]
 			rows[r] = median(buf)
+			maxDelta = math.Max(maxDelta, math.Abs(rows[r]-before))
 		}
 		buf = buf[:0]
 		for _, v := range rows {
@@ -62,6 +71,9 @@ func twoWayMedianFit(obs []fitObs, iters int) (rows, cols map[string]float64) {
 		}
 		for c := range cols {
 			cols[c] += shift
+		}
+		if maxDelta < raschTolerance {
+			break
 		}
 	}
 	return rows, cols
@@ -126,12 +138,23 @@ func raschFit(obs []binObs, iters int, lambda float64) (theta, diff map[string]f
 		d := g / h
 		return self + math.Max(-1, math.Min(1, d))
 	}
+	// Ньютон сходится задолго до потолка итераций, а потолок нужен только как
+	// страховка от расходимости. Без остановки по сходимости подгонка стоила
+	// заметную долю генерации на курсе в 378 задач и 137 учеников.
 	for it := 0; it < iters; it++ {
+		maxDelta := 0.0
 		for _, r := range rowIDs {
-			theta[r] = step(byRow[r], theta[r], true)
+			before := theta[r]
+			theta[r] = step(byRow[r], before, true)
+			maxDelta = math.Max(maxDelta, math.Abs(theta[r]-before))
 		}
 		for _, c := range colIDs {
-			diff[c] = step(byCol[c], diff[c], false)
+			before := diff[c]
+			diff[c] = step(byCol[c], before, false)
+			maxDelta = math.Max(maxDelta, math.Abs(diff[c]-before))
+		}
+		if maxDelta < raschTolerance {
+			break
 		}
 	}
 	return theta, diff

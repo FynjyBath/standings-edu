@@ -32,6 +32,13 @@ type AdminActionProgress struct {
 	Stage string `json:"stage,omitempty"`
 	Done  int    `json:"done,omitempty"`
 	Total int    `json:"total,omitempty"`
+	// Note — что обрабатывается прямо сейчас (группа, сайт). Когда этап
+	// подвисает, по ней видно, на чём именно.
+	Note string `json:"note,omitempty"`
+	// UpdatedAt — когда прогресс последний раз сдвинулся. По нему видно, что
+	// этап стоит: полоса «165 из 165» сама по себе не отличает «только что
+	// закончили» от «висим десять минут».
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Percent — доля выполненного, 0..100. Ноль, если общее число неизвестно.
@@ -54,13 +61,38 @@ func (p AdminActionProgress) StageTitle() string {
 	switch p.Stage {
 	case "accounts":
 		return "опрашиваю аккаунты на сайтах"
-	case "groups":
+	case "tables":
 		return "собираю таблицы групп"
 	case "profiles":
-		return "пишу профили учеников"
+		return "считаю профили учеников"
+	case "tempo":
+		return "считаю темп курса"
+	case "review":
+		return "собираю очередь проверки оценок"
+	case "write":
+		return "записываю файлы"
 	default:
 		return "выполняется"
 	}
+}
+
+// stalledAfter — после какого молчания считаем, что этап подозрительно встал.
+// Опрос аккаунтов отчитывается часто, сборка таблиц — раз в группу; две минуты
+// без движения означают либо очень медленный сайт, либо затык.
+const stalledAfter = 2 * time.Minute
+
+// Stalled — прогресс давно не двигался.
+func (p AdminActionProgress) Stalled() bool {
+	return time.Since(p.UpdatedAt) > stalledAfter
+}
+
+// StalledFor — сколько прогресс стоит на месте, словами.
+func (p AdminActionProgress) StalledFor() string {
+	d := time.Since(p.UpdatedAt).Round(time.Second)
+	if d < 0 {
+		d = 0
+	}
+	return d.String()
 }
 
 // Elapsed — сколько уже идёт, словами.
@@ -80,7 +112,7 @@ func (p AdminActionProgress) Elapsed() string {
 type progressWriter struct {
 	out io.Writer
 	buf bytes.Buffer
-	on  func(stage string, done, total int)
+	on  func(stage string, done, total int, note string)
 }
 
 func (w *progressWriter) Write(p []byte) (int, error) {
@@ -94,9 +126,9 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 			w.buf.WriteString(line)
 			break
 		}
-		if stage, done, total, ok := parseProgressLine(line); ok {
+		if stage, done, total, note, ok := parseProgressLine(line); ok {
 			if w.on != nil {
-				w.on(stage, done, total)
+				w.on(stage, done, total, note)
 			}
 			continue
 		}
@@ -114,7 +146,7 @@ func (w *progressWriter) Flush() {
 	}
 	line := w.buf.String()
 	w.buf.Reset()
-	if _, _, _, ok := parseProgressLine(line); ok {
+	if _, _, _, _, ok := parseProgressLine(line); ok {
 		return
 	}
 	_, _ = io.WriteString(w.out, line)
@@ -122,10 +154,10 @@ func (w *progressWriter) Flush() {
 
 // parseProgressLine разбирает «… PROGRESS stage=accounts done=17 total=210».
 // Префикс логгера (дата, время) игнорируется — ищем маркер где угодно в строке.
-func parseProgressLine(line string) (stage string, done, total int, ok bool) {
+func parseProgressLine(line string) (stage string, done, total int, note string, ok bool) {
 	i := strings.Index(line, "PROGRESS ")
 	if i < 0 {
-		return "", 0, 0, false
+		return "", 0, 0, "", false
 	}
 	for _, field := range strings.Fields(line[i+len("PROGRESS "):]) {
 		key, value, found := strings.Cut(field, "=")
@@ -139,15 +171,20 @@ func parseProgressLine(line string) (stage string, done, total int, ok bool) {
 			done, _ = strconv.Atoi(value)
 		case "total":
 			total, _ = strconv.Atoi(value)
+		case "note":
+			note = value
 		}
 	}
-	return stage, done, total, stage != "" || total > 0
+	return stage, done, total, note, stage != "" || total > 0
 }
 
 // FormatProgress — единая точка формирования строки прогресса, чтобы
 // отправитель и получатель не разъехались.
-func FormatProgress(stage string, done, total int) string {
-	return fmt.Sprintf("PROGRESS stage=%s done=%d total=%d", stage, done, total)
+func FormatProgress(stage string, done, total int, note string) string {
+	if note == "" {
+		return fmt.Sprintf("PROGRESS stage=%s done=%d total=%d", stage, done, total)
+	}
+	return fmt.Sprintf("PROGRESS stage=%s done=%d total=%d note=%s", stage, done, total, note)
 }
 
 // ── Состояние ────────────────────────────────────────────────────────────────
@@ -160,18 +197,23 @@ type adminProgressState struct {
 func (s *adminProgressState) start(action string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.current = &AdminActionProgress{Action: action, StartedAt: time.Now()}
+	now := time.Now()
+	s.current = &AdminActionProgress{Action: action, StartedAt: now, UpdatedAt: now}
 }
 
-func (s *adminProgressState) update(stage string, done, total int) {
+func (s *adminProgressState) update(stage string, done, total int, note string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.current == nil {
 		return
 	}
+	// Смена этапа сбрасывает счётчик: иначе полоса застывала бы на «165 из 165,
+	// 100%» всё время, пока идёт следующий, ещё не отчитавшийся этап.
 	s.current.Stage = stage
 	s.current.Done = done
 	s.current.Total = total
+	s.current.Note = note
+	s.current.UpdatedAt = time.Now()
 }
 
 func (s *adminProgressState) finish() {

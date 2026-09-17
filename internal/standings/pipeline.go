@@ -63,7 +63,7 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 		return nil
 	}
 
-	standingsByGroup, studentProfiles, err := p.builder.BuildGroupsStandings(ctx, data, buildGroups)
+	standingsByGroup, studentProfiles, taskReview, err := p.builder.BuildGroupsStandings(ctx, data, buildGroups)
 	if err != nil {
 		return fmt.Errorf("build standings: %w", err)
 	}
@@ -75,6 +75,13 @@ func (p *Pipeline) Run(ctx context.Context, onlyGroup string) error {
 	sort.Slice(metas, func(i, j int) bool { return metas[i].Slug < metas[j].Slug })
 	if err := p.writer.WriteGroups(metas); err != nil {
 		return fmt.Errorf("write groups list: %w", err)
+	}
+	// Очередь проверки оценок — вспомогательный артефакт: её отсутствие не
+	// повод валить генерацию таблиц.
+	if taskReview != nil {
+		if err := p.writer.WriteTaskReview(*taskReview); err != nil {
+			p.logger.Printf("WARN write task review: %v", err)
+		}
 	}
 
 	fullGroupBySlug := mapGroupsBySlug(groupsToUpdate)

@@ -57,3 +57,16 @@ func (w *GeneratedWriter) WriteStudentProfile(profile domain.GeneratedStudentPro
 	}
 	return nil
 }
+
+// WriteTaskReview пишет очередь задач на проверку оценок в
+// generated/task_review.json.
+func (w *GeneratedWriter) WriteTaskReview(review domain.GeneratedTaskReview) error {
+	if err := os.MkdirAll(w.OutDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir out dir: %w", err)
+	}
+	path := filepath.Join(w.OutDir, "task_review.json")
+	if err := fileutil.WriteJSON(path, review, 0o644); err != nil {
+		return fmt.Errorf("write task review %q: %w", path, err)
+	}
+	return nil
+}

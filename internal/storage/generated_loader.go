@@ -150,3 +150,17 @@ func (l *GeneratedLoader) LoadLastUpdatedAt() (time.Time, error) {
 	}
 	return latest, nil
 }
+
+// LoadTaskReview читает очередь задач на проверку оценок. Файла может не быть
+// (оценки не заведены либо генерация ещё не проходила) — это не ошибка.
+func (l *GeneratedLoader) LoadTaskReview() (domain.GeneratedTaskReview, error) {
+	var out domain.GeneratedTaskReview
+	path := filepath.Join(l.OutDir, "task_review.json")
+	if err := fileutil.ReadJSON(path, &out); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return domain.GeneratedTaskReview{}, nil
+		}
+		return domain.GeneratedTaskReview{}, err
+	}
+	return out, nil
+}

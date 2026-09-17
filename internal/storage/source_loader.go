@@ -42,7 +42,44 @@ func (l *SourceLoader) Load() (*domain.SourceData, error) {
 		Contests:    contests,
 		Groups:      groups,
 		FlagReviews: l.loadFlagReviews(),
+		TaskRatings: l.loadTaskRatings(),
 	}, nil
+}
+
+// loadTaskRatings читает оценки сложности задач. Файл опционален: без него
+// модель считает как раньше, только по данным.
+func (l *SourceLoader) loadTaskRatings() domain.TaskRatings {
+	out, err := LoadTaskRatings(l.DataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WARN load task ratings: %v\n", err)
+	}
+	return out
+}
+
+// LoadTaskRatings — ридер data/task_ratings.json. Отсутствующий файл — пустая
+// карта без ошибки; негодные записи молча пропускаются, чтобы одна кривая
+// строка не лишала оценок весь курс.
+func LoadTaskRatings(dataDir string) (domain.TaskRatings, error) {
+	out := domain.TaskRatings{}
+	if strings.TrimSpace(dataDir) == "" {
+		return out, nil
+	}
+	raw := domain.TaskRatings{}
+	path := filepath.Join(dataDir, "task_ratings.json")
+	if err := fileutil.ReadJSON(path, &raw); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return out, nil
+		}
+		return out, err
+	}
+	for url, rating := range raw {
+		norm := domain.NormalizeTaskURL(url)
+		if norm == "" || !rating.Valid() {
+			continue
+		}
+		out[norm] = rating
+	}
+	return out, nil
 }
 
 // loadFlagReviews читает отметки проверки флагов нечестности. Файл опционален;

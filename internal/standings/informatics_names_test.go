@@ -52,7 +52,7 @@ func TestBuildTaskContestExpandsInformaticsStatementNames(t *testing.T) {
 		Contests: []domain.GroupContestRef{{ID: "c1", Update: true}},
 	}}
 
-	res, _, err := b.BuildGroupsStandings(context.Background(), data, groups)
+	res, _, _, err := b.BuildGroupsStandings(context.Background(), data, groups)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

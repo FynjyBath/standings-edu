@@ -61,14 +61,14 @@ func NewBuilder(sources *source.Registry, logger *log.Logger, maxConcurrent int)
 	}
 }
 
-func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, map[string]*domain.GeneratedStudentProfile, error) {
+func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceData, groups []domain.GroupDefinition) (map[string]domain.GeneratedGroupStandings, map[string]*domain.GeneratedStudentProfile, *domain.GeneratedTaskReview, error) {
 	if data == nil {
-		return nil, nil, fmt.Errorf("source data is nil")
+		return nil, nil, nil, fmt.Errorf("source data is nil")
 	}
 
 	prepared := b.prepareGroups(data, groups)
 	if len(prepared) == 0 {
-		return map[string]domain.GeneratedGroupStandings{}, map[string]*domain.GeneratedStudentProfile{}, nil
+		return map[string]domain.GeneratedGroupStandings{}, map[string]*domain.GeneratedStudentProfile{}, nil, nil
 	}
 
 	requiredSites := b.collectRequiredTaskSites(prepared)
@@ -82,14 +82,14 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 
 	statusByStudent, err := b.collectStudentsTaskStatuses(ctx, students, requiredSites)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	result := make(map[string]domain.GeneratedGroupStandings, len(prepared))
 	for _, pg := range prepared {
 		standings, buildErr := b.buildGroupStandings(ctx, data, pg, statusByStudent)
 		if buildErr != nil {
-			return nil, nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
+			return nil, nil, nil, fmt.Errorf("group=%s build standings: %w", pg.group.Slug, buildErr)
 		}
 		result[pg.group.Slug] = standings
 	}
@@ -109,7 +109,7 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 		if !ok {
 			continue
 		}
-		stats := computeCourseStats(std, pg.students, statusByStudent, now, reviewIdx)
+		stats := computeCourseStats(std, pg.students, statusByStudent, now, reviewIdx, data.TaskRatings)
 
 		// Когорта курса — union составов всех групп, где есть эти контесты.
 		cohort := globalCourseCohort(data, pg.group, statusByStudent)
@@ -135,7 +135,7 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 			if cached, ok := globalCache[sig]; ok {
 				gstats = cached
 			} else {
-				gstats = computeCourseStats(std, cohort, statusByStudent, now, reviewIdx)
+				gstats = computeCourseStats(std, cohort, statusByStudent, now, reviewIdx, data.TaskRatings)
 				globalCache[sig] = gstats
 			}
 		}
@@ -158,7 +158,19 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 		sort.Slice(p.CourseStats, func(i, j int) bool { return p.CourseStats[i].GroupSlug < p.CourseStats[j].GroupSlug })
 	}
 
-	return result, profiles, nil
+	// Очередь задач на проверку: собирается по всем группам разом, потому что
+	// сложность задачи — свойство задачи, а не группы.
+	tasksByNorm := make(map[string]courseTask)
+	for _, std := range result {
+		for _, task := range courseTasksFromStandings(std) {
+			if _, seen := tasksByNorm[task.norm]; !seen {
+				tasksByNorm[task.norm] = task
+			}
+		}
+	}
+	review := buildTaskReview(tasksByNorm, statusByStudent, data.TaskRatings, now)
+
+	return result, profiles, review, nil
 }
 
 // globalCourseCohort — union составов всех групп, у которых есть хотя бы один

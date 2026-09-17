@@ -38,6 +38,13 @@ const (
 	courseFitIters       = 40  // итераций чередования медиан
 	courseRaschIters     = 200 // итераций покоординатного Ньютона
 	courseRaschLambda    = 1.0 // регуляризация: без неё «решили все» уводит порог в −∞
+
+	// Вес оценки по условию (data/task_ratings.json) как априора — «во скольких
+	// учеников она оценивается». Подобран по данным: ниже 8 — недобор, выше 32
+	// данные перестают что-либо значить. Подтверждённой преподавателем оценке
+	// доверия вдвое больше.
+	courseRatingWeight          = 16.0
+	courseRatingWeightValidated = 32.0
 )
 
 // courseTask — задача курса в порядке прохождения (контесты снизу вверх,
@@ -197,11 +204,14 @@ func attemptsToAC(st *accountStatuses, norm string) (int, bool) {
 // задачу взяли только сильные, это видно по их θ, а не выдаётся за лёгкость.
 // Поэтому прежняя поправка на редкость решения больше не нужна — и она
 // поправляла несуществующее: состав решивших по силе вдоль курса не меняется.
-func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatuses) courseModel {
+func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatuses, ratings domain.TaskRatings) courseModel {
 	solveObs := make([]binObs, 0)
 	ftObs := make([]binObs, 0)
 	costObs := make([]fitObs, 0)
 	attemptSamples := make(map[string][]float64)
+	// Сколько наблюдений стоит за каждой осью — этим взвешивается априор.
+	triedN := make(map[string]float64, len(tasks))
+	costN := make(map[string]float64, len(tasks))
 
 	ids := make([]string, 0, len(statusByStudent))
 	for id := range statusByStudent {
@@ -220,12 +230,14 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 				continue
 			}
 			solveObs = append(solveObs, binObs{row: id, col: task.norm, ok: solved})
+			triedN[task.norm]++
 			if !solved {
 				continue
 			}
 			if k, ok := attemptsToAC(st, task.norm); ok && k > 0 {
 				costObs = append(costObs, fitObs{row: id, col: task.norm, val: math.Log(float64(k))})
 				attemptSamples[task.norm] = append(attemptSamples[task.norm], float64(k))
+				costN[task.norm]++
 			}
 			if first, ok := firstSubmission(st, task.norm); ok {
 				ftObs = append(ftObs, binObs{row: id, col: task.norm, ok: first.Solved})
@@ -236,6 +248,7 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 	ability, threshold := raschFit(solveObs, courseRaschIters, courseRaschLambda)
 	_, ftThreshold := raschFit(ftObs, courseRaschIters, courseRaschLambda)
 	_, cost := twoWayMedianFit(costObs, courseFitIters)
+	applyTaskRatings(tasks, ratings, threshold, cost, triedN, costN)
 
 	zCost, zThr := robustZ(cost), robustZ(threshold)
 	raw := make(map[string]float64, len(tasks))
@@ -267,6 +280,42 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 		}
 	}
 	return m
+}
+
+// applyTaskRatings подмешивает оценку по условию к подогнанным величинам.
+//
+// Смешивание идёт в РОДНЫХ шкалах: оценка хранится как «доля решивших» и «число
+// посылок», а Threshold()/Cost() переводят их ровно в те же единицы, в которых
+// работают модель Раша и двусторонняя подгонка. Поэтому подгонять масштабы не
+// нужно, и вес априора K честно читается как «оценка стоит K учеников».
+//
+// Чем больше учеников прошло через задачу, тем меньше значит априор: у задачи с
+// сотней решивших он почти не виден, у новой задачи — единственный источник.
+func applyTaskRatings(tasks []courseTask, ratings domain.TaskRatings, threshold, cost, triedN, costN map[string]float64) {
+	if len(ratings) == 0 {
+		return
+	}
+	for _, task := range tasks {
+		rating, ok := ratings[task.norm]
+		if !ok || !rating.Valid() {
+			continue
+		}
+		k := courseRatingWeight
+		if rating.Validated() {
+			k = courseRatingWeightValidated
+		}
+		blend := func(dst map[string]float64, n float64, prior float64) {
+			cur, seen := dst[task.norm]
+			if !seen {
+				// Данных нет вовсе — задача живёт целиком на оценке.
+				dst[task.norm] = prior
+				return
+			}
+			dst[task.norm] = (n*cur + k*prior) / (n + k)
+		}
+		blend(threshold, triedN[task.norm], rating.Threshold())
+		blend(cost, costN[task.norm], rating.Cost())
+	}
 }
 
 func mapValues(m map[string]float64) []float64 {
@@ -355,7 +404,7 @@ func stampTaskWeights(std *domain.GeneratedGroupStandings, weights map[string]fl
 // детектируются флаги (они и показываются: неразмеченные и «сам решил»
 // детектируются заново с теми же ключами); фаза 2 — из данных дополнительно
 // убираются эпизоды флагов без отметки «сам решил», и темп считается по ним.
-func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time, reviews domain.StudentFlagReviews) map[string]*domain.StudentCourseStats {
+func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time, reviews domain.StudentFlagReviews, ratings domain.TaskRatings) map[string]*domain.StudentCourseStats {
 	tasks := courseTasksFromStandings(std)
 	if len(tasks) == 0 {
 		return nil
@@ -373,7 +422,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 		}
 		times[s.ID] = buildStudentTaskTimes(st)
 	}
-	model := fitCourseModel(tasks, statusByStudent)
+	model := fitCourseModel(tasks, statusByStudent, ratings)
 
 	flagsByStudent := make(map[string][]domain.CourseFlag, len(students))
 	for _, s := range students {
@@ -394,7 +443,7 @@ func computeCourseStats(std domain.GeneratedGroupStandings, students []domain.St
 			}
 			times[id] = buildStudentTaskTimes(st)
 		}
-		model = fitCourseModel(tasks, statusByStudent)
+		model = fitCourseModel(tasks, statusByStudent, ratings)
 	}
 
 	out := make(map[string]*domain.StudentCourseStats, len(students))

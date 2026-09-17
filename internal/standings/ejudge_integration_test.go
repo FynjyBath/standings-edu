@@ -67,7 +67,7 @@ func TestBuildGroupsWithEjudgeContest(t *testing.T) {
 	groups := []domain.GroupDefinition{{Slug: "g1", Title: "G1", StudentIDs: []string{"s1", "s2"},
 		Contests: []domain.GroupContestRef{{ID: "c1", Update: true}}}}
 
-	res, _, err := b.BuildGroupsStandings(context.Background(), data, groups)
+	res, _, _, err := b.BuildGroupsStandings(context.Background(), data, groups)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

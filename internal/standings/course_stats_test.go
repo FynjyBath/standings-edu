@@ -2,6 +2,7 @@ package standings
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -100,7 +101,7 @@ func TestComputeCourseStats(t *testing.T) {
 	students = append(students, domain.Student{ID: "hero"})
 	statuses["hero"] = st
 
-	stats := computeCourseStats(std, students, statuses, now, nil)
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
 	cs := stats["hero"]
 	if cs == nil {
 		t.Fatal("nil stats")
@@ -186,7 +187,7 @@ func TestDetectCourseFlags(t *testing.T) {
 
 	std, students, statuses, _ := newCheaterCohort(base)
 
-	stats := computeCourseStats(std, students, statuses, now, nil)
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
 	if n := len(stats["cheat"].Flags); n == 0 {
 		t.Fatalf("у читера должны быть флаги: %+v", stats["cheat"])
 	}
@@ -224,7 +225,7 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 
 	// Базлайн — без отметок: флаг детектируется, но его эпизод по умолчанию
 	// УЖЕ исключён из темпа (неразмеченному не доверяем).
-	noRev := computeCourseStats(std, students, statuses, now, nil)
+	noRev := computeCourseStats(std, students, statuses, now, nil, nil)
 	if len(noRev["cheat"].Flags) == 0 {
 		t.Fatal("прекондиция: без отметок у читера должны быть флаги")
 	}
@@ -240,7 +241,7 @@ func TestComputeCourseStatsExcludesReviewedEpisodes(t *testing.T) {
 		snap := flag
 		return computeCourseStats(std, students, statuses, now, domain.IndexFlagReviews(map[string]domain.FlagReview{
 			domain.FlagReviewKey("cheat", flag.Key): {At: now, Resolution: resolution, Flag: &snap},
-		}))
+		}), nil)
 	}
 	hasFlag := func(cs *domain.StudentCourseStats) bool {
 		for _, f := range cs.Flags {
@@ -295,11 +296,11 @@ func TestDetectCourseFlagsOldEpisodesKept(t *testing.T) {
 	std, students, statuses, _ := newCheaterCohort(base)
 
 	// И через неделю, и спустя год флаги на месте (и с тем же стабильным ключом).
-	fresh := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour), nil)
+	fresh := computeCourseStats(std, students, statuses, base.Add(7*24*time.Hour), nil, nil)
 	if len(fresh["cheat"].Flags) == 0 {
 		t.Fatalf("свежий эпизод должен давать флаги")
 	}
-	old := computeCourseStats(std, students, statuses, base.Add(365*24*time.Hour), nil)
+	old := computeCourseStats(std, students, statuses, base.Add(365*24*time.Hour), nil, nil)
 	if len(old["cheat"].Flags) == 0 {
 		t.Fatalf("старый эпизод тоже должен давать флаги (не забываем): %+v", old["cheat"])
 	}
@@ -330,7 +331,7 @@ func TestDetectCourseFlagsStreakBreaksOnLongGap(t *testing.T) {
 	}
 	statuses["cheat"] = cheat
 
-	stats := computeCourseStats(std, students, statuses, now, nil)
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
 	for _, f := range stats["cheat"].Flags {
 		if strings.Contains(f.Text, "с первой попытки") {
 			t.Fatalf("серия с 30-дневным перерывом не должна флаговаться: %+v", f)
@@ -346,7 +347,7 @@ func TestFlagKeyStableAcrossRetest(t *testing.T) {
 	now := base.Add(7 * 24 * time.Hour)
 
 	std, students, statuses, norms := newCheaterCohort(base)
-	before := computeCourseStats(std, students, statuses, now, nil)
+	before := computeCourseStats(std, students, statuses, now, nil, nil)
 	if len(before["cheat"].Flags) == 0 {
 		t.Fatal("прекондиция: у читера должны быть флаги")
 	}
@@ -356,7 +357,7 @@ func TestFlagKeyStableAcrossRetest(t *testing.T) {
 	// решающая посылка — время первого решения сдвинулось.
 	statuses["cheat"].timed[norms[0]] = append(statuses["cheat"].timed[norms[0]],
 		source.TimedSubmission{At: base.Add(-30 * time.Minute), Solved: true})
-	after := computeCourseStats(std, students, statuses, now, nil)
+	after := computeCourseStats(std, students, statuses, now, nil, nil)
 	if len(after["cheat"].Flags) == 0 {
 		t.Fatalf("флаг должен детектироваться и после сдвига: %+v", after["cheat"])
 	}
@@ -505,7 +506,7 @@ func TestTaskPriceHearsThreshold(t *testing.T) {
 		put("hard", i%2 == 0, base.Add(time.Hour))
 		statuses[fmt.Sprintf("s%d", i)] = st
 	}
-	m := fitCourseModel(tasks, statuses)
+	m := fitCourseModel(tasks, statuses, nil)
 	if !(m.price["hard"] > m.price["easy"]) {
 		t.Fatalf("задача, которую берёт половина, должна стоить дороже: easy=%.2f hard=%.2f",
 			m.price["easy"], m.price["hard"])
@@ -560,7 +561,7 @@ func TestTempoRewardsProgressNotTidySubmissions(t *testing.T) {
 	// Взял 6 задач за 6 недель, зато каждую с первой попытки.
 	add("tidy", 6, 6, 1)
 
-	stats := computeCourseStats(std, students, statuses, now, nil)
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
 	marathon, tidy := stats["marathon"].Tempo, stats["tidy"].Tempo
 	if marathon <= 0 || tidy <= 0 {
 		t.Fatalf("темп должен считаться у обоих: marathon=%v tidy=%v", marathon, tidy)
@@ -629,7 +630,7 @@ func TestFlagsWeighStudentsOwnRecord(t *testing.T) {
 	statuses["weak"] = weak
 	students = append(students, domain.Student{ID: "weak"})
 
-	stats := computeCourseStats(std, students, statuses, now, nil)
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
 	if n := len(stats["weak"].Flags); n == 0 {
 		t.Fatalf("серия, нетипичная для этого ученика, должна дать флаг")
 	}
@@ -641,5 +642,135 @@ func TestFlagsWeighStudentsOwnRecord(t *testing.T) {
 		if n := len(stats[id].Flags); n != 0 {
 			t.Fatalf("у обычного ученика %s флагов быть не должно: %+v", id, stats[id].Flags)
 		}
+	}
+}
+
+// Оценка по условию должна работать там, где данных ещё нет: у новой задачи
+// цена берётся из оценки целиком, а не приравнивается к «обычной задаче».
+func TestTaskRatingPricesUnseenTask(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	tasks := []courseTask{{norm: "seen"}, {norm: "fresh"}}
+
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 20; i++ {
+		st := newAccountStatuses()
+		st.attempted["seen"] = struct{}{}
+		st.solved["seen"] = struct{}{}
+		st.timed["seen"] = []source.TimedSubmission{{At: base}, {At: base.Add(5 * time.Minute), Solved: true}}
+		statuses[fmt.Sprintf("s%d", i)] = st
+	}
+	// «fresh» никто не трогал, но она оценена как заметно более трудная.
+	ratings := domain.TaskRatings{
+		"seen":  {SolveRate: 0.9, Attempts: 2},
+		"fresh": {SolveRate: 0.2, Attempts: 6},
+	}
+	withRating := fitCourseModel(tasks, statuses, ratings)
+	without := fitCourseModel(tasks, statuses, nil)
+
+	if !(withRating.price["fresh"] > withRating.price["seen"]) {
+		t.Fatalf("оценённая как трудная задача должна стоить дороже: fresh=%.2f seen=%.2f",
+			withRating.price["fresh"], withRating.price["seen"])
+	}
+	// Без оценки про «fresh» ничего не известно и она не дороже «seen».
+	if without.price["fresh"] > without.price["seen"] {
+		t.Fatalf("без оценки незнакомая задача не должна быть дороже: fresh=%.2f seen=%.2f",
+			without.price["fresh"], without.price["seen"])
+	}
+}
+
+// Данные должны вытеснять оценку: у задачи с сотнями решивших ошибка оценщика
+// почти не видна, иначе она осталась бы в цене навсегда.
+//
+// Курс здесь из восьми разных по трудности задач: на двух задачах робастная
+// нормировка вырождается (медиана и MAD считаются по двум числам), и цены
+// перестают зависеть от величины расхождения.
+func TestTaskRatingYieldsToData(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	norms := []string{"a", "t1", "t2", "t3", "t4", "t5", "t6", "t7"}
+	tasks := make([]courseTask, 0, len(norms))
+	for _, n := range norms {
+		tasks = append(tasks, courseTask{norm: n})
+	}
+	// Ученик берёт задачу t{k} с вероятностью тем меньшей, чем больше k, и
+	// тратит на неё тем больше посылок; «a» по данным — из лёгких.
+	build := func(n int) map[string]*accountStatuses {
+		out := map[string]*accountStatuses{}
+		for i := 0; i < n; i++ {
+			st := newAccountStatuses()
+			for k, norm := range norms {
+				st.attempted[norm] = struct{}{}
+				solved := i%(k+2) != 0
+				subs := []source.TimedSubmission{{At: base}}
+				for j := 0; j < k/2; j++ {
+					subs = append(subs, source.TimedSubmission{At: base.Add(time.Duration(j+1) * time.Minute)})
+				}
+				if solved {
+					st.solved[norm] = struct{}{}
+					subs = append(subs, source.TimedSubmission{At: base.Add(30 * time.Minute), Solved: true})
+				}
+				st.timed[norm] = subs
+			}
+			out[fmt.Sprintf("s%d", i)] = st
+		}
+		return out
+	}
+	// Оценка грубо врёт про «a»: якобы её почти никто не берёт и уходит 9 посылок.
+	ratings := domain.TaskRatings{"a": {SolveRate: 0.05, Attempts: 9}}
+
+	skew := func(n int) float64 {
+		statuses := build(n)
+		with := fitCourseModel(tasks, statuses, ratings)
+		without := fitCourseModel(tasks, statuses, nil)
+		return math.Abs(with.price["a"] - without.price["a"])
+	}
+	few, many := skew(6), skew(240)
+	if !(many < few/2) {
+		t.Fatalf("с ростом данных влияние ошибочной оценки должно заметно падать: мало=%.3f много=%.3f", few, many)
+	}
+}
+
+// Очередь проверки: сверху задачи, где оценка сильнее всего спорит с фактом.
+func TestTaskReviewQueueRanksDisagreement(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(24 * time.Hour)
+	tasksByNorm := map[string]courseTask{
+		"agree":  {norm: "agree", label: "K · A"},
+		"argue":  {norm: "argue", label: "K · B"},
+		"norate": {norm: "norate", label: "K · C"},
+	}
+	statuses := map[string]*accountStatuses{}
+	for i := 0; i < 20; i++ {
+		st := newAccountStatuses()
+		for _, norm := range []string{"agree", "argue", "norate"} {
+			st.attempted[norm] = struct{}{}
+			// Обе задачи берут почти все.
+			if i < 18 {
+				st.solved[norm] = struct{}{}
+				st.timed[norm] = []source.TimedSubmission{{At: base, Solved: true}}
+			} else {
+				st.timed[norm] = []source.TimedSubmission{{At: base}}
+			}
+		}
+		statuses[fmt.Sprintf("s%d", i)] = st
+	}
+	ratings := domain.TaskRatings{
+		"agree": {SolveRate: 0.9, Attempts: 1}, // согласна с фактом
+		"argue": {SolveRate: 0.1, Attempts: 1}, // спорит: «почти никто не возьмёт»
+	}
+	review := buildTaskReview(tasksByNorm, statuses, ratings, now)
+	if review == nil || len(review.Rows) != 2 {
+		t.Fatalf("в очередь должны попасть только оценённые задачи: %+v", review)
+	}
+	if review.Rows[0].NormalizedURL != "argue" {
+		t.Fatalf("сверху должна быть спорная задача, а не %q", review.Rows[0].NormalizedURL)
+	}
+	if !review.Rows[0].Harder {
+		t.Error("оценщик считает задачу труднее факта — это должно быть помечено")
+	}
+	if review.Rows[0].Gap <= review.Rows[1].Gap {
+		t.Errorf("расхождение спорной должно быть больше: %.2f против %.2f", review.Rows[0].Gap, review.Rows[1].Gap)
+	}
+	if review.Rated != 2 || review.Total != 3 {
+		t.Errorf("оценено/всего: %d/%d, ожидалось 2/3", review.Rated, review.Total)
 	}
 }

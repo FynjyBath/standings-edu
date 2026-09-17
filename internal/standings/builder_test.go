@@ -492,8 +492,8 @@ func TestComputeCourseStatsGlobalCohortShiftsTempo(t *testing.T) {
 		global = append(global, solveEvery(fmt.Sprintf("slow%d", i), 6))
 	}
 
-	byGroup := computeCourseStats(std, group, statuses, now, nil)
-	byGlobal := computeCourseStats(std, global, statuses, now, nil)
+	byGroup := computeCourseStats(std, group, statuses, now, nil, nil)
+	byGlobal := computeCourseStats(std, global, statuses, now, nil, nil)
 
 	g := byGroup["fast0"].Tempo
 	gl := byGlobal["fast0"].Tempo

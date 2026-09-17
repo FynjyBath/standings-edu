@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -540,6 +541,9 @@ type SourceData struct {
 	// FlagReviews — отметки проверки флагов нечестности (ключ — FlagReviewKey):
 	// «перенос»/«нарушение» исключают посылки эпизода из подсчёта темпа.
 	FlagReviews map[string]FlagReview
+	// TaskRatings — оценки сложности задач по условию: априор для цены задачи
+	// там, где данных ещё мало (data/task_ratings.json).
+	TaskRatings TaskRatings
 }
 
 const (
@@ -1302,4 +1306,95 @@ type StudentGroupStanding struct {
 type StudentDayCount struct {
 	Date  string `json:"date"` // YYYY-MM-DD (МSK)
 	Count int    `json:"count"`
+}
+
+// ── Оценки сложности задач ───────────────────────────────────────────────────
+
+// TaskRating — предсказание сложности задачи, сделанное по её условию (моделью
+// или преподавателем) и живущее в data/task_ratings.json.
+//
+// Оценка хранится в НАБЛЮДАЕМЫХ величинах, а не в абстрактных баллах: её можно
+// сверить с фактом и увидеть, где оценщик систематически ошибается. Абстрактную
+// «сложность от 1 до 5» сверить не с чем.
+//
+// Зачем это нужно: эмпирическая оценка задачи требует данных, которых в начале
+// курса нет. На выгрузке реального курса оценка по условию совпадала с
+// эмпирикой по 69 ученикам на +0,77 — точнее, чем данные по 34 ученикам, — а
+// вместе с данными давала +0,85 против +0,78 у данных в одиночку.
+type TaskRating struct {
+	// SolveRate — какая доля дошедших до задачи учеников её возьмёт, 0..1.
+	SolveRate float64 `json:"solve_rate"`
+	// Attempts — сколько посылок уйдёт у типичного ученика до зачёта, ≥1.
+	Attempts float64 `json:"attempts"`
+	// Model/RatedAt — кто и когда оценил.
+	Model   string     `json:"model,omitempty"`
+	RatedAt *time.Time `json:"rated_at,omitempty"`
+	// ValidatedBy/ValidatedAt — отметка преподавателя. Подтверждённой оценке
+	// модель доверяет вдвое сильнее.
+	ValidatedBy string     `json:"validated_by,omitempty"`
+	ValidatedAt *time.Time `json:"validated_at,omitempty"`
+	Note        string     `json:"note,omitempty"`
+}
+
+// TaskRatings — оценки по нормализованному URL задачи.
+type TaskRatings map[string]TaskRating
+
+// Valid — оценка пригодна к употреблению.
+func (r TaskRating) Valid() bool {
+	return r.SolveRate > 0 && r.SolveRate < 1 && r.Attempts >= 1
+}
+
+// Validated — оценку подтвердил преподаватель.
+func (r TaskRating) Validated() bool {
+	return strings.TrimSpace(r.ValidatedBy) != ""
+}
+
+// Threshold — порог задачи в шкале модели Раша: при силе ученика θ = 0
+// вероятность взять равна σ(−b), откуда b = −logit(SolveRate). Это та же
+// шкала, в которой считается эмпирический порог, поэтому смешивать их можно
+// напрямую, без подгонки масштабов.
+func (r TaskRating) Threshold() float64 {
+	p := math.Max(0.01, math.Min(0.99, r.SolveRate))
+	return -math.Log(p / (1 - p))
+}
+
+// Cost — трудоёмкость в шкале двусторонней подгонки: логарифм числа посылок.
+func (r TaskRating) Cost() float64 {
+	return math.Log(math.Max(1, r.Attempts))
+}
+
+// GeneratedTaskReview — очередь задач на проверку преподавателем: там, где
+// оценка по условию спорит с наблюдаемым. Проверять надо не там, где оценщик
+// уверен, а там, где он расходится с фактом.
+type GeneratedTaskReview struct {
+	GeneratedAt time.Time                `json:"generated_at"`
+	Rows        []GeneratedTaskReviewRow `json:"rows,omitempty"`
+	// Rated/Total — сколько задач вообще оценено из встреченных.
+	Rated int `json:"rated"`
+	Total int `json:"total"`
+}
+
+// GeneratedTaskReviewRow — одна задача в очереди. Показываются СЫРЫЕ
+// наблюдаемые (доля не осиливших, число посылок), а не итоговая цена: иначе
+// преподаватель подтверждал бы число, на которое сам же и повлиял.
+type GeneratedTaskReviewRow struct {
+	NormalizedURL string `json:"normalized_url"`
+	URL           string `json:"url,omitempty"`
+	Label         string `json:"label"`
+	Name          string `json:"name,omitempty"`
+	// Наблюдаемое.
+	Tried         int     `json:"tried"`
+	Solved        int     `json:"solved"`
+	FactSolveRate float64 `json:"fact_solve_rate"`
+	FactAttempts  float64 `json:"fact_attempts,omitempty"`
+	// Предсказанное.
+	RatedSolveRate float64 `json:"rated_solve_rate"`
+	RatedAttempts  float64 `json:"rated_attempts"`
+	// Gap — расхождение в логитах (по порогу) плюс по трудоёмкости; чем
+	// больше, тем важнее посмотреть. Impact — сколько учеников задача задела.
+	Gap       float64 `json:"gap"`
+	Impact    int     `json:"impact"`
+	Harder    bool    `json:"harder,omitempty"` // оценщик считает задачу сложнее факта
+	Validated bool    `json:"validated,omitempty"`
+	Note      string  `json:"note,omitempty"`
 }

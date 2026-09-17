@@ -45,7 +45,7 @@ func TestPerfProbeBuild(t *testing.T) {
 	groups := []domain.GroupDefinition{{Slug: "g", Title: "G", StudentIDs: ids, Contests: refs}}
 
 	t0 := time.Now()
-	res, _, err := b.BuildGroupsStandings(context.Background(), data, groups)
+	res, _, _, err := b.BuildGroupsStandings(context.Background(), data, groups)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -169,3 +169,27 @@ func TestTempoLegendMatchesCurrentModel(t *testing.T) {
 		}
 	}
 }
+
+// Широкие таблицы должны прокручиваться: у контейнера ограничена высота, его
+// нижний край с полосой уходит под сгиб, а в macOS и Windows 11 полосы по
+// умолчанию всплывающие — таблица выглядит просто обрезанной. Проверяем, что
+// разметка и стили для липкой полосы на месте.
+func TestWideTableScrollIsReachable(t *testing.T) {
+	h := filterTestHandlers(t, `{
+		"group_slug":"g1","group_title":"Г1",
+		"contests":[{"id":"c1","title":"К","score_system":"edu",
+			"tasks":[{"label":"A","url":"https://acmp.ru/?main=task&id_task=1","normalized_url":"n1"}],
+			"subcontests":[{"title":"З","task_count":1,"tasks":[{"label":"A","url":"https://acmp.ru/?main=task&id_task=1"}]}],
+			"rows":[{"student_id":"s1","public_name":"Иванов И.","statuses":["solved"],"solved_count":1}]}]}`)
+
+	req := httptest.NewRequest(http.MethodGet, "/standings/g1", nil)
+	req.SetPathValue("group_name", "g1")
+	rec := httptest.NewRecorder()
+	h.GroupStandingsPage(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("страница группы: code=%d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `class="table-wrap"`) {
+		t.Error("таблица должна лежать в прокручиваемом контейнере")
+	}
+}

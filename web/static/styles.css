@@ -3092,3 +3092,74 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--line) 60%);
   padding-left: 0.6rem;
 }
+
+/* ── Горизонтальная прокрутка широких таблиц ────────────────────────────── */
+
+/* Полосы прокрутки должны быть видны всегда: в macOS и Windows 11 они по
+   умолчанию всплывающие, и таблица выглядит просто обрезанной. */
+.table-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent 55%) transparent;
+}
+
+.table-wrap::-webkit-scrollbar {
+  height: 0.7rem;
+  width: 0.7rem;
+}
+
+.table-wrap::-webkit-scrollbar-thumb,
+.table-hscroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 45%, transparent 55%);
+  border-radius: 999px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover,
+.table-hscroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 70%, transparent 30%);
+}
+
+.table-wrap::-webkit-scrollbar-track,
+.table-hscroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Знак, что таблица продолжается вправо. Внутренняя тень, а не маска: маска
+   приглушила бы и сами цифры у правого края, а их там читают. */
+.table-wrap.has-more-right {
+  box-shadow: inset -14px 0 14px -14px color-mix(in srgb, var(--text) 45%, transparent 55%);
+}
+
+/* Своя полоса, прилипающая к нижнему краю окна: до полосы самого контейнера
+   приходилось прокручивать страницу до конца длинной таблицы. */
+.table-hscroll {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 0.85rem;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent 18%);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent 55%) transparent;
+}
+
+.table-hscroll::-webkit-scrollbar {
+  height: 0.85rem;
+}
+
+.table-hscroll > div {
+  height: 1px;
+}
+
+.table-hscroll[hidden] {
+  display: none;
+}
+
+@media (hover: none) {
+  /* На тач-устройствах таблица листается пальцем, отдельная полоса не нужна. */
+  .table-hscroll {
+    display: none;
+  }
+}

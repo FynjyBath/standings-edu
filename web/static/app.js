@@ -486,76 +486,47 @@
     window.standingsApplyStudentFilter = apply;
   }
 
-  // ── 7. Горизонтальная прокрутка широких таблиц ───────────────────────────
-  // Таблицы шире экрана прокручиваются внутри .table-wrap, но добраться до
-  // полосы бывает нечем: у контейнера ограничена высота, и его нижний край с
-  // полосой уезжает под сгиб, а в macOS и Windows 11 полосы по умолчанию
-  // всплывающие — их не видно, пока не начнёшь скроллить. Поэтому к каждой
-  // широкой таблице добавляется своя полоса, прилипающая к нижнему краю окна,
-  // и тень у правого края — знак, что таблица продолжается.
+  // ── 7. Подсказка «таблица продолжается вправо» ───────────────────────────
+  // Широкие таблицы прокручиваются вбок внутри .table-wrap. Полосу прокрутки
+  // рисует браузер (стили — в styles.css, чтобы она была видна всегда, а не
+  // всплывала). Здесь только тень у правого края: без неё край таблицы легко
+  // принять за её конец.
+  //
+  // Своей полосы здесь быть не должно: у контейнера уже есть родная, и вторая
+  // рядом с ней — просто лишняя.
   function initWideTables() {
     var wraps = document.querySelectorAll(".table-wrap");
     [].forEach.call(wraps, function (wrap) {
       if (wrap.__wideReady) return;
       wrap.__wideReady = true;
 
-      var bar = document.createElement("div");
-      bar.className = "table-hscroll";
-      bar.setAttribute("aria-hidden", "true");
-      var rail = document.createElement("div");
-      bar.appendChild(rail);
-      wrap.parentNode.insertBefore(bar, wrap.nextSibling);
-
-      var syncing = false;
-      function mirror(from, to) {
-        if (syncing) return;
-        syncing = true;
-        to.scrollLeft = from.scrollLeft;
-        syncing = false;
-      }
-      bar.addEventListener("scroll", function () { mirror(bar, wrap); });
-      wrap.addEventListener("scroll", function () {
-        mirror(wrap, bar);
-        edge();
-      });
-
       function edge() {
-        // Тень справа, пока есть что показать дальше.
-        var more = wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft > 1;
-        wrap.classList.toggle("has-more-right", more);
+        wrap.classList.toggle(
+          "has-more-right",
+          wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft > 1
+        );
       }
-
-      // Пересчёт читает scrollWidth, то есть заставляет браузер посчитать
-      // вёрстку. Сводная перестраивает таблицу на сотни строк, и наблюдатель
-      // за мутациями звал бы это на каждой; сводим к одному разу на кадр.
+      // Пересчёт читает scrollWidth, то есть заставляет браузер считать
+      // вёрстку. Сводная перестраивает таблицу на сотни строк — сводим к
+      // одному разу на кадр.
       var pending = false;
       function schedule() {
         if (pending) return;
         pending = true;
         (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
           pending = false;
-          sync();
+          edge();
         });
       }
-
-      function sync() {
-        var overflow = wrap.scrollWidth - wrap.clientWidth > 1;
-        bar.hidden = !overflow;
-        if (overflow) {
-          rail.style.width = wrap.scrollWidth + "px";
-          bar.scrollLeft = wrap.scrollLeft;
-        }
-        edge();
-      }
-      sync();
+      wrap.addEventListener("scroll", schedule);
+      window.addEventListener("resize", schedule);
       if (window.ResizeObserver) {
         new ResizeObserver(schedule).observe(wrap);
       }
-      window.addEventListener("resize", schedule);
-      // Сводная и ленивые блоки дорисовывают таблицы позже.
       if (window.MutationObserver) {
         new MutationObserver(schedule).observe(wrap, { childList: true, subtree: true });
       }
+      edge();
     });
   }
 

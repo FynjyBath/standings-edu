@@ -1,8 +1,11 @@
 package standings
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,5 +177,129 @@ func TestTaskLabel(t *testing.T) {
 		if got := taskLabel(c.site, c.url); got != c.want {
 			t.Fatalf("taskLabel(%s)=%q want %q", c.url, got, c.want)
 		}
+	}
+}
+
+// Лента посылок в профиле ведёт на настроенное зеркало informatics. Ключи в
+// st.timed — нормализованные URL, а нормализация канонизирует хост в
+// informatics.msk.ru: это ключ сопоставления, а не ссылка для человека. Без
+// переписывания преподаватель уходил на чужой домен.
+func TestProfileTimelineUsesConfiguredMirror(t *testing.T) {
+	reg := source.NewRegistry()
+	inf, err := source.NewInformaticsAPIClientWithState(
+		source.InformaticsCredentials{BaseURL: "https://informatics.mccme.ru"}, "")
+	if err != nil {
+		t.Fatalf("informatics client: %v", err)
+	}
+	reg.RegisterSite("informatics", inf)
+	b := NewBuilder(reg, log.New(io.Discard, "", 0), 1)
+
+	norm := domain.NormalizeTaskURL("https://informatics.mccme.ru/mod/statements/view.php?chapterid=2955")
+	if !strings.Contains(norm, "informatics.msk.ru") {
+		t.Fatalf("прекондиция: нормализация канонизирует хост, получили %q", norm)
+	}
+	st := newAccountStatuses()
+	st.attempted[norm] = struct{}{}
+	st.solved[norm] = struct{}{}
+	st.timed[norm] = []source.TimedSubmission{
+		{At: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC), Solved: true},
+	}
+
+	profiles := b.buildStudentProfiles(
+		[]domain.Student{{ID: "s1", PublicName: "У"}},
+		map[string]*accountStatuses{"s1": st},
+		time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC),
+	)
+	p := profiles["s1"]
+	if p == nil || len(p.Recent) != 1 {
+		t.Fatalf("ожидалась одна посылка в ленте: %+v", p)
+	}
+	got := p.Recent[0].TaskURL
+	if !strings.Contains(got, "informatics.mccme.ru") {
+		t.Errorf("ссылка должна вести на настроенное зеркало, получили %q", got)
+	}
+	if strings.Contains(got, "informatics.msk.ru") {
+		t.Errorf("в ссылке остался канонический хост нормализации: %q", got)
+	}
+}
+
+// Сплошная проверка: ни одно ПОЛЕ-ССЫЛКА в сгенерированных данных не должно
+// вести на канонический хост нормализации. Нормализованные ключи — можно, это
+// не ссылки; всё, на что кликает человек, — только настроенное зеркало.
+//
+// Проверка идёт по JSON, а не по конкретным полям: так новое поле со ссылкой
+// попадёт под неё само, без правки теста. Этот класс ошибок иначе замечает
+// только преподаватель, кликнувший не на тот домен.
+func TestGeneratedLinksUseConfiguredMirror(t *testing.T) {
+	reg := source.NewRegistry()
+	inf, err := source.NewInformaticsAPIClientWithState(
+		source.InformaticsCredentials{BaseURL: "https://informatics.mccme.ru"}, "")
+	if err != nil {
+		t.Fatalf("informatics client: %v", err)
+	}
+	reg.RegisterSite("informatics", inf)
+	b := NewBuilder(reg, log.New(io.Discard, "", 0), 1)
+
+	rawTask := "https://informatics.mccme.ru/mod/statements/view.php?chapterid=2955"
+	norm := domain.NormalizeTaskURL(rawTask)
+	contest := domain.Contest{
+		ID: "c", ScoreSystem: domain.ScoreSystemEdu,
+		Materials:   []domain.ContestMaterial{{Title: "Условия", URL: rawTask}},
+		Subcontests: []domain.Subcontest{{Title: "S", Tasks: []string{rawTask}}},
+	}
+	st := newAccountStatuses()
+	st.attempted[norm] = struct{}{}
+	st.solved[norm] = struct{}{}
+	st.timed[norm] = []source.TimedSubmission{
+		{At: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC), Solved: true},
+	}
+	students := []domain.Student{{ID: "s1", PublicName: "У"}}
+	statuses := map[string]*accountStatuses{"s1": st}
+
+	std := b.buildTaskContestStandings(contest, students, statuses, nil, nil, nil, nil, nil)
+	profiles := b.buildStudentProfiles(students, statuses, time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC))
+
+	// Поля, где канонический хост — это ключ сопоставления, а не ссылка.
+	keyFields := map[string]bool{"normalized_url": true, "task_urls": true}
+
+	mirrorLinks := 0
+	var walk func(prefix string, v any)
+	walk = func(prefix string, v any) {
+		switch value := v.(type) {
+		case map[string]any:
+			for k, inner := range value {
+				if keyFields[k] {
+					continue
+				}
+				walk(prefix+"."+k, inner)
+			}
+		case []any:
+			for i, inner := range value {
+				walk(fmt.Sprintf("%s[%d]", prefix, i), inner)
+			}
+		case string:
+			if strings.Contains(value, "informatics.msk.ru") {
+				t.Errorf("%s ведёт на канонический хост вместо настроенного: %q", prefix, value)
+			}
+			if strings.Contains(value, "informatics.mccme.ru") {
+				mirrorLinks++
+			}
+		}
+	}
+	for name, obj := range map[string]any{"standings": std, "profile": profiles["s1"]} {
+		raw, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var generic any
+		if err := json.Unmarshal(raw, &generic); err != nil {
+			t.Fatal(err)
+		}
+		walk(name, generic)
+	}
+	// Защита от вырождения: если ссылок в данных не оказалось вовсе, проверка
+	// прошла бы «успешно», ничего не проверив.
+	if mirrorLinks < 2 {
+		t.Fatalf("ожидались ссылки на зеркало и в таблице, и в профиле, нашлось %d", mirrorLinks)
 	}
 }

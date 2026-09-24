@@ -62,7 +62,11 @@ func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuse
 		return "other"
 	}
 
-	// Лента посылок (по сайтам со временем).
+	// Лента посылок (по сайтам со временем). Ключ в st.timed — НОРМАЛИЗОВАННЫЙ
+	// URL, а он канонизирован в informatics.msk.ru: это ключ сопоставления
+	// посылок, а не ссылка для человека. В ленте нужна настоящая ссылка на
+	// настроенное зеркало, иначе преподаватель уходит не на тот домен.
+	informaticsBase := b.informaticsBaseURL()
 	timeline := make([]domain.StudentSubmission, 0)
 	submissionsBySite := make(map[string]int)
 	for taskURL, subs := range st.timed {
@@ -72,7 +76,7 @@ func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuse
 			timeline = append(timeline, domain.StudentSubmission{
 				At:      sub.At,
 				Site:    site,
-				TaskURL: taskURL,
+				TaskURL: domain.RewriteInformaticsHost(taskURL, informaticsBase),
 				Label:   taskLabel(site, taskURL),
 				Solved:  sub.Solved,
 				Score:   sub.Score,

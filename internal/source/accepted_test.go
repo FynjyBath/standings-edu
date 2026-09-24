@@ -130,3 +130,79 @@ func TestBorderStatusPerProvider(t *testing.T) {
 		}
 	}
 }
+
+// Рамкой помечается вердикт, который поставил человек, а не выдала тестирующая
+// система. Списки у двух систем разные: на kod-u судья доводит посылку до
+// полного OK, на informatics — до «зачтено».
+func TestManualVerdictBorders(t *testing.T) {
+	cases := []struct {
+		status            int
+		name              string
+		informatics, kodu bool
+	}{
+		{0, "OK", false, true}, // informatics: выдаёт судья; kod-u: ставит преподаватель
+		{8, "зачтено", true, false},
+		{16, "ожидает подтверждения", false, false},
+		{10, "дисквалифицировано", true, true},
+		{17, "отвергнуто", true, true},
+		{23, "вызван на защиту", true, true},
+		// Нарушение правил оформления ejudge выставляет сам — не рамка.
+		{14, "нарушение оформления", false, false},
+		// Автоматические вердикты тестирования.
+		{1, "ошибка компиляции", false, false},
+		{3, "превышено время", false, false},
+		{5, "неверный ответ", false, false},
+		{7, "частичное решение", false, false},
+		{12, "превышена память", false, false},
+	}
+	for _, c := range cases {
+		if got := isInformaticsBorderStatus(c.status); got != c.informatics {
+			t.Errorf("informatics: статус %d (%s) → рамка %v, ожидалось %v", c.status, c.name, got, c.informatics)
+		}
+		if got := isEjudgeBorderStatus(c.status); got != c.kodu {
+			t.Errorf("ejudge: статус %d (%s) → рамка %v, ожидалось %v", c.status, c.name, got, c.kodu)
+		}
+	}
+	// «Проигнорировано» в ejudge — действие судьи, но на informatics он
+	// проставляется автоматически пачками (в т.ч. на технических задачах),
+	// поэтому там рамку не даёт.
+	if !isEjudgeBorderStatus(9) {
+		t.Error("ejudge: «проигнорировано» ставит судья — ожидалась рамка")
+	}
+	if isInformaticsBorderStatus(9) {
+		t.Error("informatics: «проигнорировано» выставляется автоматически — рамки быть не должно")
+	}
+}
+
+// Вердикт преподавателя помечается и тогда, когда задача не решена: «отвергнуто»
+// или «дисквалифицировано» — это тоже его решение, а не результат тестов.
+func TestManualVerdictOnUnsolvedTask(t *testing.T) {
+	build := func(id int) string {
+		return "https://informatics.msk.ru/mod/statements/view.php?chapterid=" + itoa(id) + "#1"
+	}
+	for _, c := range []struct {
+		name     string
+		status   int
+		accepted bool
+	}{
+		{"отвергнуто", 17, true},
+		{"дисквалифицировано", 10, true},
+		{"неверный ответ", 5, false},
+		{"нарушение оформления", 14, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			agg := map[string]informaticsTaskAggregate{}
+			foldStoredInformaticsRuns([]informaticsStoredRun{{ID: 1, ProblemID: 100, Status: c.status}}, agg, build)
+			res := aggregatesToTaskResults(agg)
+			if len(res) != 1 {
+				t.Fatalf("ожидался один результат: %+v", res)
+			}
+			if res[0].Solved {
+				t.Errorf("задача не решена, а Solved=%v", res[0].Solved)
+			}
+			if res[0].Accepted != c.accepted {
+				t.Errorf("Accepted=%v, ожидалось %v", res[0].Accepted, c.accepted)
+			}
+		})
+	}
+}

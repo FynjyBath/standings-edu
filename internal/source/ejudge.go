@@ -225,13 +225,15 @@ func (c *EjudgeClient) fetchAllLocked(ctx context.Context) error {
 			a.attempted = true
 			solved := isEjudgeSolvedStatus(run.Status)
 			border := isEjudgeBorderStatus(run.Status)
+			// Рамку ставим независимо от того, решена задача: вердикт
+			// преподавателя может быть и не «решено» (отвергнуто, вызов на
+			// защиту). У ejudge ничего не «перебивает» рамку, поэтому okSolved
+			// не ставим.
+			if border {
+				a.acceptedSolved = true
+			}
 			if solved {
 				a.solved = true
-				if border {
-					a.acceptedSolved = true
-				}
-				// У ejudge ничего не «перебивает» OK, поэтому okSolved не ставим:
-				// рамка показывается всегда, когда есть OK (см. isEjudgeBorderStatus).
 			}
 			score := domain.ClampScore(run.Score)
 			if !a.hasScore || score > a.score {
@@ -465,8 +467,21 @@ func isEjudgeSolvedStatus(status int) bool {
 	return false
 }
 
-// isEjudgeBorderStatus — жёлтая рамка у ejudge только на полном OK (0). Ничего
-// его не «перебивает», поэтому suppress-статуса у ejudge нет.
-func isEjudgeBorderStatus(status int) bool { return status == informaticsStatusOK }
+// isEjudgeBorderStatus — рамка у вердиктов, которые поставил преподаватель.
+// На kod-u это полный OK (0): система доводит посылку до «зачтено на проверку»
+// (8) или «ожидает подтверждения» (16), а OK ставит человек. Плюс разбор
+// вручную — проигнорировано, дисквалифицировано, отвергнуто, вызов на защиту:
+// таких вердиктов тестирующая система не выдаёт вовсе.
+//
+// RUN_STYLE_ERR (14) сюда не входит: нарушение правил оформления ejudge
+// выставляет сам. Ничто рамку не «перебивает», suppress-статуса у ejudge нет.
+func isEjudgeBorderStatus(status int) bool {
+	switch status {
+	case informaticsStatusOK, informaticsStatusIgnored, informaticsStatusDisqualified,
+		informaticsStatusRejected, informaticsStatusSummoned:
+		return true
+	}
+	return false
+}
 
 func isEjudgePendingStatus(status int) bool { return isInformaticsPendingStatus(status) }

@@ -545,6 +545,15 @@ const (
 	informaticsStatusOK            = 0  // RUN_OK — полный OK
 	informaticsStatusAccepted      = 8  // RUN_ACCEPTED — «Зачтено» (не полный OK)
 	informaticsStatusPendingReview = 16 // RUN_PENDING_REVIEW — «Ожидает подтверждения»
+
+	// Вердикты, которых тестирующая система не выдаёт: их ставит человек.
+	// Значения из enum RUN_* ejudge (include/ejudge/runlog.h).
+	informaticsStatusIgnored      = 9  // RUN_IGNORED — «Проигнорировано»
+	informaticsStatusDisqualified = 10 // RUN_DISQUALIFIED — «Дисквалифицировано»
+	informaticsStatusRejected     = 17 // RUN_REJECTED — «Отвергнуто»
+	informaticsStatusSummoned     = 23 // RUN_SUMMONED — «Вызван на защиту»
+	// RUN_STYLE_ERR (14) сюда НЕ входит: нарушение правил оформления ejudge
+	// выставляет сам, это не решение преподавателя.
 )
 
 // informatics: решено (зелёный плюс) — полный OK (0) и «зачтено» (8).
@@ -552,9 +561,20 @@ func isInformaticsSolvedStatus(ejudgeStatus int) bool {
 	return ejudgeStatus == informaticsStatusOK || ejudgeStatus == informaticsStatusAccepted
 }
 
-// informatics: жёлтая рамка — у «зачтено» (RUN_ACCEPTED=8), не полный OK.
+// informatics: жёлтая рамка — у вердиктов, которые поставил преподаватель, а не
+// выдала система. Это «зачтено» (RUN_ACCEPTED=8, не полный OK) и разбор вручную
+// — дисквалификация, отклонение, вызов на защиту.
+//
+// RUN_IGNORED (9) сюда намеренно не входит, хотя в ejudge это действие судьи: на
+// informatics он встречается сотнями и пачками подряд по одной задаче (в т.ч. на
+// технических вроде «DEBUG problem»), то есть проставляется автоматически.
 func isInformaticsBorderStatus(ejudgeStatus int) bool {
-	return ejudgeStatus == informaticsStatusAccepted
+	switch ejudgeStatus {
+	case informaticsStatusAccepted, informaticsStatusDisqualified,
+		informaticsStatusRejected, informaticsStatusSummoned:
+		return true
+	}
+	return false
 }
 
 // informatics: полный OK (0) «перебивает» зачтено — тогда рамки нет.
@@ -1238,8 +1258,9 @@ func (m *maybeInt) UnmarshalJSON(data []byte) error {
 type informaticsTaskAggregate struct {
 	attempted bool
 	solved    bool
-	// okSolved — был полный OK; acceptedSolved — было «зачтено» (RUN_ACCEPTED).
-	// «Зачтено» (без полного OK) помечается в таблице.
+	// okSolved — был полный OK; acceptedSolved — был вердикт преподавателя
+	// («зачтено», отклонено, дисквалифицировано…). Вердикт преподавателя без
+	// полного OK помечается в таблице рамкой.
 	okSolved       bool
 	acceptedSolved bool
 	score          int
@@ -1253,7 +1274,7 @@ type informaticsTaskAggregate struct {
 // v6: храним сырые посылки по run_id; каждый забор перезаписывает их свежими
 // данными («последняя информация — самая актуальная»), агрегаты собираются из
 // сохранённых посылок заново.
-const informaticsStateVersion = 6
+const informaticsStateVersion = 7
 
 type informaticsStateFile struct {
 	Version  int                                `json:"version"`
@@ -1307,11 +1328,13 @@ func foldStoredInformaticsRuns(runs []informaticsStoredRun, aggByTask map[string
 		agg.attempted = true
 		solved := isInformaticsSolvedStatus(run.Status)
 		border := isInformaticsBorderStatus(run.Status)
+		// Рамку ставим независимо от того, решена задача: вердикт преподавателя
+		// может быть и не «решено» (отклонено, дисквалифицировано).
+		if border {
+			agg.acceptedSolved = true
+		}
 		if solved {
 			agg.solved = true
-			if border {
-				agg.acceptedSolved = true
-			}
 			if isInformaticsSuppressStatus(run.Status) {
 				agg.okSolved = true
 			}

@@ -17,6 +17,10 @@ import (
 type accountStatuses struct {
 	solved    map[string]struct{}
 	attempted map[string]struct{}
+	// manualVerdict — задачи, по которым вердикт поставил преподаватель, а не
+	// выдала система («зачтено», отклонено, дисквалифицировано…). Такие ячейки
+	// помечаются рамкой — в том числе когда задача не решена.
+	manualVerdict map[string]struct{}
 	// okSolved — задачи, решённые полным OK (а не только «зачтено»). Задача,
 	// которая есть в solved, но не в okSolved, решена статусом «зачтено» и
 	// помечается в таблице.
@@ -522,10 +526,13 @@ func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, account
 		if attempted {
 			out.attempted[normalized] = struct{}{}
 		}
+		if result.Accepted {
+			out.manualVerdict[normalized] = struct{}{}
+		}
 		if result.Solved {
 			out.solved[normalized] = struct{}{}
-			// «Зачтено» (result.Accepted) не добавляет в okSolved — по нему потом
-			// отличаем полный OK от «зачтено».
+			// Вердикт преподавателя (result.Accepted) не добавляет в okSolved —
+			// по нему потом отличаем полный OK от ручного решения.
 			if !result.Accepted {
 				out.okSolved[normalized] = struct{}{}
 			}
@@ -1465,13 +1472,16 @@ func (b *Builder) buildTaskContestStandings(contest domain.Contest, students []d
 			if _, ok := combined.solved[col.normalizedURL]; ok {
 				status = domain.TaskStatusSolved
 				row.SolvedCount++
-				// Решено, но без полного OK → «зачтено».
+			} else if _, ok := combined.attempted[col.normalizedURL]; ok {
+				status = domain.TaskStatusAttempted
+			}
+			// Рамка — у вердиктов преподавателя, решена задача или нет. Полный
+			// OK её снимает: значит система в итоге приняла решение сама.
+			if _, manual := combined.manualVerdict[col.normalizedURL]; manual {
 				if _, okFull := combined.okSolved[col.normalizedURL]; !okFull {
 					acceptedMarks[i] = true
 					hasAccepted = true
 				}
-			} else if _, ok := combined.attempted[col.normalizedURL]; ok {
-				status = domain.TaskStatusAttempted
 			}
 			row.Statuses[i] = status
 
@@ -1582,11 +1592,14 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 		}
 		if !sub.At.After(end) { // в окне [start, end]
 			inAttempted = true
+			// Вердикт преподавателя метит ячейку независимо от того, решена
+			// ли задача: он может быть и не «решено».
+			if sub.Accepted {
+				inBorder = true
+			}
 			if sub.Solved {
 				inSolved = true
-				if sub.Accepted {
-					inBorder = true
-				} else {
+				if !sub.Accepted {
 					inOKSolved = true
 				}
 			}
@@ -1595,11 +1608,12 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 			}
 		} else { // после окончания — дорешка
 			afterAttempted = true
+			if sub.Accepted {
+				afterBorder = true
+			}
 			if sub.Solved {
 				afterSolved = true
-				if sub.Accepted {
-					afterBorder = true
-				} else {
+				if !sub.Accepted {
 					afterOKSolved = true
 				}
 			}
@@ -1615,6 +1629,10 @@ func windowedTaskResult(timed []source.TimedSubmission, start, end time.Time, is
 		accepted = inBorder && !(suppressBorder && inOKSolved)
 	} else if afterSolved {
 		accepted = afterBorder && !(suppressBorder && afterOKSolved)
+	} else if inAttempted || afterAttempted {
+		// Не решено, но вердикт поставил преподаватель (отклонено,
+		// дисквалифицировано) — такую ячейку тоже помечаем.
+		accepted = inBorder || afterBorder
 	}
 
 	// Статус и базовая пометка дорешки — по факту решения/попытки.
@@ -1681,11 +1699,12 @@ func newAccountStatuses() *accountStatuses {
 
 func newAccountStatusesValue() accountStatuses {
 	return accountStatuses{
-		solved:    make(map[string]struct{}),
-		attempted: make(map[string]struct{}),
-		okSolved:  make(map[string]struct{}),
-		scores:    make(map[string]int),
-		timed:     make(map[string][]source.TimedSubmission),
+		solved:        make(map[string]struct{}),
+		attempted:     make(map[string]struct{}),
+		manualVerdict: make(map[string]struct{}),
+		okSolved:      make(map[string]struct{}),
+		scores:        make(map[string]int),
+		timed:         make(map[string][]source.TimedSubmission),
 	}
 }
 
@@ -1698,6 +1717,12 @@ func mergeStatuses(dst *accountStatuses, src accountStatuses) {
 	}
 	for key := range src.attempted {
 		dst.attempted[key] = struct{}{}
+	}
+	for key := range src.manualVerdict {
+		if dst.manualVerdict == nil {
+			dst.manualVerdict = make(map[string]struct{})
+		}
+		dst.manualVerdict[key] = struct{}{}
 	}
 	for key := range src.okSolved {
 		if dst.okSolved == nil {

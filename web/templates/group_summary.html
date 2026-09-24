@@ -478,7 +478,7 @@
             var practice = !!(row && Array.isArray(row.upsolved) && row.upsolved[i]);
             var accepted = !!(row && Array.isArray(row.accepted) && row.accepted[i]);
             var td = document.createElement("td");
-            if (accepted) td.title = "Зачтено";
+            if (accepted) td.title = "Вердикт поставил преподаватель, а не система";
             if (isIoi) {
               td.className = "score-cell" + (practice ? " practice" : "") + (accepted ? " accepted" : "");
               // «50 (70)»: основной балл и дорешка; фон — по лучшему из них.

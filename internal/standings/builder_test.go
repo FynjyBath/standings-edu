@@ -300,9 +300,10 @@ func TestBuildTaskContestAcceptedMark(t *testing.T) {
 	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
 	students := []domain.Student{{ID: "s1", PublicName: "У"}}
 
-	// Без окна: solved обе, okSolved только у второй.
+	// Без окна: решены обе, но первую зачёл преподаватель, вторую принял судья.
 	st := newAccountStatuses()
 	st.solved[u[0]] = struct{}{}
+	st.manualVerdict[u[0]] = struct{}{}
 	st.solved[u[1]] = struct{}{}
 	st.okSolved[u[1]] = struct{}{}
 	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil, nil)
@@ -524,5 +525,93 @@ func TestGlobalCohortDedup(t *testing.T) {
 	}
 	if seen["x"] != 1 || seen["y"] != 1 || len(got) != 2 {
 		t.Fatalf("ученик из двух групп должен быть один раз: %v", seen)
+	}
+}
+
+// Рамка вердикта преподавателя нужна и у нерешённой задачи: «отвергнуто» —
+// тоже его решение. Раньше пометка выводилась из «решено, но не полный OK», и
+// нерешённую ячейку пометить было нечем.
+func TestManualVerdictMarksUnsolvedCell(t *testing.T) {
+	contest := domain.Contest{
+		ID: "c", ScoreSystem: domain.ScoreSystemEdu,
+		Subcontests: []domain.Subcontest{{Title: "S", Tasks: []string{
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=1", // отвергнута преподавателем
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=2", // просто неверный ответ
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=3", // зачтено преподавателем
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=4", // зачтено, потом полный OK
+		}}},
+	}
+	u := make([]string, 4)
+	for i, raw := range contest.Subcontests[0].Tasks {
+		u[i] = domain.NormalizeTaskURL(raw)
+	}
+	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
+	students := []domain.Student{{ID: "s1", PublicName: "У"}}
+
+	st := newAccountStatuses()
+	st.attempted[u[0]] = struct{}{}
+	st.manualVerdict[u[0]] = struct{}{}
+	st.attempted[u[1]] = struct{}{}
+	st.solved[u[2]] = struct{}{}
+	st.manualVerdict[u[2]] = struct{}{}
+	// Полный OK после ручного вердикта снимает рамку: систему в итоге
+	// устроило решение само по себе.
+	st.solved[u[3]] = struct{}{}
+	st.manualVerdict[u[3]] = struct{}{}
+	st.okSolved[u[3]] = struct{}{}
+
+	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil, nil)
+	row := out.Rows[0]
+	if row.Accepted == nil {
+		t.Fatal("ожидались пометки вердиктов")
+	}
+	want := []bool{true, false, true, false}
+	for i, w := range want {
+		if row.Accepted[i] != w {
+			t.Errorf("задача %d: рамка %v, ожидалось %v (%+v)", i, row.Accepted[i], w, row.Accepted)
+		}
+	}
+	// Статусы при этом не меняются: отвергнутая остаётся попыткой, не решением.
+	if row.Statuses[0] != domain.TaskStatusAttempted {
+		t.Errorf("отвергнутая задача должна остаться попыткой, а не %q", row.Statuses[0])
+	}
+	if row.Statuses[2] != domain.TaskStatusSolved {
+		t.Errorf("зачтённая задача должна остаться решённой, а не %q", row.Statuses[2])
+	}
+}
+
+// То же в контесте с окном: там результат считается по посылкам с временем.
+func TestManualVerdictMarksUnsolvedCellInWindow(t *testing.T) {
+	start := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	end := start.Add(2 * time.Hour)
+	inTime := start.Add(30 * time.Minute)
+	contest := domain.Contest{
+		ID: "c", ScoreSystem: domain.ScoreSystemEdu,
+		StartTime: &start, EndTime: &end,
+		Subcontests: []domain.Subcontest{{Title: "S", Tasks: []string{
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=1",
+			"https://informatics.msk.ru/mod/statements/view.php?chapterid=2",
+		}}},
+	}
+	u := make([]string, 2)
+	for i, raw := range contest.Subcontests[0].Tasks {
+		u[i] = domain.NormalizeTaskURL(raw)
+	}
+	b := NewBuilder(nil, log.New(io.Discard, "", 0), 1)
+	students := []domain.Student{{ID: "s1", PublicName: "У"}}
+
+	st := newAccountStatuses()
+	// Не решена, но вердикт поставил преподаватель.
+	st.timed[u[0]] = []source.TimedSubmission{{At: inTime, Solved: false, Accepted: true}}
+	// Не решена, обычный отказ тестирующей системы.
+	st.timed[u[1]] = []source.TimedSubmission{{At: inTime, Solved: false, Accepted: false}}
+
+	out := b.buildTaskContestStandings(contest, students, map[string]*accountStatuses{"s1": st}, nil, nil, nil, nil, nil)
+	row := out.Rows[0]
+	if row.Accepted == nil || !row.Accepted[0] {
+		t.Fatalf("вердикт преподавателя по нерешённой задаче должен пометиться: %+v", row.Accepted)
+	}
+	if row.Accepted[1] {
+		t.Errorf("обычный отказ системы помечать не надо: %+v", row.Accepted)
 	}
 }

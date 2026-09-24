@@ -343,8 +343,11 @@ func upsolvingView(contest domain.GeneratedContestStandings) *UpsolvingView {
 			}
 			if solvedInWindow {
 				windowSolved++
-			} else {
-				wc.Accepted = false // рамка «зачтено» только у оконного решения
+			} else if wc.Status == "none" {
+				// В окне задачи нет (не решалась или решена дорешкой) — рамке
+				// вердикта преподавателя тут не место. У показанных попыток она
+				// остаётся: вердикт может быть и не «решено».
+				wc.Accepted = false
 			}
 			if wc.Text == "" {
 				wc.SubmissionURL = ""

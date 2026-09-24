@@ -662,8 +662,8 @@ func TestTaskRatingPricesUnseenTask(t *testing.T) {
 	}
 	// «fresh» никто не трогал, но она оценена как заметно более трудная.
 	ratings := domain.TaskRatings{
-		"seen":  {SolveRate: 0.9, Attempts: 2},
-		"fresh": {SolveRate: 0.2, Attempts: 6},
+		"seen":  {IdeaRate: 0.9, ImplAttempts: 2},
+		"fresh": {IdeaRate: 0.2, ImplAttempts: 6},
 	}
 	withRating := fitCourseModel(tasks, statuses, ratings)
 	without := fitCourseModel(tasks, statuses, nil)
@@ -716,7 +716,7 @@ func TestTaskRatingYieldsToData(t *testing.T) {
 		return out
 	}
 	// Оценка грубо врёт про «a»: якобы её почти никто не берёт и уходит 9 посылок.
-	ratings := domain.TaskRatings{"a": {SolveRate: 0.05, Attempts: 9}}
+	ratings := domain.TaskRatings{"a": {IdeaRate: 0.05, ImplAttempts: 9}}
 
 	skew := func(n int) float64 {
 		statuses := build(n)
@@ -755,8 +755,8 @@ func TestTaskReviewQueueRanksDisagreement(t *testing.T) {
 		statuses[fmt.Sprintf("s%d", i)] = st
 	}
 	ratings := domain.TaskRatings{
-		"agree": {SolveRate: 0.9, Attempts: 1}, // согласна с фактом
-		"argue": {SolveRate: 0.1, Attempts: 1}, // спорит: «почти никто не возьмёт»
+		"agree": {IdeaRate: 0.9, ImplAttempts: 1}, // согласна с фактом
+		"argue": {IdeaRate: 0.1, ImplAttempts: 1}, // спорит: «почти никто не возьмёт»
 	}
 	review := buildTaskReview(tasksByNorm, statuses, ratings, now)
 	if review == nil || len(review.Rows) != 2 {

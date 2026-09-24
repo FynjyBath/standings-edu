@@ -238,3 +238,68 @@ func TestLoadInjectsManualTables(t *testing.T) {
 		t.Fatalf("inline table not injected: %q", cfg["table"])
 	}
 }
+
+// Файл оценок прежнего формата должен ОСТАНАВЛИВАТЬ генерацию, а не
+// пропускаться молча.
+//
+// Ключ solve_rate раньше означал «доля решивших задачу вообще» — на реальном
+// курсе 0,85–0,99 с медианой 0,97. Идейность означает другое: «доля дошедших,
+// кто придумает решение сам». Прочитай мы старые числа как новые, почти все
+// задачи получили бы идейность в 1 балл, и априор весом в 64 ученика задавил
+// бы данные. Молчаливый пропуск не лучше: курс остался бы без оценок, и никто
+// бы не понял почему.
+func TestLoadTaskRatingsRejectsLegacyFormat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "task_ratings.json")
+	legacy := `{"https://informatics.msk.ru/mod/statements/view.php?chapterid=1":
+		{"solve_rate":0.97,"attempts":2.1,"model":"claude-opus-5"}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadTaskRatings(dir)
+	if err == nil {
+		t.Fatalf("старый формат должен быть ошибкой, получили %d оценок", len(got))
+	}
+	for _, want := range []string{"idea_rate", "impl_attempts", "переоценить"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("в ошибке нет %q: %v", want, err)
+		}
+	}
+	if len(got) != 0 {
+		t.Errorf("при отказе оценок быть не должно, получили %d", len(got))
+	}
+}
+
+// Новый формат читается, а одна кривая запись не лишает оценок весь курс.
+func TestLoadTaskRatingsCurrentFormat(t *testing.T) {
+	dir := t.TempDir()
+	body := `{
+		"https://informatics.msk.ru/mod/statements/view.php?chapterid=1":
+			{"idea_rate":0.65,"impl_attempts":1.5,"model":"claude-opus-5"},
+		"https://informatics.msk.ru/mod/statements/view.php?chapterid=2":
+			{"idea_rate":0,"impl_attempts":1.5}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "task_ratings.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadTaskRatings(dir)
+	if err != nil {
+		t.Fatalf("новый формат должен читаться: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("ожидалась одна годная оценка, получили %d", len(got))
+	}
+	for _, r := range got {
+		if r.IdeaRate != 0.65 || r.ImplAttempts != 1.5 {
+			t.Errorf("числа не разобрались: %+v", r)
+		}
+	}
+}
+
+// Отсутствующий файл — не ошибка: оценки необязательны.
+func TestLoadTaskRatingsMissingFile(t *testing.T) {
+	got, err := LoadTaskRatings(t.TempDir())
+	if err != nil || len(got) != 0 {
+		t.Fatalf("ожидалась пустая карта без ошибки, получили %d и %v", len(got), err)
+	}
+}

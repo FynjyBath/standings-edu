@@ -76,21 +76,21 @@ func buildTaskReview(tasksByNorm map[string]courseTask, statusByStudent map[stri
 		row := domain.GeneratedTaskReviewRow{
 			NormalizedURL: norm, URL: f.task.url, Label: f.task.label, Name: f.task.name,
 			Tried: f.tried, Solved: f.solved, FactFirstTry: round2(factRate),
-			RatedSolveRate: rating.SolveRate, RatedAttempts: rating.Attempts,
+			RatedSolveRate: rating.IdeaRate, RatedAttempts: rating.ImplAttempts,
 			IdeaScore: rating.IdeaScore(), ImplScore: rating.ImplScore(),
 			Impact: f.tried, Validated: rating.Validated(), Note: rating.Note,
 		}
 		// Расхождение по идейности — в логитах: это та же шкала, в которой
 		// смешиваются оценка и данные, поэтому разрыв читается как «на сколько
 		// оценщик промахнулся в единицах модели».
-		gap := math.Abs(logit(clamp01(factRate)) - logit(clamp01(rating.SolveRate)))
+		gap := math.Abs(logit(clamp01(factRate)) - logit(clamp01(rating.IdeaRate)))
 		if len(f.attempts) >= courseWeightMinSolvers {
 			factAttempts := median(f.attempts)
 			row.FactAttempts = round1(factAttempts)
 			gap += math.Abs(math.Log(math.Max(1, factAttempts)) - rating.Cost())
 		}
 		row.Gap = round2(gap)
-		row.Harder = rating.SolveRate < factRate
+		row.Harder = rating.IdeaRate < factRate
 		out.Rows = append(out.Rows, row)
 	}
 	// Порядок очереди: расхождение, взвешенное на охват.

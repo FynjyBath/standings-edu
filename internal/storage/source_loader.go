@@ -59,6 +59,13 @@ func (l *SourceLoader) loadTaskRatings() domain.TaskRatings {
 // LoadTaskRatings — ридер data/task_ratings.json. Отсутствующий файл — пустая
 // карта без ошибки; негодные записи молча пропускаются, чтобы одна кривая
 // строка не лишала оценок весь курс.
+//
+// Файл ПРЕЖНЕГО формата (ключи solve_rate/attempts) — ошибка, а не пропуск.
+// Там лежала доля решивших задачу вообще, а не доля придумавших решение
+// самостоятельно: на реальном курсе это 0,85–0,99 с медианой 0,97. Пропусти мы
+// такой файл молча, курс остался бы без оценок; прочитай мы его как новый —
+// почти все задачи стали бы «идейность 1 балл», и априор весом в 64 ученика
+// задавил бы данные. Оба исхода хуже, чем отказ с объяснением.
 func LoadTaskRatings(dataDir string) (domain.TaskRatings, error) {
 	out := domain.TaskRatings{}
 	if strings.TrimSpace(dataDir) == "" {
@@ -79,7 +86,35 @@ func LoadTaskRatings(dataDir string) (domain.TaskRatings, error) {
 		}
 		out[norm] = rating
 	}
+	if len(out) == 0 && len(raw) > 0 {
+		if legacy, err := hasLegacyRatingKeys(path); err == nil && legacy {
+			return domain.TaskRatings{}, fmt.Errorf(
+				"%s: формат оценок сменился — вместо solve_rate/attempts нужны "+
+					"idea_rate (доля дошедших, кто придумает решение сам) и "+
+					"impl_attempts (посылок у того, кто уже придумал). Старые "+
+					"числа означают другое, механически переименовать ключи нельзя: "+
+					"задачи нужно переоценить", path)
+		}
+	}
 	return out, nil
+}
+
+// hasLegacyRatingKeys — есть ли в файле ключи снятого формата. Проверяется
+// только когда ни одна запись не разобралась: иначе это лишнее чтение файла.
+func hasLegacyRatingKeys(path string) (bool, error) {
+	var probe map[string]struct {
+		SolveRate *float64 `json:"solve_rate"`
+		Attempts  *float64 `json:"attempts"`
+	}
+	if err := fileutil.ReadJSON(path, &probe); err != nil {
+		return false, err
+	}
+	for _, v := range probe {
+		if v.SolveRate != nil || v.Attempts != nil {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // loadFlagReviews читает отметки проверки флагов нечестности. Файл опционален;

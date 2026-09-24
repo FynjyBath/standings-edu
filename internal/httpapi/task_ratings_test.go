@@ -50,10 +50,18 @@ func ratingsPage(t *testing.T, h *Handlers) string {
 func TestTaskRatingsPageWithoutRatings(t *testing.T) {
 	h, _, _ := ratingsHandlers(t)
 	body := ratingsPage(t, h)
-	for _, want := range []string{"Оценок пока нет", "task_ratings.json", "solve_rate", "attempts"} {
+	// Именно новые ключи: подстрокой «attempts» проверять нельзя — она есть и
+	// в предупреждении про снятый формат, и тест проходил бы при неверном
+	// образце JSON.
+	for _, want := range []string{"Оценок пока нет", "task_ratings.json", "idea_rate", "impl_attempts"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("на странице нет %q", want)
 		}
+	}
+	// Образец не должен показывать снятые ключи как рабочие: про них на
+	// странице сказано отдельно, что файл с ними читать откажутся.
+	if strings.Contains(body, `"solve_rate"`) {
+		t.Error("в образце JSON остались ключи снятого формата")
 	}
 }
 
@@ -88,7 +96,7 @@ func TestTaskRatingsPageShowsQueue(t *testing.T) {
 func TestTaskRatingValidateWrites(t *testing.T) {
 	h, dataDir, _ := ratingsHandlers(t)
 	path := filepath.Join(dataDir, "task_ratings.json")
-	writeTestFile(t, path, `{"https://x/1":{"solve_rate":0.2,"attempts":4,"model":"test"}}`)
+	writeTestFile(t, path, `{"https://x/1":{"idea_rate":0.2,"impl_attempts":4,"model":"test"}}`)
 
 	// Правка приходит в баллах 1..10 — так её вводит человек.
 	body := strings.NewReader(`{"url":"https://x/1","idea_score":3,"impl_score":8,"by":"Антон","note":"поправил"}`)
@@ -132,7 +140,7 @@ func TestTaskRatingValidateWrites(t *testing.T) {
 func TestTaskRatingValidateRejectsNonsense(t *testing.T) {
 	h, dataDir, _ := ratingsHandlers(t)
 	path := filepath.Join(dataDir, "task_ratings.json")
-	writeTestFile(t, path, `{"https://x/1":{"solve_rate":0.2,"attempts":4}}`)
+	writeTestFile(t, path, `{"https://x/1":{"idea_rate":0.2,"impl_attempts":4}}`)
 
 	for _, bad := range []string{
 		`{"url":"https://x/1","idea_score":14}`,

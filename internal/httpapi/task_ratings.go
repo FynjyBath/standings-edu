@@ -108,14 +108,14 @@ func (h *Handlers) AdminTaskRatingValidate(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "идейность — балл от 1 до 10"})
 			return
 		}
-		rating.SolveRate = domain.IdeaFromScore(*req.IdeaScore)
+		rating.IdeaRate = domain.IdeaFromScore(*req.IdeaScore)
 	}
 	if req.ImplScore != nil {
 		if *req.ImplScore < 1 || *req.ImplScore > 10 {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "сложность реализации — балл от 1 до 10"})
 			return
 		}
-		rating.Attempts = domain.ImplFromScore(*req.ImplScore)
+		rating.ImplAttempts = domain.ImplFromScore(*req.ImplScore)
 	}
 	if !rating.Valid() {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "оценка вне допустимых границ"})

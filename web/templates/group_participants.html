@@ -24,8 +24,8 @@
           <th class="sortable" data-sort="progress" title="Доля пройденного (по сложности задач)">Прогресс</th>
           <th class="sortable count-col" data-sort="tempo" title="Сколько курса закрывается за календарную неделю занятий. ×1 — как у типичного ученика группы">Темп</th>
           <th class="sortable count-col" data-sort="recent" title="Тот же темп, но свежие недели весят больше">По времени</th>
-          <th class="sortable count-col" data-sort="confidence" title="Шанс, что ученик возьмёт типичную задачу курса с первой попытки. С поправкой на трудность: взять сложное с ходу весит больше">Уверенность</th>
-          <th class="sortable count-col" data-sort="hours" title="Время между посылками — работа на судье. Обдумывание до первой посылки судья не показывает, поэтому это не «время над задачами»">Часов на судье</th>
+          <th class="sortable count-col" data-sort="mind" title="Шанс взять с первой попытки задачу обычной для курса ИДЕЙНОСТИ. Считается по задачам, где надо догадаться, а не повозиться">Соображает</th>
+          <th class="sortable count-col" data-sort="accuracy" title="Во сколько раз меньше лишних посылок, чем ожидается на этих задачах. ×1 — как обычно, ×1,5 — вдвое чище. Считается по задачам, где много возни">Аккуратность</th>
           <th class="sortable count-col" data-sort="weekly" title="Часов на судье в неделю: медиана по активным неделям за 8 недель">≈ч/нед</th>
           <th title="Самая дальняя решённая задача группы">Сейчас на</th>
           <th title="Застрял: посылок уже в несколько раз больше, чем обычно уходит, а задача не взята. Пропустил: были попытки, ушёл дальше.">Сигналы</th>
@@ -34,7 +34,7 @@
       <tbody id="participants-tbody">
         {{range .Rows}}
         <tr data-filter-text="{{.PublicName}}"
-            {{if .Course}}data-progress="{{.Course.Progress}}" data-tempo="{{if .Course.LowData}}-1{{else}}{{.Course.Tempo}}{{end}}" data-recent="{{.Course.TempoRecent}}" data-confidence="{{.Course.Confidence}}" data-hours="{{.Course.JudgeHours}}" data-weekly="{{.Course.WeeklyHours}}"{{else}}data-progress="-1" data-tempo="-1" data-recent="-1" data-confidence="-1" data-hours="-1" data-weekly="-1"{{end}}>
+            {{if .Course}}data-progress="{{.Course.Progress}}" data-tempo="{{if .Course.LowData}}-1{{else}}{{.Course.Tempo}}{{end}}" data-recent="{{.Course.TempoRecent}}" data-mind="{{.Course.Mind}}" data-accuracy="{{.Course.Accuracy}}" data-weekly="{{.Course.WeeklyHours}}"{{else}}data-progress="-1" data-tempo="-1" data-recent="-1" data-mind="-1" data-accuracy="-1" data-weekly="-1"{{end}}>
           <td class="student-name"><a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}{{if $.Token}}&token={{$.Token}}{{end}}">{{.PublicName}}</a></td>
           {{if .Course}}
           <td class="progress-cell">
@@ -48,8 +48,8 @@
             {{else}}<span class="speed-pill {{if ge .Course.Tempo 1.2}}speed-pill--hi{{else if lt .Course.Tempo 0.8}}speed-pill--lo{{end}}" title="{{numText .Course.SolvedPrice}} обычных задач курса за все недели занятий">×{{numText .Course.Tempo}}</span>{{end}}
           </td>
           <td class="solved-count">{{if .Course.TempoRecent}}×{{numText .Course.TempoRecent}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
-          <td class="solved-count">{{if .Course.Confidence}}{{pct .Course.Confidence}}%{{else}}<span class="grade-weight">—</span>{{end}}</td>
-          <td class="solved-count">{{numText .Course.JudgeHours}}</td>
+          <td class="solved-count">{{if .Course.Mind}}{{pct .Course.Mind}}%{{else}}<span class="grade-weight">—</span>{{end}}</td>
+          <td class="solved-count">{{if .Course.Accuracy}}<span class="speed-pill {{if ge .Course.Accuracy 1.2}}speed-pill--hi{{else if lt .Course.Accuracy 0.8}}speed-pill--lo{{end}}" title="Лишних посылок в {{numText .Course.Accuracy}} раза меньше ожидаемого на этих задачах">×{{numText .Course.Accuracy}}</span>{{else}}<span class="grade-weight">—</span>{{end}}</td>
           <td class="solved-count">{{if .Course.WeeklyHours}}≈{{numText .Course.WeeklyHours}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
           <td class="course-front-cell" title="{{.Course.Front}}">{{.Course.Front}}</td>
           <td class="signals-cell">

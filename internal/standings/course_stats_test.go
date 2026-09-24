@@ -793,12 +793,12 @@ func TestProgressReportingIsOptIn(t *testing.T) {
 	}
 }
 
-// Показатель «уверенность» должен РАЗЛИЧАТЬ учеников. Это не придирка: его
+// Показатель «соображает» должен РАЗЛИЧАТЬ учеников. Это не придирка: его
 // предшественница — «сила» по модели Раша на исходе «пробовал → решил» —
 // молча вырождалась, потому что в таком курсе почти всё начатое в итоге берут.
 // На реальной группе 86% учеников получали ровно 100%, и заметил это
 // преподаватель, а не тесты.
-func TestConfidenceSeparatesStudents(t *testing.T) {
+func TestMindSeparatesStudents(t *testing.T) {
 	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
 	now := base.Add(30 * 24 * time.Hour)
 
@@ -844,9 +844,9 @@ func TestConfidenceSeparatesStudents(t *testing.T) {
 	}
 
 	stats := computeCourseStats(std, students, statuses, now, nil, nil)
-	tidy, mid, rough := stats["tidy0"].Confidence, stats["mid0"].Confidence, stats["rough0"].Confidence
+	tidy, mid, rough := stats["tidy0"].Mind, stats["mid0"].Mind, stats["rough0"].Mind
 	if tidy == 0 || mid == 0 || rough == 0 {
-		t.Fatalf("уверенность должна считаться у всех: %v %v %v", tidy, mid, rough)
+		t.Fatalf("«соображает» должно считаться у всех: %v %v %v", tidy, mid, rough)
 	}
 	if !(tidy > mid && mid > rough) {
 		t.Fatalf("порядок должен сохраняться: точный=%v средний=%v небрежный=%v", tidy, mid, rough)
@@ -855,9 +855,9 @@ func TestConfidenceSeparatesStudents(t *testing.T) {
 	seen := map[float64]int{}
 	atMax := 0
 	for _, cs := range stats {
-		if cs.Confidence > 0 {
-			seen[cs.Confidence]++
-			if cs.Confidence >= 0.995 {
+		if cs.Mind > 0 {
+			seen[cs.Mind]++
+			if cs.Mind >= 0.995 {
 				atMax++
 			}
 		}
@@ -873,9 +873,9 @@ func TestConfidenceSeparatesStudents(t *testing.T) {
 	}
 }
 
-// Без данных уверенность не показывается: раньше ученик, не решивший ничего,
+// Без данных «соображает» не показывается: раньше ученик, не решивший ничего,
 // получал 98% — модель без наблюдений возвращала уверенный ответ.
-func TestConfidenceHiddenWithoutData(t *testing.T) {
+func TestMindHiddenWithoutData(t *testing.T) {
 	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
 	now := base.Add(30 * 24 * time.Hour)
 	tasks := make([]domain.GeneratedTask, 20)
@@ -908,10 +908,84 @@ func TestConfidenceHiddenWithoutData(t *testing.T) {
 	students = append(students, domain.Student{ID: "empty"})
 
 	stats := computeCourseStats(std, students, statuses, now, nil, nil)
-	if c := stats["empty"].Confidence; c != 0 {
-		t.Fatalf("без единой посылки уверенности быть не должно, получили %v", c)
+	if c := stats["empty"].Mind; c != 0 {
+		t.Fatalf("без единой посылки «соображает» быть не должно, получили %v", c)
+	}
+	if a := stats["empty"].Accuracy; a != 0 {
+		t.Fatalf("без единой посылки аккуратности быть не должно, получили %v", a)
 	}
 	if !stats["empty"].LowData {
 		t.Error("ученик без посылок — это «мало данных»")
+	}
+}
+
+// Аккуратность должна читаться как «во сколько раз чище обычного» и различать
+// небрежного от точного. Проверяем заодно усадку: у ученика с парой задач
+// отклонение не должно быть таким же резким, как у того, кто прошёл весь курс.
+func TestAccuracySeparatesAndShrinks(t *testing.T) {
+	base := time.Date(2026, 7, 1, 18, 0, 0, 0, time.UTC)
+	now := base.Add(60 * 24 * time.Hour)
+	const n = 24
+	tasks := make([]domain.GeneratedTask, n)
+	norms := make([]string, n)
+	for i := range tasks {
+		norms[i] = fmt.Sprintf("t%d", i)
+		tasks[i] = domain.GeneratedTask{Label: fmt.Sprintf("A%d", i), NormalizedURL: norms[i]}
+	}
+	std := domain.GeneratedGroupStandings{GroupSlug: "g", GroupTitle: "Г",
+		Contests: []domain.GeneratedContestStandings{{Title: "K", Tasks: tasks}}}
+
+	statuses := map[string]*accountStatuses{}
+	students := make([]domain.Student, 0)
+	// attempts — сколько посылок тратит ученик на каждую задачу; upto — сколько
+	// задач курса он вообще прошёл.
+	add := func(id string, attempts, upto int) {
+		st := newAccountStatuses()
+		for j := 0; j < upto; j++ {
+			norm := norms[j]
+			st.attempted[norm] = struct{}{}
+			st.solved[norm] = struct{}{}
+			at := base.Add(time.Duration(j) * 12 * time.Hour)
+			subs := make([]source.TimedSubmission, 0, attempts)
+			for k := 0; k < attempts-1; k++ {
+				subs = append(subs, source.TimedSubmission{At: at.Add(time.Duration(k) * 10 * time.Minute)})
+			}
+			subs = append(subs, source.TimedSubmission{At: at.Add(time.Duration(attempts) * 10 * time.Minute), Solved: true})
+			st.timed[norm] = subs
+		}
+		statuses[id] = st
+		students = append(students, domain.Student{ID: id})
+	}
+	for i := 0; i < 5; i++ {
+		add(fmt.Sprintf("clean%d", i), 1, n) // всегда с первой
+	}
+	for i := 0; i < 5; i++ {
+		add(fmt.Sprintf("usual%d", i), 3, n)
+	}
+	for i := 0; i < 5; i++ {
+		add(fmt.Sprintf("messy%d", i), 7, n)
+	}
+	add("cleanFew", 1, 6) // такой же точный, но прошёл вчетверо меньше
+
+	stats := computeCourseStats(std, students, statuses, now, nil, nil)
+	clean, usual, messy := stats["clean0"].Accuracy, stats["usual0"].Accuracy, stats["messy0"].Accuracy
+	if clean == 0 || usual == 0 || messy == 0 {
+		t.Fatalf("аккуратность должна считаться у всех: %v %v %v", clean, usual, messy)
+	}
+	if !(clean > usual && usual > messy) {
+		t.Fatalf("порядок нарушен: точный=%v обычный=%v небрежный=%v", clean, usual, messy)
+	}
+	// Читаемость шкалы: 1,0 — «как обычно». Небрежный должен быть ниже единицы,
+	// точный — выше.
+	if messy >= 1 {
+		t.Errorf("небрежный должен быть ниже 1,0, получили %v", messy)
+	}
+	if clean <= 1 {
+		t.Errorf("точный должен быть выше 1,0, получили %v", clean)
+	}
+	// Усадка: та же безупречность на шести задачах должна давать более
+	// осторожное число, чем на двадцати четырёх.
+	if few := stats["cleanFew"].Accuracy; few >= clean {
+		t.Errorf("на малых данных аккуратность должна быть осторожнее: %v против %v", few, clean)
 	}
 }

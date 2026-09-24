@@ -19,8 +19,9 @@ func TestTaskReviewRoundTrip(t *testing.T) {
 			NormalizedURL: "https://informatics.msk.ru/mod/statements/view.php?chapterid=2955",
 			URL:           "https://informatics.msk.ru/mod/statements/view.php?chapterid=2955",
 			Label:         "Контест · R", Name: "Улитка",
-			Tried: 40, Solved: 30, FactSolveRate: 0.75, FactAttempts: 1.5,
+			Tried: 40, Solved: 30, FactFirstTry: 0.75, FactAttempts: 1.5,
 			RatedSolveRate: 0.2, RatedAttempts: 4,
+			IdeaScore: 7.5, ImplScore: 2.5,
 			Gap: 2.7, Impact: 40, Harder: true,
 		}},
 	}
@@ -41,9 +42,14 @@ func TestTaskReviewRoundTrip(t *testing.T) {
 	if g.Label != wRow.Label || g.Name != wRow.Name || g.NormalizedURL != wRow.NormalizedURL {
 		t.Errorf("не совпали поля задачи: %+v", g)
 	}
-	if g.Tried != wRow.Tried || g.Solved != wRow.Solved || g.FactSolveRate != wRow.FactSolveRate ||
+	if g.Tried != wRow.Tried || g.Solved != wRow.Solved || g.FactFirstTry != wRow.FactFirstTry ||
 		g.RatedSolveRate != wRow.RatedSolveRate || g.RatedAttempts != wRow.RatedAttempts {
 		t.Errorf("не совпали числа: %+v", g)
+	}
+	// Баллы 1..10 — то, что человек правит в админке; они обязаны переживать
+	// запись и чтение, иначе форма правки откроется с чужими числами.
+	if g.IdeaScore != wRow.IdeaScore || g.ImplScore != wRow.ImplScore {
+		t.Errorf("не совпали баллы осей: %+v", g)
 	}
 	if !g.Harder || g.Gap != wRow.Gap || g.Impact != wRow.Impact {
 		t.Errorf("не совпало расхождение: %+v", g)

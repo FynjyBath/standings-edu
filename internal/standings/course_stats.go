@@ -29,22 +29,45 @@ const (
 	courseMinWeeks      = 2    // минимум активных недель для показа темпа
 	courseMaxSignals    = 4    // сколько застреваний/брошенных показывать
 
-	// Цена задачи складывается из двух осей: трудоёмкости (сколько посылок
-	// уходит) и порога понимания (какая доля пробовавших её берёт). Взаимная
-	// связь этих осей всего +0.44 — это разные вещи, и одна цена, собранная
-	// только из первой, ставила «Улитку» вровень с рядовым упражнением.
-	courseCostShare      = 0.6
-	courseThresholdShare = 0.4
+	// Цена задачи складывается из двух осей: реализации (сколько посылок
+	// уходит) и идейности (надо ли догадаться). Реализация весит больше: именно
+	// она определяет, сколько времени задача реально съедает.
+	courseCostShare      = 0.65
+	courseThresholdShare = 0.35
 	courseFitIters       = 40  // итераций чередования медиан
 	courseRaschIters     = 200 // итераций покоординатного Ньютона
 	courseRaschLambda    = 1.0 // регуляризация: без неё «решили все» уводит порог в −∞
 
 	// Вес оценки по условию (data/task_ratings.json) как априора — «во скольких
-	// учеников она оценивается». Подобран по данным: ниже 8 — недобор, выше 32
-	// данные перестают что-либо значить. Подтверждённой преподавателем оценке
-	// доверия вдвое больше.
-	courseRatingWeight          = 16.0
-	courseRatingWeightValidated = 32.0
+	// учеников она оценивается». Веса РАЗНЫЕ по осям, и это не вкусовщина:
+	// проверка «оценить ось на половине когорты → сверить с другой половиной»
+	// на 378 задачах и 130 учениках дала
+	//
+	//	ось          только данные    K=16    K=64    только оценка
+	//	идейность        +0,375       +0,387  +0,416     +0,345
+	//	реализация       +0,882       +0,869  +0,812     +0,608
+	//
+	// То есть реализацию данные знают лучше любой оценки, и приор нужен только
+	// задачам, которых ещё никто не решал; а идейность данные почти не видят
+	// (бросают задачу не только из-за трудности, но и уходя из курса), и там
+	// оценка по условию перевешивает всю когорту. Подтверждённой
+	// преподавателем оценке доверия вдвое больше.
+	courseIdeaWeight  = 64.0
+	courseImplWeight  = 6.0
+	courseValidatedX2 = 2.0
+
+	// Вес задачи в «соображает»: σ(β·(идейность − реализация)) в робастных
+	// z-шкалах. β подобрано по устойчивости: при β = 1,5 надёжность
+	// «соображает» 0,81, «аккуратности» 0,87 при делении пула задач пополам.
+	// Жёсткое деление пула разводит оси сильнее (+0,60 против +0,73), но роняет
+	// надёжность «соображает» до 0,69 — треть порядка становится шумом.
+	courseTiltBeta = 1.5
+	// courseMindSigma2 — дисперсия априорного распределения силы. Без неё
+	// ученик с 25 задачами и одними удачами улетает в потолок шкалы.
+	courseMindSigma2 = 1.5
+	// courseAccShrink — усадка аккуратности к «как обычно», в ожидаемых лишних
+	// посылках: пока их набралось мало, отклонению верить нельзя.
+	courseAccShrink = 6.0
 )
 
 // courseTask — задача курса в порядке прохождения (контесты снизу вверх,
@@ -167,16 +190,27 @@ func median(xs []float64) float64 {
 // courseModel — подогнанные по когорте величины курса.
 type courseModel struct {
 	price     map[string]float64 // цена задачи в «обычных задачах курса»
-	threshold map[string]float64 // b_j: порог понимания, логиты
+	threshold map[string]float64 // b_j: ИДЕЙНОСТЬ задачи, логиты
 	ability   map[string]float64 // θ_i: сила ученика, логиты
-	// ftThreshold — порог задачи по исходу «взял с первой попытки»; ftAbility —
-	// то же для ученика. Для флагов сила пересчитывается отдельно, без
-	// проверяемого эпизода (см. firstTryAbilityExcluding).
+	// ideaWeight/implWeight — вклад задачи в «соображает» и в «аккуратность»:
+	// σ(β·(zИдейность − zРеализация)) и единица минус он. Задача, где всё
+	// решает догадка, почти не влияет на аккуратность, и наоборот.
+	ideaWeight map[string]float64
+	implWeight map[string]float64
+	// expExtra — сколько ЛИШНИХ посылок (сверх первой) ожидается на задаче.
+	expExtra map[string]float64
+	// mind — «соображает» ученика в логитах идейности; accuracy — во сколько
+	// раз меньше лишних посылок, чем ожидалось (1,0 — как обычно).
+	mind     map[string]float64
+	accuracy map[string]float64
+	// mindMedian — «соображает» у медианной задачи курса: к нему привязан
+	// показатель, чтобы он читался как вероятность, а не как логит.
+	mindMedian float64
+	// ftThreshold — порог задачи по исходу «взял с первой попытки». Нужен
+	// только флагам: там сила ученика пересчитывается отдельно, без
+	// проверяемого эпизода (см. firstTryAbilityExcluding), поэтому силу по
+	// всей выборке хранить незачем.
 	ftThreshold map[string]float64
-	ftAbility   map[string]float64
-	// ftMedian — порог типичной задачи курса: к нему привязывается показатель
-	// уверенности, чтобы он читался как вероятность, а не как логит.
-	ftMedian    float64
 	typAttempts map[string]float64 // типичное число посылок до зачёта
 	total       float64            // сумма цен всех задач курса
 }
@@ -217,6 +251,14 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 	// Сколько наблюдений стоит за каждой осью — этим взвешивается априор.
 	triedN := make(map[string]float64, len(tasks))
 	costN := make(map[string]float64, len(tasks))
+	// Лишние посылки ученика и сколько их ожидалось — для аккуратности.
+	// Копим сырые пары, веса и ожидание появятся после подгонки осей.
+	type extraObs struct {
+		id   string
+		norm string
+		k    int
+	}
+	extras := make([]extraObs, 0)
 
 	ids := make([]string, 0, len(statusByStudent))
 	for id := range statusByStudent {
@@ -243,6 +285,7 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 				costObs = append(costObs, fitObs{row: id, col: task.norm, val: math.Log(float64(k))})
 				attemptSamples[task.norm] = append(attemptSamples[task.norm], float64(k))
 				costN[task.norm]++
+				extras = append(extras, extraObs{id: id, norm: task.norm, k: k})
 			}
 			if first, ok := firstSubmission(st, task.norm); ok {
 				ftObs = append(ftObs, binObs{row: id, col: task.norm, ok: first.Solved})
@@ -251,7 +294,7 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 	}
 
 	ability, threshold := raschFit(solveObs, courseRaschIters, courseRaschLambda)
-	ftAbility, ftThreshold := raschFit(ftObs, courseRaschIters, courseRaschLambda)
+	_, ftThreshold := raschFit(ftObs, courseRaschIters, courseRaschLambda)
 	_, cost := twoWayMedianFit(costObs, courseFitIters)
 	applyTaskRatings(tasks, ratings, threshold, cost, triedN, costN)
 
@@ -271,14 +314,9 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 		threshold:   threshold,
 		ability:     ability,
 		ftThreshold: ftThreshold,
-		ftAbility:   ftAbility,
 		typAttempts: make(map[string]float64, len(tasks)),
 	}
-	ftLevels := make([]float64, 0, len(tasks))
 	for _, task := range tasks {
-		if v, ok := ftThreshold[task.norm]; ok {
-			ftLevels = append(ftLevels, v)
-		}
 		p := raw[task.norm] / scale
 		if p <= 0 || math.IsNaN(p) || math.IsInf(p, 0) {
 			p = 1
@@ -289,7 +327,52 @@ func fitCourseModel(tasks []courseTask, statusByStudent map[string]*accountStatu
 			m.typAttempts[task.norm] = median(s)
 		}
 	}
-	m.ftMedian = median(ftLevels)
+	extraGot := make(map[string]float64)
+	extraExp := make(map[string]float64)
+
+	// Перевес задачи: идейная она или реализационная. Обе оси приводятся к
+	// робастным z, иначе сравнивать логиты с логарифмом посылок нельзя.
+	m.ideaWeight = make(map[string]float64, len(tasks))
+	m.implWeight = make(map[string]float64, len(tasks))
+	m.expExtra = make(map[string]float64, len(tasks))
+	for _, task := range tasks {
+		w := 1 / (1 + math.Exp(-courseTiltBeta*(zThr[task.norm]-zCost[task.norm])))
+		m.ideaWeight[task.norm] = w
+		m.implWeight[task.norm] = 1 - w
+		// Сколько посылок сверх первой ожидается: exp(cost) — типичное число
+		// посылок у медианного ученика.
+		m.expExtra[task.norm] = math.Max(math.Exp(cost[task.norm])-1, 0.05)
+	}
+
+	for _, e := range extras {
+		w := m.implWeight[e.norm]
+		extraGot[e.id] += w * float64(e.k-1)
+		extraExp[e.id] += w * m.expExtra[e.norm]
+	}
+
+	// «Соображает»: сила при известной трудности = идейности задачи.
+	m.mind = raschAbilityKnown(ftObs, threshold, m.ideaWeight, courseRaschIters, courseMindSigma2)
+	mindLevels := make([]float64, 0, len(tasks))
+	for _, task := range tasks {
+		if v, ok := threshold[task.norm]; ok {
+			mindLevels = append(mindLevels, v)
+		}
+	}
+	m.mindMedian = median(mindLevels)
+
+	// «Аккуратность»: лишние посылки против ожидаемых, взвешенные к
+	// реализационной стороне курса и усаженные к «как обычно», пока
+	// свидетельств мало.
+	m.accuracy = make(map[string]float64, len(extraGot))
+	for id, got := range extraGot {
+		exp := extraExp[id]
+		if exp <= 0 {
+			continue
+		}
+		ratio := (got + 1) / (exp + 1)
+		shrink := exp / (exp + courseAccShrink)
+		m.accuracy[id] = math.Exp(-math.Log(ratio) * shrink)
+	}
 	return m
 }
 
@@ -311,21 +394,22 @@ func applyTaskRatings(tasks []courseTask, ratings domain.TaskRatings, threshold,
 		if !ok || !rating.Valid() {
 			continue
 		}
-		k := courseRatingWeight
+		trust := 1.0
 		if rating.Validated() {
-			k = courseRatingWeightValidated
+			trust = courseValidatedX2
 		}
-		blend := func(dst map[string]float64, n float64, prior float64) {
+		blend := func(dst map[string]float64, n, k, prior float64) {
 			cur, seen := dst[task.norm]
 			if !seen {
 				// Данных нет вовсе — задача живёт целиком на оценке.
 				dst[task.norm] = prior
 				return
 			}
+			k *= trust
 			dst[task.norm] = (n*cur + k*prior) / (n + k)
 		}
-		blend(threshold, triedN[task.norm], rating.Threshold())
-		blend(cost, costN[task.norm], rating.Cost())
+		blend(threshold, triedN[task.norm], courseIdeaWeight, rating.Threshold())
+		blend(cost, costN[task.norm], courseImplWeight, rating.Cost())
 	}
 }
 
@@ -598,27 +682,47 @@ func applyEpisodeExclusions(students []domain.Student, statusByStudent map[strin
 // normalizeCourseTempo перецентрирует темп на когорту: медианный ученик
 // получает ровно ×1. Маленькую когорту не трогаем — медиана по трём людям
 // ничего не значит.
+// normalizeCourseTempo приводит темп и аккуратность к «×1 — как типичный ученик
+// группы». Для темпа это единственный осмысленный способ прочитать «обычные
+// задачи курса в неделю»; для аккуратности — способ убрать системный сдвиг.
+//
+// Про сдвиг. Лишние посылки суммируются арифметически, а ожидание на задаче
+// берётся из медианной подгонки. Распределение посылок сильно скошено (52%
+// задач берут с первой, среднее 2,3 при медиане 1), поэтому сумма фактических
+// лишних систематически больше суммы медианных ожиданий — и БЕЗ нормировки
+// «аккуратнее обычного» не получал почти никто: на реальном курсе медиана
+// выходила 0,62 вместо 1,00. Нормировка по когорте чинит это ровно там, где
+// сдвиг возник, и заодно делает подпись «×1 — как обычно» буквально верной.
 func normalizeCourseTempo(stats map[string]*domain.StudentCourseStats) {
-	valid := make([]float64, 0, len(stats))
-	for _, cs := range stats {
-		if cs != nil && !cs.LowData && cs.Tempo > 0 {
-			valid = append(valid, cs.Tempo)
-		}
-	}
 	const minCohort = 5
-	m := median(valid)
-	if len(valid) < minCohort || m <= 0 {
-		return
+	collect := func(get func(*domain.StudentCourseStats) float64) float64 {
+		valid := make([]float64, 0, len(stats))
+		for _, cs := range stats {
+			if cs != nil && !cs.LowData && get(cs) > 0 {
+				valid = append(valid, get(cs))
+			}
+		}
+		if len(valid) < minCohort {
+			return 0
+		}
+		return median(valid)
 	}
+	tempoMed := collect(func(cs *domain.StudentCourseStats) float64 { return cs.Tempo })
+	accMed := collect(func(cs *domain.StudentCourseStats) float64 { return cs.Accuracy })
 	for _, cs := range stats {
 		if cs == nil {
 			continue
 		}
-		if cs.Tempo > 0 {
-			cs.Tempo = round2(cs.Tempo / m)
+		if tempoMed > 0 {
+			if cs.Tempo > 0 {
+				cs.Tempo = round2(cs.Tempo / tempoMed)
+			}
+			if cs.TempoRecent > 0 {
+				cs.TempoRecent = round2(cs.TempoRecent / tempoMed)
+			}
 		}
-		if cs.TempoRecent > 0 {
-			cs.TempoRecent = round2(cs.TempoRecent / m)
+		if accMed > 0 && cs.Accuracy > 0 {
+			cs.Accuracy = round2(cs.Accuracy / accMed)
 		}
 	}
 }
@@ -692,20 +796,33 @@ func computeStudentCourseStats(std domain.GeneratedGroupStandings, studentID str
 
 	cs.LowData = cs.SolvedCount < courseMinSolved || len(activeWeeks) < courseMinWeeks
 
-	// Уверенность: шанс, что этот ученик возьмёт ТИПИЧНУЮ задачу курса с первой
-	// попытки. Модель Раша по исходу «с первой попытки», привязанная к порогу
-	// медианной задачи, — поэтому число читается как вероятность.
+	// Две характеристики ученика по двум осям задачи.
+	//
+	// «Соображает» (Mind) — шанс взять с первой попытки задачу ТИПИЧНОЙ для
+	// курса идейности. Модель Раша, где трудность задачи задана снаружи (её
+	// идейность), а задачи входят с весом тем большим, чем сильнее в них
+	// перевешивает идея. Привязка к медианной задаче делает из логита
+	// вероятность.
+	//
+	// «Аккуратность» (Accuracy) — во сколько раз меньше лишних посылок, чем
+	// ожидается на этих задачах, по задачам с перевесом реализации.
 	//
 	// Здесь раньше стояла «сила» — доля курса, которая ученику по плечу, по
 	// модели Раша на исходе «пробовал → решил». Она вырождалась: в этом курсе
 	// 97% начатых задач в итоге берут (ученик долбит, пока не возьмёт), так что
 	// «сможет ли решить» почти детерминировано и разделять людей нечем. На
 	// реальной группе 86% учеников получали ровно 100%, и даже тот, кто не решил
-	// ничего, показывал 98%. «Что может» этими данными не измеряется; «насколько
-	// уверенно берёт» — измеряется, и разброс там настоящий.
+	// ничего, показывал 98%.
+	//
+	// Две метрики связаны между собой на +0,73: кто соображает, тот и отлаживает
+	// меньше. Это не дефект и не дублирование — это свойство учеников; в
+	// подсказках и легенде так и сказано, чтобы их не читали как независимые.
 	if !cs.LowData {
-		if th, ok := m.ftAbility[studentID]; ok {
-			cs.Confidence = round2(1 / (1 + math.Exp(-(th - m.ftMedian))))
+		if th, ok := m.mind[studentID]; ok {
+			cs.Mind = round2(1 / (1 + math.Exp(-(th - m.mindMedian))))
+		}
+		if a, ok := m.accuracy[studentID]; ok {
+			cs.Accuracy = round2(a)
 		}
 	}
 

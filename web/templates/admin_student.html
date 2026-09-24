@@ -16,7 +16,8 @@
     <div class="stat-card"><span class="stat-value stat-value--text">мало данных</span><span class="stat-label">темп (нужно ≥5 решённых задач и ≥2 недель занятий)</span></div>
     {{else}}
     <div class="stat-card stat-card--primary"><span class="stat-value">×{{numText .Tempo}}</span><span class="stat-label">темп: сколько курса за неделю занятий, ×1 — как типичный ученик группы</span></div>
-    {{if .Confidence}}<div class="stat-card"><span class="stat-value">{{pct .Confidence}}%</span><span class="stat-label">уверенность: шанс взять типичную задачу курса с первой попытки</span></div>{{end}}
+    {{if .Mind}}<div class="stat-card"><span class="stat-value">{{pct .Mind}}%</span><span class="stat-label">соображает: шанс взять с первой попытки задачу обычной для курса идейности</span></div>{{end}}
+    {{if .Accuracy}}<div class="stat-card"><span class="stat-value">×{{numText .Accuracy}}</span><span class="stat-label">аккуратность: во сколько раз меньше лишних посылок, чем ожидается (×1 — как обычно)</span></div>{{end}}
     {{if .TempoRecent}}<div class="stat-card"><span class="stat-value">×{{numText .TempoRecent}}</span><span class="stat-label">темп, взвешенный по времени (свежее — важнее)</span></div>{{end}}
     {{end}}
     <div class="stat-card"><span class="stat-value">{{numText .JudgeHours}}</span><span class="stat-label">часов на судье (время между посылками, не время над задачами)</span></div>

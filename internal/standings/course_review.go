@@ -20,6 +20,7 @@ type taskFacts struct {
 	task     courseTask
 	tried    int
 	solved   int
+	firstTry int
 	attempts []float64
 }
 
@@ -51,6 +52,9 @@ func buildTaskReview(tasksByNorm map[string]courseTask, statusByStudent map[stri
 			f.solved++
 			if k, ok := attemptsToAC(st, norm); ok && k > 0 {
 				f.attempts = append(f.attempts, float64(k))
+				if k == 1 {
+					f.firstTry++
+				}
 			}
 		}
 	}
@@ -65,14 +69,18 @@ func buildTaskReview(tasksByNorm map[string]courseTask, statusByStudent map[stri
 		if f.tried == 0 {
 			continue // сравнивать не с чем: задачу ещё никто не трогал
 		}
-		factRate := float64(f.solved) / float64(f.tried)
+		// Идейность сверяется с долей взявших С ПЕРВОЙ ПОСЫЛКИ, а не с долей
+		// решивших вообще: последняя в этом курсе равна 97% почти везде и с
+		// идейностью не соотносится никак.
+		factRate := float64(f.firstTry) / float64(f.tried)
 		row := domain.GeneratedTaskReviewRow{
 			NormalizedURL: norm, URL: f.task.url, Label: f.task.label, Name: f.task.name,
-			Tried: f.tried, Solved: f.solved, FactSolveRate: round2(factRate),
+			Tried: f.tried, Solved: f.solved, FactFirstTry: round2(factRate),
 			RatedSolveRate: rating.SolveRate, RatedAttempts: rating.Attempts,
+			IdeaScore: rating.IdeaScore(), ImplScore: rating.ImplScore(),
 			Impact: f.tried, Validated: rating.Validated(), Note: rating.Note,
 		}
-		// Расхождение по порогу — в логитах: это та же шкала, в которой
+		// Расхождение по идейности — в логитах: это та же шкала, в которой
 		// смешиваются оценка и данные, поэтому разрыв читается как «на сколько
 		// оценщик промахнулся в единицах модели».
 		gap := math.Abs(logit(clamp01(factRate)) - logit(clamp01(rating.SolveRate)))

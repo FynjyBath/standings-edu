@@ -192,3 +192,67 @@ func robustZ(v map[string]float64) map[string]float64 {
 	}
 	return out
 }
+
+// raschAbilityKnown оценивает силу учеников при ИЗВЕСТНОЙ трудности задач.
+//
+// Зачем отдельно от raschFit: там трудность подгоняется по тем же данным, и
+// сильная серия объясняется задним числом через самого ученика. Здесь шкала
+// задана снаружи (идейность задачи), поэтому число читается как «на каком
+// уровне идейности ученик берёт с первой попытки», а не как ранг внутри
+// когорты.
+//
+// weight — вклад задачи в правдоподобие, 0..1: так в оценку «соображает»
+// сильнее входят задачи, где перевешивает идея, а не техническая возня.
+// Задачи без веса пропускаются.
+//
+// sigma2 — дисперсия априорного распределения силы. Без него ученик, взявший
+// с первой попытки все 25 задач, улетает в бесконечность: именно так в прошлой
+// версии в топ выходили те, кто решил мало и всё удачно.
+func raschAbilityKnown(obs []binObs, diff, weight map[string]float64, iters int, sigma2 float64) map[string]float64 {
+	theta := map[string]float64{}
+	if len(obs) == 0 || sigma2 <= 0 {
+		return theta
+	}
+	byRow := map[string][]int{}
+	for i, o := range obs {
+		if _, ok := diff[o.col]; !ok {
+			continue
+		}
+		if w, ok := weight[o.col]; ok && w <= 0 {
+			continue
+		}
+		byRow[o.row] = append(byRow[o.row], i)
+		theta[o.row] = 0
+	}
+	for _, r := range sortedKeys(byRow) {
+		idx := byRow[r]
+		for it := 0; it < iters; it++ {
+			g, h := 0.0, 0.0
+			for _, i := range idx {
+				o := obs[i]
+				w := 1.0
+				if weight != nil {
+					w = weight[o.col]
+				}
+				p := 1 / (1 + math.Exp(-(theta[r] - diff[o.col])))
+				y := 0.0
+				if o.ok {
+					y = 1
+				}
+				g += w * (y - p)
+				h += w * p * (1 - p)
+			}
+			g -= theta[r] / sigma2
+			h += 1 / sigma2
+			if h < 1e-9 {
+				break
+			}
+			d := math.Max(-1, math.Min(1, g/h))
+			theta[r] = math.Max(-6, math.Min(6, theta[r]+d))
+			if math.Abs(d) < raschTolerance {
+				break
+			}
+		}
+	}
+	return theta
+}

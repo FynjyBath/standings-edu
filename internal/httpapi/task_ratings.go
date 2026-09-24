@@ -70,9 +70,11 @@ func (h *Handlers) AdminTaskRatingsPage(w http.ResponseWriter, _ *http.Request) 
 // сильнее (courseRatingWeightValidated), поэтому отметка — не косметика.
 func (h *Handlers) AdminTaskRatingValidate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		URL       string   `json:"url"`
-		SolveRate *float64 `json:"solve_rate"`
-		Attempts  *float64 `json:"attempts"`
+		URL string `json:"url"`
+		// Правка приходит в баллах 1..10 — в том виде, в каком её вводит
+		// человек; в наблюдаемые величины переводит домен.
+		IdeaScore *float64 `json:"idea_score"`
+		ImplScore *float64 `json:"impl_score"`
 		By        string   `json:"by"`
 		Note      string   `json:"note"`
 	}
@@ -101,14 +103,22 @@ func (h *Handlers) AdminTaskRatingValidate(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "для этой задачи нет оценки"})
 		return
 	}
-	if req.SolveRate != nil {
-		rating.SolveRate = *req.SolveRate
+	if req.IdeaScore != nil {
+		if *req.IdeaScore < 1 || *req.IdeaScore > 10 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "идейность — балл от 1 до 10"})
+			return
+		}
+		rating.SolveRate = domain.IdeaFromScore(*req.IdeaScore)
 	}
-	if req.Attempts != nil {
-		rating.Attempts = *req.Attempts
+	if req.ImplScore != nil {
+		if *req.ImplScore < 1 || *req.ImplScore > 10 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "сложность реализации — балл от 1 до 10"})
+			return
+		}
+		rating.Attempts = domain.ImplFromScore(*req.ImplScore)
 	}
 	if !rating.Valid() {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "доля решивших должна быть между 0 и 1, посылок — не меньше 1"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "оценка вне допустимых границ"})
 		return
 	}
 	now := time.Now().UTC()

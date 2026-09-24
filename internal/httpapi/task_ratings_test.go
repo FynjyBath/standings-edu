@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -63,16 +64,18 @@ func TestTaskRatingsPageShowsQueue(t *testing.T) {
 	writeTestFile(t, filepath.Join(genDir, "task_review.json"), `{
 		"generated_at":"2026-09-17T10:00:00Z","rated":2,"total":9,
 		"rows":[{"normalized_url":"https://x/1","url":"https://x/1","label":"Контест · B",
-		         "name":"Улитка","tried":40,"solved":30,"fact_solve_rate":0.75,
+		         "name":"Улитка","tried":40,"solved":30,"fact_first_try":0.75,
 		         "fact_attempts":1.5,"rated_solve_rate":0.2,"rated_attempts":4,
+		         "idea_score":7.5,"impl_score":2.5,
 		         "gap":2.7,"impact":40,"harder":true}]}`)
 	body := ratingsPage(t, h)
 	for _, want := range []string{
 		"Контест · B", "Улитка",
-		"75%", // факт
-		"20%", // предсказание
+		"75%", // факт: доля взявших с первой посылки
+		"20%", // во что переводится балл идейности
 		"Оценено 2 задач из 9",
-		"Принять факт", "Оценка верна",
+		`value="7.5"`, `value="2.5"`, // баллы обеих осей в форме правки
+		"Сохранить", "Оценка верна",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("на странице нет %q", want)
@@ -87,7 +90,8 @@ func TestTaskRatingValidateWrites(t *testing.T) {
 	path := filepath.Join(dataDir, "task_ratings.json")
 	writeTestFile(t, path, `{"https://x/1":{"solve_rate":0.2,"attempts":4,"model":"test"}}`)
 
-	body := strings.NewReader(`{"url":"https://x/1","solve_rate":0.75,"attempts":1.5,"by":"Антон","note":"принят факт"}`)
+	// Правка приходит в баллах 1..10 — так её вводит человек.
+	body := strings.NewReader(`{"url":"https://x/1","idea_score":3,"impl_score":8,"by":"Антон","note":"поправил"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/task-rating/validate", body)
 	rec := httptest.NewRecorder()
 	h.AdminTaskRatingValidate(rec, req)
@@ -107,8 +111,13 @@ func TestTaskRatingValidateWrites(t *testing.T) {
 	if !ok {
 		t.Fatalf("оценка не сохранилась: %s", raw)
 	}
-	if got.SolveRate != 0.75 || got.Attempts != 1.5 {
-		t.Errorf("числа не записались: %+v", got)
+	// Баллы переводятся в наблюдаемые величины; проверяем, что обратный
+	// перевод даёт те же баллы — иначе правка «уезжает» при каждом открытии.
+	if gotIdea := got.IdeaScore(); math.Abs(gotIdea-3) > 0.1 {
+		t.Errorf("идейность не записалась: балл %v, оценка %+v", gotIdea, got)
+	}
+	if gotImpl := got.ImplScore(); math.Abs(gotImpl-8) > 0.1 {
+		t.Errorf("реализация не записалась: балл %v, оценка %+v", gotImpl, got)
 	}
 	if !got.Validated() || got.ValidatedBy != "Антон" {
 		t.Errorf("оценка должна стать подтверждённой: %+v", got)
@@ -118,17 +127,17 @@ func TestTaskRatingValidateWrites(t *testing.T) {
 	}
 }
 
-// Негодные числа не должны попадать в файл: доля решивших вне (0,1) сломала бы
-// перевод в логиты.
+// Негодные числа не должны попадать в файл: балл вне 1..10 после перевода дал
+// бы долю вне (0,1) и сломал логиты.
 func TestTaskRatingValidateRejectsNonsense(t *testing.T) {
 	h, dataDir, _ := ratingsHandlers(t)
 	path := filepath.Join(dataDir, "task_ratings.json")
 	writeTestFile(t, path, `{"https://x/1":{"solve_rate":0.2,"attempts":4}}`)
 
 	for _, bad := range []string{
-		`{"url":"https://x/1","solve_rate":1.4}`,
-		`{"url":"https://x/1","attempts":0}`,
-		`{"url":"","solve_rate":0.5}`,
+		`{"url":"https://x/1","idea_score":14}`,
+		`{"url":"https://x/1","impl_score":0}`,
+		`{"url":"","idea_score":5}`,
 	} {
 		rec := httptest.NewRecorder()
 		h.AdminTaskRatingValidate(rec, httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(bad)))

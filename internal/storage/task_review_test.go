@@ -20,7 +20,7 @@ func TestTaskReviewRoundTrip(t *testing.T) {
 			URL:           "https://informatics.msk.ru/mod/statements/view.php?chapterid=2955",
 			Label:         "Контест · R", Name: "Улитка",
 			Tried: 40, Solved: 30, FactFirstTry: 0.75, FactAttempts: 1.5,
-			RatedSolveRate: 0.2, RatedAttempts: 4,
+			RatedIdeaRate: 0.2, RatedImplAttempts: 4,
 			IdeaScore: 7.5, ImplScore: 2.5,
 			Gap: 2.7, Impact: 40, Harder: true,
 		}},
@@ -43,7 +43,7 @@ func TestTaskReviewRoundTrip(t *testing.T) {
 		t.Errorf("не совпали поля задачи: %+v", g)
 	}
 	if g.Tried != wRow.Tried || g.Solved != wRow.Solved || g.FactFirstTry != wRow.FactFirstTry ||
-		g.RatedSolveRate != wRow.RatedSolveRate || g.RatedAttempts != wRow.RatedAttempts {
+		g.RatedIdeaRate != wRow.RatedIdeaRate || g.RatedImplAttempts != wRow.RatedImplAttempts {
 		t.Errorf("не совпали числа: %+v", g)
 	}
 	// Баллы 1..10 — то, что человек правит в админке; они обязаны переживать

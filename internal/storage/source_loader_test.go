@@ -303,3 +303,37 @@ func TestLoadTaskRatingsMissingFile(t *testing.T) {
 		t.Fatalf("ожидалась пустая карта без ошибки, получили %d и %v", len(got), err)
 	}
 }
+
+// Негодный файл оценок должен ронять ВСЮ загрузку источников, а не только
+// чтение оценок. Раньше ошибка гасилась в WARN на stderr, и генерация из cron
+// тихо считала курс без оценок: идейность держится на них, по данным она почти
+// не измеряется, так что числа испортились бы у всей группы незаметно.
+func TestLoadFailsOnUnusableTaskRatings(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"students.json", "contests.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(`[]`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "groups"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{"https://informatics.msk.ru/mod/statements/view.php?chapterid=1":
+		{"solve_rate":0.97,"attempts":2.1}}`
+	if err := os.WriteFile(filepath.Join(dir, "task_ratings.json"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&SourceLoader{DataDir: dir}).Load(); err == nil {
+		t.Fatal("загрузка источников должна падать на негодном файле оценок")
+	} else if !strings.Contains(err.Error(), "idea_rate") {
+		t.Errorf("ошибка должна объяснять, что не так: %v", err)
+	}
+
+	// А без файла оценок загрузка обязана проходить: оценки необязательны.
+	if err := os.Remove(filepath.Join(dir, "task_ratings.json")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&SourceLoader{DataDir: dir}).Load(); err != nil {
+		t.Errorf("без файла оценок загрузка должна проходить: %v", err)
+	}
+}

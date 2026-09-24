@@ -76,7 +76,7 @@ func buildTaskReview(tasksByNorm map[string]courseTask, statusByStudent map[stri
 		row := domain.GeneratedTaskReviewRow{
 			NormalizedURL: norm, URL: f.task.url, Label: f.task.label, Name: f.task.name,
 			Tried: f.tried, Solved: f.solved, FactFirstTry: round2(factRate),
-			RatedSolveRate: rating.IdeaRate, RatedAttempts: rating.ImplAttempts,
+			RatedIdeaRate: rating.IdeaRate, RatedImplAttempts: rating.ImplAttempts,
 			IdeaScore: rating.IdeaScore(), ImplScore: rating.ImplScore(),
 			Impact: f.tried, Validated: rating.Validated(), Note: rating.Note,
 		}

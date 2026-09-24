@@ -73,7 +73,7 @@ func TestTaskRatingsPageShowsQueue(t *testing.T) {
 		"generated_at":"2026-09-17T10:00:00Z","rated":2,"total":9,
 		"rows":[{"normalized_url":"https://x/1","url":"https://x/1","label":"Контест · B",
 		         "name":"Улитка","tried":40,"solved":30,"fact_first_try":0.75,
-		         "fact_attempts":1.5,"rated_solve_rate":0.2,"rated_attempts":4,
+		         "fact_attempts":1.5,"rated_idea_rate":0.2,"rated_impl_attempts":4,
 		         "idea_score":7.5,"impl_score":2.5,
 		         "gap":2.7,"impact":40,"harder":true}]}`)
 	body := ratingsPage(t, h)

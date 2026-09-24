@@ -37,28 +37,30 @@ func (l *SourceLoader) Load() (*domain.SourceData, error) {
 		return nil, err
 	}
 
+	ratings, err := LoadTaskRatings(l.DataDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &domain.SourceData{
 		Students:    students,
 		Contests:    contests,
 		Groups:      groups,
 		FlagReviews: l.loadFlagReviews(),
-		TaskRatings: l.loadTaskRatings(),
+		TaskRatings: ratings,
 	}, nil
-}
-
-// loadTaskRatings читает оценки сложности задач. Файл опционален: без него
-// модель считает как раньше, только по данным.
-func (l *SourceLoader) loadTaskRatings() domain.TaskRatings {
-	out, err := LoadTaskRatings(l.DataDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARN load task ratings: %v\n", err)
-	}
-	return out
 }
 
 // LoadTaskRatings — ридер data/task_ratings.json. Отсутствующий файл — пустая
 // карта без ошибки; негодные записи молча пропускаются, чтобы одна кривая
 // строка не лишала оценок весь курс.
+//
+// ОТСУТСТВУЮЩИЙ файл и присутствующий, но негодный — разные случаи. Первый
+// означает «оценок не завели», это нормально. Второй означает ошибку в данных,
+// и ошибка отсюда ОСТАНАВЛИВАЕТ генерацию (см. Load): молча посчитать курс без
+// оценок нельзя — идейность держится на них, по данным она почти не измеряется,
+// и числа тихо испортились бы у всей группы. Предупреждения на stderr тут мало:
+// генерацию запускают из cron, читать её вывод некому.
 //
 // Файл ПРЕЖНЕГО формата (ключи solve_rate/attempts) — ошибка, а не пропуск.
 // Там лежала доля решивших задачу вообще, а не доля придумавших решение

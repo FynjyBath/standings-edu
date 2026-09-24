@@ -54,12 +54,12 @@
           <td class="solved-count">{{pct .FactFirstTry}}%</td>
           <td class="solved-count">
             <input type="number" class="rating-input" data-idea min="1" max="10" step="0.5" value="{{numText .IdeaScore}}" aria-label="идейность, 1–10" />
-            <span class="grade-weight" title="во что переводится балл">({{pct .RatedSolveRate}}% придумают)</span>
+            <span class="grade-weight" title="во что переводится балл">({{pct .RatedIdeaRate}}% придумают)</span>
           </td>
           <td class="solved-count">{{if .FactAttempts}}{{numText .FactAttempts}}{{else}}<span class="grade-weight">—</span>{{end}}</td>
           <td class="solved-count">
             <input type="number" class="rating-input" data-impl min="1" max="10" step="0.5" value="{{numText .ImplScore}}" aria-label="сложность реализации, 1–10" />
-            <span class="grade-weight" title="во что переводится балл">({{numText .RatedAttempts}} посылки)</span>
+            <span class="grade-weight" title="во что переводится балл">({{numText .RatedImplAttempts}} посылки)</span>
           </td>
           <td class="solved-count">
             <button type="button" class="summary-link-btn" data-save>Сохранить</button>

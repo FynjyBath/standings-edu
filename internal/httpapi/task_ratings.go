@@ -67,7 +67,8 @@ func (h *Handlers) AdminTaskRatingsPage(w http.ResponseWriter, _ *http.Request) 
 
 // AdminTaskRatingValidate отмечает оценку задачи проверенной — с правкой чисел,
 // если преподаватель их поправил. Подтверждённой оценке модель доверяет вдвое
-// сильнее (courseRatingWeightValidated), поэтому отметка — не косметика.
+// сильнее (courseValidatedX2 в internal/standings), поэтому отметка — не
+// косметика.
 func (h *Handlers) AdminTaskRatingValidate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		URL string `json:"url"`
@@ -95,7 +96,10 @@ func (h *Handlers) AdminTaskRatingValidate(w http.ResponseWriter, r *http.Reques
 	ratings, err := storage.LoadTaskRatings(h.dataDir)
 	if err != nil {
 		h.logger.Printf("ERROR load task ratings: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "не прочитать оценки"})
+		// Текст ошибки написан для человека и объясняет, что делать (например,
+		// что файл прежнего формата надо переоценить). Прятать его в лог
+		// бессмысленно: чинит файл как раз тот, кто сейчас на этой странице.
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	rating, ok := ratings[norm]

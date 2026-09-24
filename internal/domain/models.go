@@ -1486,11 +1486,13 @@ type GeneratedTaskReviewRow struct {
 	// промах оценщика. «Придумал сам» ближе всего к «попал с первого раза».
 	FactFirstTry float64 `json:"fact_first_try"`
 	FactAttempts float64 `json:"fact_attempts,omitempty"`
-	// Предсказанное — в родных величинах и в баллах 1..10 для правки.
-	RatedSolveRate float64 `json:"rated_solve_rate"`
-	RatedAttempts  float64 `json:"rated_attempts"`
-	IdeaScore      float64 `json:"idea_score"`
-	ImplScore      float64 `json:"impl_score"`
+	// Предсказанное — в родных величинах и в баллах 1..10 для правки. Имена
+	// повторяют ключи файла оценок: rated_idea_rate означало бы «доля
+	// решивших», а здесь лежит идейность.
+	RatedIdeaRate     float64 `json:"rated_idea_rate"`
+	RatedImplAttempts float64 `json:"rated_impl_attempts"`
+	IdeaScore         float64 `json:"idea_score"`
+	ImplScore         float64 `json:"impl_score"`
 	// Gap — расхождение в логитах (по идейности) плюс по реализации; чем
 	// больше, тем важнее посмотреть. Impact — сколько учеников задача задела.
 	Gap       float64 `json:"gap"`

@@ -24,6 +24,7 @@
 </section>
 {{else}}
 <section class="admin-block">
+  {{if .RatingsError}}<p class="empty-hint admin-editor-status--error"><b>Файл оценок не читается:</b> {{.RatingsError}}<br>Пока это не исправлено, показаны баллы с момента последней генерации, а сохранение будет возвращать ошибку.</p>{{end}}
   <div class="admin-editor-tools">
     <span class="grade-weight">Оценено {{.Rated}} задач из {{.Total}}{{if .Hidden}} · показаны {{len .Rows}} с наибольшим расхождением, ещё {{.Hidden}} ниже порога внимания{{end}}</span>
     <span id="ratings-status" class="admin-editor-status"></span>
@@ -93,19 +94,21 @@
       if (!row) return;
       var body = { url: row.getAttribute("data-url"), by: "админ" };
       if (btn.hasAttribute("data-save")) {
-        // Отправляем только ту ось, которую действительно поменяли: балл
+        // Отправляется только та ось, которую действительно поменяли: балл
         // округлён до десятых, и переслать его назад нетронутым — значит
-        // потерять точность хранимой оценки.
-        var changed = false;
+        // потерять точность хранимой оценки. «Не меняли» и «негодное значение»
+        // — РАЗНЫЕ вещи и разными флагами: раньше обе кодировались отсутствием
+        // поля, а isNaN(undefined) — истина, и «Сохранить» отбивало всё, кроме
+        // правки сразу двух осей.
+        var changed = false, bad = false;
         [["[data-idea]", "idea_score"], ["[data-impl]", "impl_score"]].forEach(function (pair) {
           var el = row.querySelector(pair[0]);
           if (!el) return;
           var v = parseFloat(el.value);
-          if (isNaN(v) || v < 1 || v > 10) { body[pair[1]] = NaN; return; }
+          if (isNaN(v) || v < 1 || v > 10) { bad = true; return; }
           if (el.value !== el.defaultValue) { body[pair[1]] = v; changed = true; }
         });
-        if (isNaN(body.idea_score) || isNaN(body.impl_score)) {
-          delete body.idea_score; delete body.impl_score;
+        if (bad) {
           say("баллы должны быть от 1 до 10", true);
           return;
         }

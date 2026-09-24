@@ -41,6 +41,9 @@ type AdminTaskRatingsPageData struct {
 	GeneratedAt time.Time
 	// NoRatings — оценок нет вовсе: показываем, как их завести.
 	NoRatings bool
+	// RatingsError — файл оценок не читается (например, прежнего формата).
+	// Показывается прямо на странице: чинит файл тот, кто здесь стоит.
+	RatingsError string
 }
 
 // AdminTaskRatingsPage показывает очередь задач на проверку.
@@ -56,6 +59,29 @@ func (h *Handlers) AdminTaskRatingsPage(w http.ResponseWriter, _ *http.Request) 
 	page.Rated, page.Total, page.GeneratedAt = review.Rated, review.Total, review.GeneratedAt
 	page.NoRatings = review.Rated == 0
 	page.Rows = review.Rows
+
+	// Очередь строится при генерации, а правят оценки между генерациями.
+	// Показывать балл из очереди — значит показать преподавателю его же правку
+	// неприменённой: он решит, что не сохранилось, и поправит второй раз.
+	// Наблюдаемые числа (факт) остаются из очереди — они и меняются только
+	// при генерации.
+	if ratings, err := storage.LoadTaskRatings(h.dataDir); err != nil {
+		h.logger.Printf("ERROR load task ratings: %v", err)
+		page.RatingsError = err.Error()
+	} else {
+		for i := range page.Rows {
+			cur, ok := ratings[page.Rows[i].NormalizedURL]
+			if !ok || !cur.Valid() {
+				continue
+			}
+			page.Rows[i].RatedIdeaRate = cur.IdeaRate
+			page.Rows[i].RatedImplAttempts = cur.ImplAttempts
+			page.Rows[i].IdeaScore = cur.IdeaScore()
+			page.Rows[i].ImplScore = cur.ImplScore()
+			page.Rows[i].Validated = cur.Validated()
+			page.Rows[i].Note = cur.Note
+		}
+	}
 	if len(page.Rows) > adminTaskRatingsLimit {
 		page.Hidden = len(page.Rows) - adminTaskRatingsLimit
 		page.Rows = page.Rows[:adminTaskRatingsLimit]

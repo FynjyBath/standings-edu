@@ -1274,8 +1274,12 @@ type StudentSubmission struct {
 	Site    string    `json:"site"`
 	TaskURL string    `json:"task_url"`
 	Label   string    `json:"label"`
-	Solved  bool      `json:"solved"`
-	Score   *int      `json:"score,omitempty"`
+	// Name — название задачи («P-base»), если она встречается в таблицах какой-
+	// нибудь группы. По ссылке «Инф 3036» непонятно, о чём речь, а названия уже
+	// разрешены при сборке таблиц — сети это не стоит ничего.
+	Name   string `json:"name,omitempty"`
+	Solved bool   `json:"solved"`
+	Score  *int   `json:"score,omitempty"`
 }
 
 // StudentSiteStat — счётчики по сайту. HasTimes=false у сайтов без времени

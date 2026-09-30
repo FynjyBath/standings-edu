@@ -24,6 +24,11 @@ func TestStudentCourseStatsRoundTripKeepsNewFields(t *testing.T) {
 				GroupSlug: "g", Mind: 0.58, Accuracy: 1.1, Tempo: 1.0,
 			},
 		}},
+		Recent: []domain.StudentSubmission{{
+			At:   time.Date(2026, 9, 25, 13, 33, 14, 0, time.UTC),
+			Site: "informatics", TaskURL: "https://informatics.mccme.ru/x?chapterid=3036",
+			Label: "Инф 3036", Name: "P-base",
+		}},
 		GeneratedAt: ptr(time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)),
 	}
 	if err := w.WriteStudentProfile(want); err != nil {
@@ -48,6 +53,9 @@ func TestStudentCourseStatsRoundTripKeepsNewFields(t *testing.T) {
 	}
 	if g.Global == nil || g.Global.Mind != 0.58 || g.Global.Accuracy != 1.1 {
 		t.Errorf("вложенный Global потерял поля: %+v", g.Global)
+	}
+	if len(got.Recent) != 1 || got.Recent[0].Name != "P-base" {
+		t.Errorf("название задачи в ленте потерялось: %+v", got.Recent)
 	}
 }
 

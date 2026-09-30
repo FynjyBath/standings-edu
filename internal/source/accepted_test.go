@@ -143,6 +143,7 @@ func TestManualVerdictBorders(t *testing.T) {
 		{0, "OK", false, true}, // informatics: выдаёт судья; kod-u: ставит преподаватель
 		{8, "зачтено", true, false},
 		{16, "ожидает подтверждения", false, false},
+		{9, "проигнорировано", true, true},
 		{10, "дисквалифицировано", true, true},
 		{17, "отвергнуто", true, true},
 		{23, "вызван на защиту", true, true},
@@ -163,14 +164,15 @@ func TestManualVerdictBorders(t *testing.T) {
 			t.Errorf("ejudge: статус %d (%s) → рамка %v, ожидалось %v", c.status, c.name, got, c.kodu)
 		}
 	}
-	// «Проигнорировано» в ejudge — действие судьи, но на informatics он
-	// проставляется автоматически пачками (в т.ч. на технических задачах),
-	// поэтому там рамку не даёт.
+	// «Проигнорировано» — действие судьи на обеих системах. На informatics его
+	// когда-то исключили как «автоматическое пачками»; проверка по данным это
+	// опровергла: у пяти аккаунтов на ~2900 посылок он встретился 26 раз на 22
+	// задачах, максимум по две на задачу.
 	if !isEjudgeBorderStatus(9) {
 		t.Error("ejudge: «проигнорировано» ставит судья — ожидалась рамка")
 	}
-	if isInformaticsBorderStatus(9) {
-		t.Error("informatics: «проигнорировано» выставляется автоматически — рамки быть не должно")
+	if !isInformaticsBorderStatus(9) {
+		t.Error("informatics: «проигнорировано» ставит судья — ожидалась рамка")
 	}
 }
 
@@ -186,6 +188,7 @@ func TestManualVerdictOnUnsolvedTask(t *testing.T) {
 		accepted bool
 	}{
 		{"отвергнуто", 17, true},
+		{"проигнорировано", 9, true},
 		{"дисквалифицировано", 10, true},
 		{"неверный ответ", 5, false},
 		{"нарушение оформления", 14, false},
@@ -204,5 +207,56 @@ func TestManualVerdictOnUnsolvedTask(t *testing.T) {
 				t.Errorf("Accepted=%v, ожидалось %v", res[0].Accepted, c.accepted)
 			}
 		})
+	}
+}
+
+// Случай из жизни: преподаватель проигнорировал прошедшую тесты посылку, а всё
+// остальное по задаче — частичные решения. Ячейка должна остаться нерешённой,
+// но с рамкой: вердикт поставил человек, и это видно.
+func TestIgnoredAmongPartialsGivesBorder(t *testing.T) {
+	build := func(id int) string {
+		return "https://informatics.msk.ru/mod/statements/view.php?chapterid=" + itoa(id) + "#1"
+	}
+	agg := map[string]informaticsTaskAggregate{}
+	foldStoredInformaticsRuns([]informaticsStoredRun{
+		{ID: 42121910, ProblemID: 3036, Status: 7, Score: 14},  // частичное
+		{ID: 42191886, ProblemID: 3036, Status: 7, Score: 14},  // частичное
+		{ID: 42192045, ProblemID: 3036, Status: 9, Score: 100}, // проигнорировано судьёй
+	}, agg, build)
+	res := aggregatesToTaskResults(agg)
+	if len(res) != 1 {
+		t.Fatalf("ожидался один результат: %+v", res)
+	}
+	if res[0].Solved {
+		t.Error("проигнорированная посылка не делает задачу решённой")
+	}
+	if !res[0].Accepted {
+		t.Error("ожидалась рамка: вердикт поставил преподаватель")
+	}
+	if !res[0].Attempted {
+		t.Error("попытки по задаче были")
+	}
+}
+
+// Полный OK снимает рамку и с «проигнорировано»: раз система в итоге приняла
+// решение сама, отмечать ручной вердикт незачем.
+func TestFullOKSuppressesIgnoredBorder(t *testing.T) {
+	build := func(id int) string {
+		return "https://informatics.msk.ru/mod/statements/view.php?chapterid=" + itoa(id) + "#1"
+	}
+	agg := map[string]informaticsTaskAggregate{}
+	foldStoredInformaticsRuns([]informaticsStoredRun{
+		{ID: 1, ProblemID: 200, Status: 9, Score: 0},
+		{ID: 2, ProblemID: 200, Status: 0, Score: 100},
+	}, agg, build)
+	res := aggregatesToTaskResults(agg)
+	if len(res) != 1 {
+		t.Fatalf("ожидался один результат: %+v", res)
+	}
+	if !res[0].Solved {
+		t.Error("полный OK — задача решена")
+	}
+	if res[0].Accepted {
+		t.Error("полный OK должен снимать рамку")
 	}
 }

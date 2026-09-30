@@ -563,15 +563,17 @@ func isInformaticsSolvedStatus(ejudgeStatus int) bool {
 
 // informatics: жёлтая рамка — у вердиктов, которые поставил преподаватель, а не
 // выдала система. Это «зачтено» (RUN_ACCEPTED=8, не полный OK) и разбор вручную
-// — дисквалификация, отклонение, вызов на защиту.
+// — проигнорировано, дисквалификация, отклонение, вызов на защиту.
 //
-// RUN_IGNORED (9) сюда намеренно не входит, хотя в ejudge это действие судьи: на
-// informatics он встречается сотнями и пачками подряд по одной задаче (в т.ч. на
-// технических вроде «DEBUG problem»), то есть проставляется автоматически.
+// RUN_IGNORED (9) когда-то был исключён как «проставляется автоматически
+// пачками». На данных это не подтвердилось: у пяти аккаунтов на ~2900 посылок
+// он встретился 26 раз на 22 разных задачах, максимум по две на задачу, —
+// то есть ровно так, как выглядит ручной разбор. Массовых простановок нет.
 func isInformaticsBorderStatus(ejudgeStatus int) bool {
 	switch ejudgeStatus {
-	case informaticsStatusAccepted, informaticsStatusDisqualified,
-		informaticsStatusRejected, informaticsStatusSummoned:
+	case informaticsStatusAccepted, informaticsStatusIgnored,
+		informaticsStatusDisqualified, informaticsStatusRejected,
+		informaticsStatusSummoned:
 		return true
 	}
 	return false

@@ -55,7 +55,7 @@ func TestBuildStudentProfile(t *testing.T) {
 	st.timed[inf3] = []source.TimedSubmission{{At: now.Add(-1 * time.Hour), Solved: true, Score: sc(100)}}
 
 	student := domain.Student{ID: "s1", PublicName: "Ученик", Accounts: []domain.Account{{Site: "codeforces", AccountID: "u"}}}
-	p := b.buildStudentProfile(student, st, now)
+	p := b.buildStudentProfile(student, st, nil, now)
 
 	if p.Stats.TotalSolved != 4 || p.Stats.TotalAttempted != 5 || p.Stats.TotalSubmissions != 5 {
 		t.Fatalf("totals wrong: %+v", p.Stats)
@@ -208,6 +208,7 @@ func TestProfileTimelineUsesConfiguredMirror(t *testing.T) {
 	profiles := b.buildStudentProfiles(
 		[]domain.Student{{ID: "s1", PublicName: "У"}},
 		map[string]*accountStatuses{"s1": st},
+		nil,
 		time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC),
 	)
 	p := profiles["s1"]
@@ -257,7 +258,7 @@ func TestGeneratedLinksUseConfiguredMirror(t *testing.T) {
 	statuses := map[string]*accountStatuses{"s1": st}
 
 	std := b.buildTaskContestStandings(contest, students, statuses, nil, nil, nil, nil, nil)
-	profiles := b.buildStudentProfiles(students, statuses, time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC))
+	profiles := b.buildStudentProfiles(students, statuses, nil, time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC))
 
 	// Поля, где канонический хост — это ключ сопоставления, а не ссылка.
 	keyFields := map[string]bool{"normalized_url": true, "task_urls": true}
@@ -301,5 +302,72 @@ func TestGeneratedLinksUseConfiguredMirror(t *testing.T) {
 	// прошла бы «успешно», ничего не проверив.
 	if mirrorLinks < 2 {
 		t.Fatalf("ожидались ссылки на зеркало и в таблице, и в профиле, нашлось %d", mirrorLinks)
+	}
+}
+
+// В ленте посылок должно быть видно НАЗВАНИЕ задачи: по «Инф 3036» преподаватель
+// не поймёт, о чём речь. Названия берутся из уже построенных таблиц, поэтому
+// задача, не входящая ни в один контест, остаётся без названия — и это не
+// ошибка, лента всё равно показывает метку.
+func TestProfileTimelineCarriesTaskName(t *testing.T) {
+	reg := source.NewRegistry()
+	inf, err := source.NewInformaticsAPIClientWithState(
+		source.InformaticsCredentials{BaseURL: "https://informatics.mccme.ru"}, "")
+	if err != nil {
+		t.Fatalf("informatics client: %v", err)
+	}
+	reg.RegisterSite("informatics", inf)
+	b := NewBuilder(reg, log.New(io.Discard, "", 0), 1)
+
+	named := domain.NormalizeTaskURL("https://informatics.mccme.ru/mod/statements/view.php?chapterid=3036")
+	other := domain.NormalizeTaskURL("https://informatics.mccme.ru/mod/statements/view.php?chapterid=39")
+	st := newAccountStatuses()
+	for i, norm := range []string{named, other} {
+		st.attempted[norm] = struct{}{}
+		st.timed[norm] = []source.TimedSubmission{
+			{At: time.Date(2026, 9, 1, 10+i, 0, 0, 0, time.UTC)},
+		}
+	}
+
+	profiles := b.buildStudentProfiles(
+		[]domain.Student{{ID: "s1", PublicName: "У"}},
+		map[string]*accountStatuses{"s1": st},
+		map[string]string{named: "P-base"},
+		time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC),
+	)
+	p := profiles["s1"]
+	if p == nil || len(p.Recent) != 2 {
+		t.Fatalf("ожидались две посылки: %+v", p)
+	}
+	byLabel := map[string]domain.StudentSubmission{}
+	for _, sub := range p.Recent {
+		byLabel[sub.Label] = sub
+	}
+	if got := byLabel["Инф 3036"].Name; got != "P-base" {
+		t.Errorf("название задачи не доехало до ленты: %q", got)
+	}
+	if got := byLabel["Инф 39"].Name; got != "" {
+		t.Errorf("у задачи вне таблиц названия быть не должно, получили %q", got)
+	}
+}
+
+// taskNamesFromStandings должна собирать названия по всем группам сразу: ученик
+// мог решать задачу в контесте другой группы.
+func TestTaskNamesFromStandings(t *testing.T) {
+	names := taskNamesFromStandings(map[string]domain.GeneratedGroupStandings{
+		"g1": {Contests: []domain.GeneratedContestStandings{{Tasks: []domain.GeneratedTask{
+			{NormalizedURL: "n1", Name: "P-base"},
+			{NormalizedURL: "n2", Name: "  "},       // пустое — не берём
+			{NormalizedURL: "", Name: "без ссылки"}, // без ключа — не берём
+		}}}},
+		"g2": {Contests: []domain.GeneratedContestStandings{{Tasks: []domain.GeneratedTask{
+			{NormalizedURL: "n3", Name: "Улитка"},
+		}}}},
+	})
+	if len(names) != 2 {
+		t.Fatalf("ожидались два названия, получили %v", names)
+	}
+	if names["n1"] != "P-base" || names["n3"] != "Улитка" {
+		t.Errorf("названия собрались неверно: %v", names)
 	}
 }

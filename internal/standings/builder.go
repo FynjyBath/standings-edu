@@ -125,7 +125,7 @@ func (b *Builder) BuildGroupsStandings(ctx context.Context, data *domain.SourceD
 
 	now := time.Now().UTC()
 	b.progressf("profiles", 0, 0, "")
-	profiles := b.buildStudentProfiles(students, statusByStudent, now)
+	profiles := b.buildStudentProfiles(students, statusByStudent, taskNamesFromStandings(result), now)
 
 	// Темп курса по каждой группе — в профили учеников (для преподавателя).
 	// Отметки индексируются по ученикам один раз на всю генерацию.
@@ -1741,4 +1741,26 @@ func mergeStatuses(dst *accountStatuses, src accountStatuses) {
 		}
 		dst.timed[key] = append(dst.timed[key], subs...)
 	}
+}
+
+// taskNamesFromStandings собирает «нормализованная ссылка → название задачи» по
+// уже построенным таблицам всех групп. Названия там разрешены (в том числе
+// походами в сеть за составом сборников), поэтому ленте посылок они достаются
+// даром. Задача, не входящая ни в один контест, остаётся без названия.
+func taskNamesFromStandings(byGroup map[string]domain.GeneratedGroupStandings) map[string]string {
+	out := make(map[string]string)
+	for _, std := range byGroup {
+		for _, contest := range std.Contests {
+			for _, task := range contest.Tasks {
+				name := strings.TrimSpace(task.Name)
+				if name == "" || task.NormalizedURL == "" {
+					continue
+				}
+				if _, seen := out[task.NormalizedURL]; !seen {
+					out[task.NormalizedURL] = name
+				}
+			}
+		}
+	}
+	return out
 }

@@ -147,10 +147,10 @@
       <thead><tr><th>Время</th><th>Сайт</th><th>Задача</th><th>Результат</th></tr></thead>
       <tbody id="subs-body">
         {{range $p.Recent}}
-        <tr class="{{if .Solved}}is-solved{{end}}" data-task="{{.TaskURL}}" data-at="{{unixMs .At}}" data-filter-text="{{siteName .Site}} {{.Label}} {{if .Solved}}решено{{else}}попытка{{end}}">
+        <tr class="{{if .Solved}}is-solved{{end}}" data-task="{{.TaskURL}}" data-at="{{unixMs .At}}" data-filter-text="{{siteName .Site}} {{.Label}} {{.Name}} {{if .Solved}}решено{{else}}попытка{{end}}">
           <td>{{localTime .At}}</td>
           <td class="site-tag">{{siteName .Site}}</td>
-          <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer" title="{{if $sub}}Посылки ученика по задаче на сайте{{else}}Открыть задачу{{end}}">{{.Label}}</a></td>
+          <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer" title="{{if $sub}}Посылки ученика по задаче на сайте{{else}}Открыть задачу{{end}}">{{.Label}}</a>{{if .Name}}<span class="grade-weight"> · {{.Name}}</span>{{end}}</td>
           <td>{{if .Solved}}<span class="result-pill result-pill--ok">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="result-pill result-pill--try">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
         </tr>
         {{end}}

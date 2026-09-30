@@ -35,19 +35,19 @@ const (
 // buildStudentProfiles собирает профили активности учеников из уже скачанных
 // статусов (без позиций в группах — их добавляет pipeline). now — момент
 // генерации (UTC), от него считаются окна 7/30 дней и график активности.
-func (b *Builder) buildStudentProfiles(students []domain.Student, statusByStudent map[string]*accountStatuses, now time.Time) map[string]*domain.GeneratedStudentProfile {
+func (b *Builder) buildStudentProfiles(students []domain.Student, statusByStudent map[string]*accountStatuses, taskNames map[string]string, now time.Time) map[string]*domain.GeneratedStudentProfile {
 	out := make(map[string]*domain.GeneratedStudentProfile, len(students))
 	for _, student := range students {
 		st := statusByStudent[student.ID]
 		if st == nil {
 			st = newAccountStatuses()
 		}
-		out[student.ID] = b.buildStudentProfile(student, st, now)
+		out[student.ID] = b.buildStudentProfile(student, st, taskNames, now)
 	}
 	return out
 }
 
-func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuses, now time.Time) *domain.GeneratedStudentProfile {
+func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuses, taskNames map[string]string, now time.Time) *domain.GeneratedStudentProfile {
 	profile := &domain.GeneratedStudentProfile{
 		StudentID:  student.ID,
 		PublicName: student.PublicName,
@@ -78,6 +78,7 @@ func (b *Builder) buildStudentProfile(student domain.Student, st *accountStatuse
 				Site:    site,
 				TaskURL: domain.RewriteInformaticsHost(taskURL, informaticsBase),
 				Label:   taskLabel(site, taskURL),
+				Name:    taskNames[taskURL],
 				Solved:  sub.Solved,
 				Score:   sub.Score,
 			})

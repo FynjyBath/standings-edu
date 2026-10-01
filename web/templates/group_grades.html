@@ -33,7 +33,7 @@
       <tbody id="grades-tbody">
         {{range .Grades.Rows}}
         <tr data-filter-text="{{.PublicName}}">
-          <td class="student-name">{{.PublicName}}</td>
+          <td class="student-name">{{if and $.CanViewProfiles .StudentID}}<a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}{{if $.Token}}&token={{$.Token}}{{end}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
           {{range .Values}}
           <td class="solved-count">{{gradeFixed . $.Grades.Decimals}}</td>
           {{end}}

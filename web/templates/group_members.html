@@ -42,7 +42,7 @@
       <tbody id="members-tbody">
         {{range .Members}}
         <tr data-filter-text="{{.PublicName}} {{.FullName}} {{.StudentID}}">
-          <td class="student-name">{{.PublicName}}</td>
+          <td class="student-name">{{if and $.CanViewProfiles .StudentID}}<a href="/standings/{{$.GroupSlug}}/student?id={{.StudentID}}{{if $.GroupToken}}&token={{$.GroupToken}}{{end}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
           <td>{{.FullName}}</td>
           <td>
             {{if $.CanEditStudents}}

@@ -34,6 +34,9 @@
     // лёгкая, JSON жмётся и кэшируется по обычным правилам.
     var pageSlug = {{.GroupSlug}};
     var pageToken = root.getAttribute("data-token") || "";
+    // Профиль ученика открывается только по праву view.participants — по
+    // «есть хоть какой-то токен» ссылка вела бы в 404.
+    var canViewProfiles = {{if .CanViewProfiles}}true{{else}}false{{end}};
     empty.textContent = "Загрузка данных…";
     empty.style.display = "";
     fetch("/standings/" + encodeURIComponent(pageSlug) + "/summary-data" + (pageToken ? "?token=" + encodeURIComponent(pageToken) : ""))
@@ -385,7 +388,16 @@
 
         var tdName = document.createElement("td");
         tdName.className = "student-name";
-        tdName.textContent = student.public_name;
+        if (canViewProfiles && student.student_id) {
+          var a = document.createElement("a");
+          a.href = "/standings/" + encodeURIComponent(pageSlug) + "/student?id=" +
+            encodeURIComponent(student.student_id) +
+            (pageToken ? "&token=" + encodeURIComponent(pageToken) : "");
+          a.textContent = student.public_name;
+          tdName.appendChild(a);
+        } else {
+          tdName.textContent = student.public_name;
+        }
         tr.appendChild(tdName);
 
         var totals = totalsById.get(student.student_id) || { score: 0, plus: 0 };

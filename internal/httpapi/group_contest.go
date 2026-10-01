@@ -29,10 +29,14 @@ type GroupContestPageData struct {
 	Contest    domain.GeneratedContestStandings
 	// Access — права доступа; TokenValid — доступ что-то даёт сверх публичного;
 	// Token — токен для ссылок; JuryKonduits — контест является кондуитом.
-	Access       *GroupAccess
-	TokenValid   bool
-	Token        string
-	JuryKonduits map[string]bool
+	Access     *GroupAccess
+	TokenValid bool
+	// CanViewProfiles — доступ открывает профили учеников (view.participants).
+	// Отдельно от TokenValid: по «есть хоть какое-то право» ссылка на ФИО
+	// появлялась и там, где профиль не открыть, и вела в 404.
+	CanViewProfiles bool
+	Token           string
+	JuryKonduits    map[string]bool
 	// GroupArchived — группа в архиве: под таблицей показываем «обновлено».
 	GroupArchived bool
 	// UnfrozenView — показана полная версия замороженной таблицы.
@@ -90,15 +94,16 @@ func (h *Handlers) renderContestPage(w http.ResponseWriter, r *http.Request, slu
 		title = contest.ID
 	}
 	page := GroupContestPageData{
-		PageTitle:    title + " — " + standings.GroupTitle,
-		Footer:       h.buildFooterInfo(),
-		GroupSlug:    slug,
-		GroupTitle:   standings.GroupTitle,
-		Contest:      contest,
-		Access:       acc,
-		TokenValid:   acc.Elevated(),
-		UnfrozenView: unfrozen,
-		Token:        acc.Token,
+		PageTitle:       title + " — " + standings.GroupTitle,
+		Footer:          h.buildFooterInfo(),
+		GroupSlug:       slug,
+		GroupTitle:      standings.GroupTitle,
+		Contest:         contest,
+		Access:          acc,
+		TokenValid:      acc.Elevated(),
+		CanViewProfiles: acc.Has(domain.PermViewParticipants),
+		UnfrozenView:    unfrozen,
+		Token:           acc.Token,
 	}
 	if idx > 0 {
 		prev := standings.Contests[idx-1]

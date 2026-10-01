@@ -48,7 +48,7 @@
            data-filter-count="#contest-filter-count" data-filter-empty="#contest-filter-empty" />
     <span class="filter-count" id="contest-filter-count"></span>
   </div>
-  {{template "contestBlockBody" (dict "Contest" .Contest "TokenValid" .TokenValid "JuryKonduits" .JuryKonduits "GroupSlug" .GroupSlug "Token" .Token "GroupArchived" .GroupArchived)}}
+  {{template "contestBlockBody" (dict "Contest" .Contest "TokenValid" .TokenValid "CanViewProfiles" .CanViewProfiles "JuryKonduits" .JuryKonduits "GroupSlug" .GroupSlug "Token" .Token "GroupArchived" .GroupArchived)}}
   <p class="empty-hint" id="contest-filter-empty" hidden>Ничего не найдено.</p>
 </section>
 

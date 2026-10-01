@@ -6,7 +6,7 @@
 {{- end}}
 
 {{define "contestBlockBody"}}
-{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}{{$groupArchived := .GroupArchived}}
+{{- $contest := .Contest}}{{$uv := upsolvingView $contest}}{{$tokenValid := .TokenValid}}{{$canProfiles := .CanViewProfiles}}{{$konduits := .JuryKonduits}}{{$slug := .GroupSlug}}{{$token := .Token}}{{$groupArchived := .GroupArchived}}
 {{- with $contest}}
     <div class="contest-block-head">
       <h2>{{.Title}}</h2>
@@ -83,7 +83,7 @@
           {{/* data-student/-filter-text — за них цепляется фильтр по ученику (app.js). */}}
           <tr data-student="{{.StudentID}}" data-filter-text="{{.PublicName}}">
             <td class="solved-count">{{placeText .Place}}</td>
-            <td class="student-name">{{if $tokenValid}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}&token={{$token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
+            <td class="student-name">{{if $canProfiles}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}{{if $token}}&token={{$token}}{{end}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
             <td class="solved-count">{{if eq $contest.ScoreSystem "ioi"}}{{.TotalScore}}{{else}}{{.SolvedCount}}{{end}}</td>
             {{if $hasPenalty}}<td class="solved-count">{{penaltyText .Penalty}}</td>{{end}}
             {{range taskCells $contest .}}{{template "uvTaskCell" .}}{{end}}
@@ -96,7 +96,7 @@
           {{range $uv.Rows}}
           <tr data-student="{{.StudentID}}" data-filter-text="{{.PublicName}}">
             <td class="solved-count">{{placeText .Place}}</td>
-            <td class="student-name">{{if $tokenValid}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}&token={{$token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
+            <td class="student-name">{{if $canProfiles}}<a href="/standings/{{$slug}}/student?id={{.StudentID}}{{if $token}}&token={{$token}}{{end}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
             <td class="solved-count">{{.Count}}</td>
             {{if $hasPenalty}}<td class="solved-count">{{.Penalty}}</td>{{end}}
             {{range .Cells}}{{template "uvTaskCell" .}}{{end}}

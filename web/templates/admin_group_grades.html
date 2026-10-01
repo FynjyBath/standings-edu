@@ -61,7 +61,7 @@
         {{range .Rows}}
         {{$row := .}}
         <tr data-filter-text="{{$row.PublicName}}">
-          <td class="student-name">{{.PublicName}}</td>
+          <td class="student-name">{{if .StudentID}}<a href="/standings/admin/student?id={{.StudentID}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
           {{range $i, $col := $.Columns}}
           <td>
             <input class="grade-input" type="number" min="0" max="10" step="0.1"

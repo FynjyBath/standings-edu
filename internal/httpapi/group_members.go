@@ -33,7 +33,9 @@ type GroupMembersPageData struct {
 	// GroupToken — токен доступа для ссылок со страницы (пусто — вошли сессией).
 	GroupToken string
 	RoleTitle  string
-	Members    []AdminGroupMember
+	// CanViewProfiles — показывать ли ФИО ссылкой на профиль ученика.
+	CanViewProfiles bool
+	Members         []AdminGroupMember
 	// MembersJSON — те же участники с аккаунтами, для формы правки ученика:
 	// [{id, full_name, public_name, accounts:[{site, account_id}]}].
 	MembersJSON template.JS
@@ -108,6 +110,7 @@ func (h *Handlers) GroupManageMembersPage(w http.ResponseWriter, r *http.Request
 		RoleTitle:       acc.Title(),
 		Members:         members,
 		MembersJSON:     template.JS(membersJSON),
+		CanViewProfiles: acc.Has(domain.PermViewParticipants),
 		CanRegister:     acc.Has(domain.PermMembersRegister),
 		CanEditStudents: acc.Has(domain.PermStudentsEdit),
 	}

@@ -60,17 +60,22 @@ func TestGroupStandingsContestUpdatedCaption(t *testing.T) {
 	}
 }
 
-// Имена учеников в таблицах группы кликабельны (ведут на профиль) только при
-// валидном токене преподавателя; ученикам (без токена) — обычный текст.
+// Имена учеников в таблицах группы кликабельны (ведут на профиль) только у
+// доступа с правом view.participants; ученикам — обычный текст.
+//
+// Признак отдельный от TokenValid намеренно: тот означает «есть хоть какое-то
+// право», а профиль открывается только по view.participants. По TokenValid
+// ссылка появлялась и у доступа, который профиль открыть не может, и вела в 404.
 func TestGroupStandingsClickableNames(t *testing.T) {
 	renderer := web.NewTemplateRenderer("../../web/templates")
 
-	page := func(tokenValid bool) GroupPageData {
+	page := func(tokenValid, canProfiles bool) GroupPageData {
 		return GroupPageData{
-			PageTitle:  "t",
-			Footer:     FooterInfo{},
-			Token:      "T0K",
-			TokenValid: tokenValid,
+			PageTitle:       "t",
+			Footer:          FooterInfo{},
+			Token:           "T0K",
+			TokenValid:      tokenValid,
+			CanViewProfiles: canProfiles,
 			Standings: domain.GeneratedGroupStandings{
 				GroupSlug:          "alpha",
 				GroupTitle:         "Альфа",
@@ -100,15 +105,25 @@ func TestGroupStandingsClickableNames(t *testing.T) {
 
 	link := `href="/standings/alpha/student?id=stud1&token=T0K"`
 
-	withTok := render(page(true))
+	withTok := render(page(true, true))
 	// Ссылка должна быть и в основной таблице, и в доске «решено» — минимум дважды.
 	if n := strings.Count(withTok, link); n < 2 {
 		t.Fatalf("под токеном имена должны быть ссылками (найдено %d, ждём ≥2): %q", n, link)
 	}
 
-	noTok := render(page(false))
+	noTok := render(page(false, false))
 	if strings.Contains(noTok, link) {
 		t.Fatal("без токена имена не должны вести на профиль")
+	}
+
+	// Доступ есть, но права на профили нет: ссылки быть не должно — она вела бы
+	// в 404, потому что страница профиля требует именно view.participants.
+	otherPerm := render(page(true, false))
+	if strings.Contains(otherPerm, link) {
+		t.Fatal("без права view.participants имя не должно вести на профиль")
+	}
+	if !strings.Contains(otherPerm, "Иванов И.") {
+		t.Fatal("имя должно остаться обычным текстом")
 	}
 	if !strings.Contains(noTok, "Иванов И.") {
 		t.Fatal("имя должно остаться обычным текстом")

@@ -439,6 +439,7 @@ func (h *Handlers) renderGroupPage(w http.ResponseWriter, r *http.Request, slug 
 		UnfrozenView:    unfrozen,
 		Access:          acc,
 		TokenValid:      acc.Elevated(),
+		CanViewProfiles: acc.Has(domain.PermViewParticipants),
 		CombinedMembers: h.combinedMemberTitles(slug),
 		StudentNames:    pageStudentNames(standings),
 	}
@@ -510,12 +511,13 @@ func (h *Handlers) GroupContestFragment(w http.ResponseWriter, r *http.Request) 
 			archived = gf.Archived()
 		}
 		data := map[string]any{
-			"Contest":       standings.Contests[i],
-			"TokenValid":    false,
-			"JuryKonduits":  map[string]bool(nil),
-			"GroupSlug":     standings.GroupSlug,
-			"Token":         "",
-			"GroupArchived": archived,
+			"Contest":         standings.Contests[i],
+			"TokenValid":      false,
+			"CanViewProfiles": false,
+			"JuryKonduits":    map[string]bool(nil),
+			"GroupSlug":       standings.GroupSlug,
+			"Token":           "",
+			"GroupArchived":   archived,
 		}
 		if err := h.renderer.RenderFragment(w, http.StatusOK, "group_standings.html", "contestBlockBody", data); err != nil {
 			h.logger.Printf("ERROR render contest fragment slug=%s id=%s err=%v", slug, contestID, err)
@@ -804,6 +806,7 @@ func (h *Handlers) GroupGradesPage(w http.ResponseWriter, r *http.Request) {
 		UnfrozenView: unfrozen,
 	}
 	page.Token = acc.Token
+	page.CanViewProfiles = acc.Has(domain.PermViewParticipants)
 	if err := h.renderer.Render(w, http.StatusOK, "group_grades.html", page); err != nil {
 		h.logger.Printf("ERROR render grades slug=%s err=%v", slug, err)
 	}
@@ -859,6 +862,7 @@ func (h *Handlers) renderGroupSummaryPage(w http.ResponseWriter, r *http.Request
 		UnfrozenView: unfrozen,
 	}
 	page.Token = acc.Token
+	page.CanViewProfiles = acc.Has(domain.PermViewParticipants)
 	if err := h.renderer.Render(w, http.StatusOK, "group_summary.html", page); err != nil {
 		h.logger.Printf("ERROR render group summary slug=%s mode=%s err=%v", slug, mode, err)
 	}
@@ -1169,6 +1173,11 @@ type GroupPageData struct {
 	// замороженных таблиц. Token протаскивается в ссылки страницы.
 	UnfrozenView bool
 	Token        string
+	// CanViewProfiles — доступ открывает статистику участников и профили.
+	// ОТДЕЛЬНО от TokenValid: тот означает «есть хоть какое-то право», а профиль
+	// требует именно view.participants. По TokenValid ссылка на ФИО появлялась
+	// и у доступа, который профиль открыть не может, и вела в 404.
+	CanViewProfiles bool
 	// TokenValid — доступ что-то даёт сверх публичного вида (влияет на показ
 	// ссылок на профили, весов задач и т.п.).
 	TokenValid bool
@@ -1230,6 +1239,8 @@ type GroupGradesPageData struct {
 	Grades       domain.GeneratedGrades
 	UnfrozenView bool
 	Token        string
+	// CanViewProfiles — показывать ли ФИО ссылкой на профиль ученика.
+	CanViewProfiles bool
 }
 
 type GroupSummaryPageData struct {
@@ -1240,4 +1251,6 @@ type GroupSummaryPageData struct {
 	Footer       FooterInfo
 	UnfrozenView bool
 	Token        string
+	// CanViewProfiles — показывать ли ФИО ссылкой на профиль ученика.
+	CanViewProfiles bool
 }

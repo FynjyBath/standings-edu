@@ -163,7 +163,7 @@
       <tbody>
         {{range .Standings.SolvedSummary}}
         <tr data-student="{{.StudentID}}" data-filter-text="{{.PublicName}}">
-          <td class="student-name">{{if $.TokenValid}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}&token={{$.Token}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
+          <td class="student-name">{{if $.CanViewProfiles}}<a href="/standings/{{$.Standings.GroupSlug}}/student?id={{.StudentID}}{{if $.Token}}&token={{$.Token}}{{end}}">{{.PublicName}}</a>{{else}}{{.PublicName}}{{end}}</td>
           <td class="solved-count">{{.SolvedCountOnPageSites}}</td>
           {{range .SolvedCountBySite}}
           <td class="solved-count">{{.}}</td>
@@ -195,7 +195,7 @@
       <button type="button" class="rows-expand-btn lazy-load-btn">Показать таблицу</button>
     </div>
     {{else}}
-    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token "GroupArchived" $.GroupArchived)}}
+    {{template "contestBlockBody" (dict "Contest" $contest "TokenValid" $.TokenValid "CanViewProfiles" $.CanViewProfiles "JuryKonduits" $.JuryKonduits "GroupSlug" $.Standings.GroupSlug "Token" $.Token "GroupArchived" $.GroupArchived)}}
     {{end}}
   </section>
   {{end}}

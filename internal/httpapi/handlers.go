@@ -256,6 +256,11 @@ func (h *Handlers) applyAccessView(standings *domain.GeneratedGroupStandings, sl
 	if !acc.Has(domain.PermViewTaskLinks) && !h.groupShowsTaskLinks(slug) {
 		standings.StripTaskLinks()
 	}
+	// Время решения задач — статистика участников: без права её нет и в
+	// данных, а не только на странице.
+	if !acc.Has(domain.PermViewParticipants) {
+		standings.StripTaskWeights()
+	}
 	if acc.Has(domain.PermViewJudgeLinks) {
 		domain.SwapEjudgeLinksToJudge(standings)
 	} else {
@@ -1173,13 +1178,16 @@ type GroupPageData struct {
 	// замороженных таблиц. Token протаскивается в ссылки страницы.
 	UnfrozenView bool
 	Token        string
-	// CanViewProfiles — доступ открывает статистику участников и профили.
-	// ОТДЕЛЬНО от TokenValid: тот означает «есть хоть какое-то право», а профиль
-	// требует именно view.participants. По TokenValid ссылка на ФИО появлялась
-	// и у доступа, который профиль открыть не может, и вела в 404.
+	// CanViewProfiles — доступ открывает статистику участников и профили, а с
+	// ними и всё, что из неё растёт: ссылки на ФИО, время решения задач, плашку
+	// с числом контестов и участников. ОТДЕЛЬНО от TokenValid: тот означает
+	// «есть хоть какое-то право», а здесь нужно именно view.participants. По
+	// TokenValid ссылка на ФИО появлялась и у доступа, который профиль открыть
+	// не может, и вела в 404.
 	CanViewProfiles bool
-	// TokenValid — доступ что-то даёт сверх публичного вида (влияет на показ
-	// ссылок на профили, весов задач и т.п.).
+	// TokenValid — доступ что-то даёт сверх публичного вида. Видимых блоков сам
+	// по себе не добавляет (каждый показывается по своему праву); от него
+	// зависит лишь то, что страница рисуется целиком, без ленивой подгрузки.
 	TokenValid bool
 	// Access — резолв доступа: права, подписи доступов, признак сессии.
 	// Шаблоны спрашивают у него конкретные права через Can*.

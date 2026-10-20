@@ -572,8 +572,9 @@ type GeneratedTask struct {
 	// Сервер вырезает такие колонки из публичного вида, но отдаёт по токену жюри.
 	Hidden bool `json:"hidden,omitempty"`
 	// Weight — типичное время решения задачи в минутах (медиана активного
-	// времени решивших), для показа по токену жюри. 0/пусто — определить нельзя
-	// (мало решивших с известным временем: ACMP, никто не решал).
+	// времени решивших). Показывается только с правом view.participants, без
+	// него сервер вырезает поле из ответа (StripTaskWeights). 0/пусто —
+	// определить нельзя (мало решивших с известным временем: ACMP, никто не решал).
 	Weight float64 `json:"weight,omitempty"`
 	// EjudgeSite/EjudgeProb — для задач ejudge: имя сайта (ejudge_id, под ним
 	// лежит логин ученика в Accounts строки) и КОРОТКОЕ имя задачи в ejudge.
@@ -824,6 +825,25 @@ func (s *GeneratedGroupStandings) StripTaskLinks() {
 		// SourceURL используется в сводной для ссылки «посылки по контесту» —
 		// это тоже ссылка на задачи, убираем.
 		c.SourceURL = ""
+	}
+}
+
+// StripTaskWeights убирает типичное время решения задач (GeneratedTask.Weight):
+// это статистика участников, её видно только с правом view.participants. Без
+// права в ответе её нет вовсе — иначе сводная, которая рисуется на клиенте,
+// получала бы числа, которые не показывает. Работает на клоне (CloneForServe
+// копирует Tasks/Subcontests), кэш не задевается.
+func (s *GeneratedGroupStandings) StripTaskWeights() {
+	for ci := range s.Contests {
+		c := &s.Contests[ci]
+		for j := range c.Tasks {
+			c.Tasks[j].Weight = 0
+		}
+		for j := range c.Subcontests {
+			for k := range c.Subcontests[j].Tasks {
+				c.Subcontests[j].Tasks[k].Weight = 0
+			}
+		}
 	}
 }
 

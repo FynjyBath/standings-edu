@@ -249,7 +249,9 @@ func TestSummaryDataGzipAndCache(t *testing.T) {
 	}
 
 	// Кэш: повторный запрос отдаёт байты из кэша (запись появилась).
-	if _, ok := h.cachedSummaryData("g|0000", func() string { v, _ := h.groupPageVersion("g"); return v }()); !ok {
+	// Ключ — тот же, что у публичного вида (доступ без прав).
+	publicKey := "g|" + (&GroupAccess{}).ViewKey()
+	if _, ok := h.cachedSummaryData(publicKey, func() string { v, _ := h.groupPageVersion("g"); return v }()); !ok {
 		t.Fatal("после первого запроса ответ должен закэшироваться")
 	}
 	// Изменение standings-файла инвалидирует кэш: новые данные видны.

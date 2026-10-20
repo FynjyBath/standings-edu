@@ -32,7 +32,8 @@
     <a class="summary-link-btn" href="/standings/signout?back=/standings/{{.Standings.GroupSlug}}">Выйти{{if .Access.Title}} ({{.Access.Title}}){{end}}</a>
     {{end}}
   </p>
-  {{if .TokenValid}}
+  {{/* Обзор группы — часть статистики участников: по праву view.participants. */}}
+  {{if .CanViewProfiles}}
   <div class="group-overview">
     <span class="overview-stat">Контесты <b>{{len .Standings.Contests}}</b></span>
     {{if .Standings.SolvedSummary}}<span class="overview-stat">Участники <b>{{len .Standings.SolvedSummary}}</b></span>{{end}}

@@ -148,11 +148,12 @@ func (a *GroupAccess) HasPanel() bool {
 }
 
 // ViewKey — отпечаток прав, влияющих на ВИД таблиц: ключ кэша готовых ответов
-// (у разных доступов разные разморозка, скрытое, ссылки на задачи и судью).
+// (у разных доступов разные разморозка, скрытое, ссылки на задачи и судью,
+// время решения задач).
 func (a *GroupAccess) ViewKey() string {
-	key := make([]byte, 0, 4)
+	key := make([]byte, 0, 5)
 	for _, p := range []domain.Perm{domain.PermViewUnfrozen, domain.PermViewHidden,
-		domain.PermViewTaskLinks, domain.PermViewJudgeLinks} {
+		domain.PermViewTaskLinks, domain.PermViewJudgeLinks, domain.PermViewParticipants} {
 		if a.Has(p) {
 			key = append(key, '1')
 		} else {

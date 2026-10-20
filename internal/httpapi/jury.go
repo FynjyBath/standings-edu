@@ -557,6 +557,13 @@ func (h *Handlers) juryStandingsExtras(slug string, page *GroupPageData, acc *Gr
 	}
 	page.CanManageContests = acc.Has(domain.PermContestsManage)
 
+	// Кнопки «заполнить кондуит» ведут в редактор, который требует
+	// konduit.fill: без права они вели бы в 404 (доступ с одними оценками
+	// или контестами видел их и раньше).
+	if !acc.Has(domain.PermKonduitFill) {
+		return
+	}
+
 	entries, err := h.loadGroupContestEntries(slug)
 	if err != nil {
 		return

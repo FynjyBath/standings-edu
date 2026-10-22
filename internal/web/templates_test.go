@@ -243,3 +243,26 @@ func TestUpsolvingViewProviderKeepsPlaces(t *testing.T) {
 		t.Fatalf("оконный балл Бори = %d, ждём 50", uv.Rows[1].Count)
 	}
 }
+
+// В ленте профиля балл показывается, только когда он что-то сообщает сверх
+// «решено/попытка»: частичный. «решено · 100», «решено · 0» (контест без
+// баллов) и «попытка · 0» — шум.
+func TestScoreNote(t *testing.T) {
+	v := func(n int) *int { return &n }
+	cases := []struct {
+		score *int
+		want  string
+	}{
+		{nil, ""},
+		{v(0), ""},
+		{v(100), ""},
+		{v(30), " · 30"},
+		{v(99), " · 99"},
+		{v(1), " · 1"},
+	}
+	for _, c := range cases {
+		if got := scoreNote(c.score); got != c.want {
+			t.Errorf("scoreNote(%v) = %q, want %q", c.score, got, c.want)
+		}
+	}
+}

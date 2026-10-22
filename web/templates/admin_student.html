@@ -152,7 +152,7 @@
           <td>{{localTime .At}}</td>
           <td class="site-tag">{{siteName .Site}}</td>
           <td>{{$sub := submissionLink .TaskURL $p.Accounts}}<a href="{{if $sub}}{{$sub}}{{else}}{{.TaskURL}}{{end}}" target="_blank" rel="noopener noreferrer" title="{{if $sub}}Посылки ученика по задаче на сайте{{else}}Открыть задачу{{end}}">{{.Label}}</a>{{if .Name}}<span class="grade-weight"> · {{.Name}}</span>{{end}}</td>
-          <td>{{if .Solved}}<span class="result-pill result-pill--ok">решено{{if .Score}} · {{.Score}}{{end}}</span>{{else}}<span class="result-pill result-pill--try">попытка{{if .Score}} · {{.Score}}{{end}}</span>{{end}}</td>
+          <td>{{if .Solved}}<span class="result-pill result-pill--ok">решено{{scoreNote .Score}}</span>{{else}}<span class="result-pill result-pill--try">попытка{{scoreNote .Score}}</span>{{end}}</td>
         </tr>
         {{end}}
       </tbody>

@@ -542,6 +542,9 @@ func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, account
 		score := 0
 		if result.Score != nil {
 			score = domain.ClampScore(*result.Score)
+			if result.Solved && score == 0 {
+				score = solvedWithoutPointsScore
+			}
 			hasScore = true
 		} else if attempted {
 			if result.Solved {
@@ -556,13 +559,27 @@ func (b *Builder) fetchAccountStatuses(ctx context.Context, site string, account
 			}
 		}
 
-		if len(result.Timed) > 0 {
-			out.timed[normalized] = append(out.timed[normalized], result.Timed...)
+		for _, sub := range result.Timed {
+			// sub — копия: подменяем указатель, а не значение под ним, чтобы
+			// не задеть кэш клиента сайта.
+			if sub.Solved && sub.Score != nil && *sub.Score == 0 {
+				full := solvedWithoutPointsScore
+				sub.Score = &full
+			}
+			out.timed[normalized] = append(out.timed[normalized], sub)
 		}
 	}
 
 	return out, nil
 }
+
+// solvedWithoutPointsScore — балл решённой задачи, за которую сайт прислал 0.
+// Ноль у решения означает контест без баллов (ACM: только «ОК / не ОК»): ejudge
+// в таком режиме отдаёт score=0 и у полного OK. Без поправки решённая задача
+// давала 0 в сумму таблицы с баллами, а в ленте профиля висело «решено · 0».
+// Решённая задача стоит полный балл — как у сайтов, баллов не отдающих вовсе.
+// Частичный балл решения (например, «зачтено» на 60) не трогается.
+const solvedWithoutPointsScore = 100
 
 func (b *Builder) buildGroupStandings(
 	ctx context.Context,

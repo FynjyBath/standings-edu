@@ -72,6 +72,7 @@ func NewTemplateRenderer(templatesDir string) *TemplateRenderer {
 			"unixMs":                  func(t time.Time) int64 { return t.UnixMilli() },
 			"join":                    strings.Join,
 			"submissionLink":          submissionLink,
+			"scoreNote":               scoreNote,
 			// taskJudgeFilter — фильтр прогонов ejudge по одной задаче, для
 			// ссылки в заголовке колонки. Пусто — вид не судейский или короткое
 			// имя задачи неизвестно.
@@ -464,6 +465,17 @@ func submissionLink(taskURL string, accounts []domain.Account) string {
 		}
 	}
 	return submissionURL(taskURL, m)
+}
+
+// scoreNote — балл посылки для ленты профиля («· 30») или пусто, если балл
+// ничего не сообщает сверх «решено/попытка»: у решения это полный балл, а у
+// попытки ноль — та же попытка. Без этого задачи «ОК / не ОК» (ejudge в
+// ACM-режиме, Codeforces) показывали «решено · 100» и «попытка · 0».
+func scoreNote(score *int) string {
+	if score == nil || *score <= 0 || *score >= 100 {
+		return ""
+	}
+	return " · " + strconv.Itoa(*score)
 }
 
 func numText(v float64) string {

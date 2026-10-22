@@ -1,0 +1,79 @@
+{{/* Страница ученика для родителей (/standings/child?key=…). Только публичное
+     и только его строки: доска почёта, оценки, контесты с его результатами.
+     Мест нет — в таблице из одной строки они лишь сравнивают с остальными. */}}
+{{define "content"}}
+<section class="page-head">
+  <h1>{{.PublicName}}</h1>
+  <p class="empty-hint">Результаты по контестам групп — только те, где есть посылки. Таблицы обновляются вместе с таблицами групп.</p>
+</section>
+
+{{if not .Groups}}
+<div class="empty-state"><span class="empty-state-icon" aria-hidden="true">📭</span><p>Результатов пока нет.</p></div>
+{{end}}
+
+{{range .Groups}}
+{{$group := .}}
+<section class="child-group">
+  <h2 class="child-group-title">{{.Title}}{{if .Archived}} <span class="archived-badge">🗄 архив</span>{{end}}</h2>
+
+  {{if .Honor}}
+  <section class="contest-block">
+    <div class="contest-block-head"><h2>Решено задач по сайтам</h2></div>
+    <div class="table-wrap">
+      <table class="standings-table">
+        <thead>
+          <tr>
+            <th class="student-col">Ученик</th>
+            <th class="count-col">Сумма</th>
+            {{range .HonorSites}}<th class="count-col">{{.}}</th>{{end}}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="student-name">{{.Honor.PublicName}}</td>
+            <td class="solved-count">{{.Honor.SolvedCountOnPageSites}}</td>
+            {{range .Honor.SolvedCountBySite}}<td class="solved-count">{{.}}</td>{{end}}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+
+  {{with .Grades}}
+  <section class="contest-block">
+    <div class="contest-block-head"><h2>{{if .Title}}{{.Title}}{{else}}Оценки{{end}}</h2></div>
+    <div class="table-wrap">
+      <table class="standings-table">
+        <thead>
+          <tr>
+            <th class="student-col">Ученик</th>
+            {{range .Columns}}<th class="count-col">{{.Title}} <span class="grade-weight">×{{numText .Weight}}</span></th>{{end}}
+            <th class="count-col">Итог</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{$decimals := .Decimals}}
+          {{range .Rows}}
+          <tr>
+            <td class="student-name">{{.PublicName}}</td>
+            {{range .Values}}<td class="solved-count">{{gradeFixed . $decimals}}</td>{{end}}
+            <td class="solved-count"><strong>{{gradeText .Final}}</strong></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+
+  {{range .Contests}}
+  <section class="contest-block" id="contest-{{$group.Slug}}-{{.ID}}">
+    {{template "contestBlockBody" (dict "Contest" . "HidePlace" true "GroupSlug" $group.Slug)}}
+  </section>
+  {{end}}
+</section>
+{{end}}
+
+{{template "contestBlockScripts" (dict "GroupSlug" "child")}}
+{{end}}

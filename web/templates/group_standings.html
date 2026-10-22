@@ -19,6 +19,9 @@
     {{if .Access.CanViewParticipants}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/participants{{if .Token}}?token={{.Token}}{{end}}">Статистика участников</a>
     {{end}}
+    {{if .Access.CanViewParentLinks}}
+    <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/manage/parent-links{{if .Token}}?token={{.Token}}{{end}}" title="Ссылки на страницы учеников с их результатами — чтобы раздать родителям.">👪 Ссылки для родителей</a>
+    {{end}}
     {{if .Access.CanViewIntake}}
     <a class="summary-link-btn" href="/standings/{{.Standings.GroupSlug}}/manage/intake{{if .Token}}?token={{.Token}}{{end}}" title="Кто подал заявку в группу и с какими аккаунтами.">📮 Анкеты</a>
     {{end}}

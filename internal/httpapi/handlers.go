@@ -62,6 +62,9 @@ type Handlers struct {
 	// informatics-ссылки сразу приводятся к этому зеркалу (msk ⇄ mccme), чтобы в
 	// данных не смешивались домены. Пусто — приведение выключено.
 	informaticsBaseURL string
+	// studentLinks — секрет и индекс ссылок на страницы учеников для родителей
+	// (см. student_links.go).
+	studentLinks studentLinksState
 }
 
 // ConfigureInformaticsBaseURL задаёт зеркало informatics, под которое
@@ -710,6 +713,9 @@ func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Reques
 		TokenView:      true,
 		Token:          acc.Token,
 		CanReviewFlags: acc.Has(domain.PermFlagsReview),
+	}
+	if acc.Has(domain.PermViewParentLinks) {
+		page.ParentLink = h.studentLinkURL(id)
 	}
 	h.fillStudentProfilePage(&page, id, &slug)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {

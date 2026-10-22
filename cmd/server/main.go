@@ -31,6 +31,7 @@ func main() {
 		adminCreds       = flag.String("admin-creds-file", "./data/credentials/admin_credentials.json", "path to admin credentials JSON with login/password")
 		intakeCreds      = flag.String("intake-creds-file", "./data/credentials/intake_credentials.json", "path to optional intake token JSON ({\"token\":\"...\"}) protecting POST /api/rpc")
 		informaticsCreds = flag.String("informatics-creds-file", "./data/credentials/informatics_credentials.json", "path to informatics credentials JSON; its base_url задаёт зеркало, под которое приводятся добавляемые informatics-ссылки")
+		studentLinksKey  = flag.String("student-links-key-file", "", "секрет ссылок на страницы учеников для родителей ({\"key\":\"<hex>\"}); по умолчанию <data>/credentials/student_links_key.json. Нет файла — ссылки выключены")
 		templatesDir     = flag.String("templates", "./web/templates", "path to templates")
 		staticDir        = flag.String("static", "./web/static", "path to static files")
 		generateInterval = flag.Duration("generate-interval", 5*time.Minute, "expected auto-generation period (e.g. 5m, 30m, 1h); shows the next-update countdown in the footer. 0 = не показывать")
@@ -100,6 +101,12 @@ func main() {
 		logger.Printf("WARN read informatics credentials %s: %v", *informaticsCreds, err)
 	}
 	handlers.ConfigureGenerateInterval(*generateInterval)
+	// Ссылки для родителей: ключ сервер сам не создаёт — сгенерированный сам
+	// собой, он при потере файла молча поменял бы все розданные ссылки.
+	handlers.ConfigureStudentLinksKeyFile(*studentLinksKey)
+	if err := handlers.StudentLinksStatus(); err != nil {
+		logger.Printf("WARN %v (%s): ссылки на страницы учеников для родителей выключены", err, handlers.StudentLinksKeyPath())
+	}
 	// Разовая миграция: пароли доступов, заведённые до перехода на хеши,
 	// пересчитываются и перестают лежать на диске открытым текстом.
 	handlers.MigrateAccessPasswords()

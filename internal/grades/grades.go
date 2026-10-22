@@ -179,7 +179,7 @@ func computeTableColumn(col domain.GradeColumn, standings domain.GeneratedGroupS
 			if value > cd.contestMax {
 				cd.contestMax = value
 			}
-			if ignoreMissing && participatedInContest(row) {
+			if ignoreMissing && row.Participated() {
 				cd.participated[row.StudentID] = true
 			}
 		}
@@ -235,31 +235,6 @@ func computeTableColumn(col domain.GradeColumn, standings domain.GeneratedGroupS
 		}
 	}
 	return rawByStudent, refByStudent, applies
-}
-
-// participatedInContest — ученик что-то делал в контесте: есть решённые/попытанные
-// задачи или ненулевые баллы (в т.ч. в дорешке). Всё по нулям и без попыток —
-// контест считается пропущенным.
-func participatedInContest(row domain.GeneratedRow) bool {
-	if row.SolvedCount != 0 || row.TotalScore != 0 {
-		return true
-	}
-	for _, s := range row.Statuses {
-		if s == domain.TaskStatusSolved || s == domain.TaskStatusAttempted {
-			return true
-		}
-	}
-	for _, sc := range row.Scores {
-		if sc != nil && *sc != 0 {
-			return true
-		}
-	}
-	for _, sc := range row.PracticeScores {
-		if sc != nil && *sc != 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // contestRowValue — вклад одного контеста в колонку оценки для строки ученика.

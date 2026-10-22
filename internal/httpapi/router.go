@@ -18,6 +18,7 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /standings/admin/logs", handlers.AdminAuth(handlers.AdminLogsPage))
 	mux.HandleFunc("GET /standings/admin/group-accounts", handlers.AdminAuth(handlers.AdminGroupAccounts))
 	mux.HandleFunc("GET /standings/admin/group-grades", handlers.AdminAuth(handlers.AdminGroupGradesPage))
+	mux.HandleFunc("GET /standings/admin/group-parent-links", handlers.AdminAuth(handlers.AdminGroupParentLinksPage))
 	mux.HandleFunc("POST /api/admin/group-grades/save", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupGradesSave))))
 	mux.HandleFunc("POST /api/admin/group-grades/config-save", handlers.AdminAuth(handlers.AuditAdminWrite(handlers.SerializeDataWrite(handlers.AdminGroupGradesConfigSave))))
 	mux.HandleFunc("GET /standings/admin/students", handlers.AdminAuth(handlers.AdminStudentsPage))
@@ -85,6 +86,12 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux.HandleFunc("GET /standings/{group_name}/manage/grades", handlers.GroupManageGradesPage)
 	mux.HandleFunc("GET /standings/{group_name}/manage/intake", handlers.GroupIntakePage)
 	mux.HandleFunc("GET /standings/{group_name}/manage/members", handlers.GroupManageMembersPage)
+	mux.HandleFunc("GET /standings/{group_name}/manage/parent-links", handlers.GroupParentLinksPage)
+	// Страница ученика для родителей. Ключ — в query, а не в пути: шаблон
+	// /standings/child/{key} пересёкся бы с /standings/{group_name}/panel и
+	// прочими, и роутер упал бы при старте. Слаг группы «child» поэтому занят,
+	// как и login/signout/admin.
+	mux.HandleFunc("GET /standings/child", handlers.StudentChildPage)
 	mux.HandleFunc("POST /api/group-panel/members/remove", handlers.SerializeDataWrite(handlers.PanelMemberRemove))
 	mux.HandleFunc("POST /api/group-panel/members/register-names/dry-run", handlers.PanelRegisterNamesDryRun)
 	mux.HandleFunc("POST /api/group-panel/members/register-names/apply", handlers.SerializeDataWrite(handlers.PanelRegisterNamesApply))

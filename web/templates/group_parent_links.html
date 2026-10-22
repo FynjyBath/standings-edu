@@ -1,0 +1,107 @@
+{{define "content"}}
+<section class="page-head">
+  <h1>Ссылки для родителей: {{.GroupTitle}} <span class="grade-weight">({{.GroupSlug}})</span></h1>
+  <p class="summary-links">
+    <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
+    {{if .RoleTitle}}<span class="panel-role-badge">🛠 {{.RoleTitle}}</span>{{end}}
+  </p>
+  <p class="empty-hint">
+    По ссылке — результаты ученика по контестам всех его групп: только его строки и только то, что и так видно на публичных страницах групп. Закрытой статистики (темп, профиль, посылки) там нет.
+    Ссылка у ученика одна, не меняется и угадать её нельзя.
+  </p>
+</section>
+
+{{if .KeyError}}
+<section class="admin-block">
+  <h2>Ссылки выключены</h2>
+  <p class="empty-hint">{{.KeyError}}. Ссылки вычисляются по секретному ключу сервера, а его нет или он негодный. Ключ создаёт администратор один раз — например так:</p>
+  <pre class="admin-log">python3 -c 'import secrets,json;print(json.dumps({"key":secrets.token_hex(32)}))' &gt; {{.KeyPath}}</pre>
+  <p class="empty-hint">Файл нужно беречь и переносить вместе с данными: другой ключ — другие ссылки у всех учеников.</p>
+</section>
+{{else}}
+<section class="admin-block">
+  <h2>Ученики ({{len .Rows}})</h2>
+  {{if .Rows}}
+  <div class="admin-editor-tools">
+    <input type="search" class="filter-input" placeholder="Поиск по имени…" autocomplete="off" spellcheck="false"
+           data-filter-rows="#parent-links-tbody > tr" data-filter-count="#parent-links-count" data-filter-empty="#parent-links-empty" />
+    <span class="filter-count" id="parent-links-count"></span>
+    <button type="button" class="admin-btn admin-btn--secondary" id="parent-links-copy-all" title="ФИО и ссылка через табуляцию, по строке на ученика — вставляется в таблицу для рассылки">Скопировать все</button>
+    <span id="parent-links-status" class="admin-editor-status"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="standings-table">
+      <thead>
+        <tr>
+          <th class="student-col">Ученик</th>
+          <th>ФИО</th>
+          <th>Ссылка</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="parent-links-tbody">
+        {{range .Rows}}
+        <tr data-filter-text="{{.PublicName}} {{.FullName}}" data-full-name="{{if .FullName}}{{.FullName}}{{else}}{{.PublicName}}{{end}}">
+          <td class="student-name">{{.PublicName}}</td>
+          <td>{{.FullName}}</td>
+          <td>{{if .URL}}<a class="parent-link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">открыть ↗</a>{{else}}—{{end}}</td>
+          <td>{{if .URL}}<button type="button" class="admin-btn admin-btn--secondary parent-link-copy">Копировать</button>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty-hint" id="parent-links-empty" hidden>Ничего не найдено.</p>
+  {{else}}
+  <div class="empty-state"><span class="empty-state-icon" aria-hidden="true">👥</span><p>В группе пока нет учеников.</p></div>
+  {{end}}
+</section>
+{{end}}
+
+<script>
+  (function () {
+    var status = document.getElementById("parent-links-status");
+    // Ссылки в разметке относительные — копируем полный адрес этого сервера.
+    function absolute(a) { return new URL(a.getAttribute("href"), location.href).href; }
+    function copy(text, okMsg) {
+      function done() { if (status) status.textContent = okMsg; }
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+      } else {
+        fallback(text);
+        done();
+      }
+    }
+    // Без HTTPS clipboard API недоступен — копируем через скрытое поле.
+    function fallback(text) {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+    document.querySelectorAll(".parent-link-copy").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest("tr");
+        var a = row && row.querySelector("a.parent-link");
+        if (a) copy(absolute(a), "Ссылка скопирована: " + row.getAttribute("data-full-name"));
+      });
+    });
+    var all = document.getElementById("parent-links-copy-all");
+    if (all) {
+      all.addEventListener("click", function () {
+        var lines = [];
+        document.querySelectorAll("#parent-links-tbody > tr").forEach(function (row) {
+          if (row.classList.contains("filtered-out")) return; // уважаем поиск
+          var a = row.querySelector("a.parent-link");
+          if (a) lines.push(row.getAttribute("data-full-name") + "\t" + absolute(a));
+        });
+        copy(lines.join("\n") + "\n", "Скопировано ссылок: " + lines.length);
+      });
+    }
+  })();
+</script>
+{{end}}

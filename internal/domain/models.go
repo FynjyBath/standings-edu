@@ -620,6 +620,32 @@ type GeneratedRow struct {
 	Accounts map[string]string `json:"accounts,omitempty"`
 }
 
+// Participated — ученик что-то делал в контесте: есть решённые/попытанные
+// задачи или ненулевые баллы (в т.ч. в дорешке). Всё по нулям и без попыток —
+// контест считается пропущенным. Правило общее для оценок («не учитывать
+// пропущенные контесты») и страницы ученика для родителей.
+func (row GeneratedRow) Participated() bool {
+	if row.SolvedCount != 0 || row.TotalScore != 0 {
+		return true
+	}
+	for _, s := range row.Statuses {
+		if s == TaskStatusSolved || s == TaskStatusAttempted {
+			return true
+		}
+	}
+	for _, sc := range row.Scores {
+		if sc != nil && *sc != 0 {
+			return true
+		}
+	}
+	for _, sc := range row.PracticeScores {
+		if sc != nil && *sc != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 type GeneratedContestStandings struct {
 	ID          string            `json:"id"`
 	Title       string            `json:"title"`

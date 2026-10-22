@@ -3127,3 +3127,15 @@ span:not(.flag-review-actions) > .flag-subs-btn {
 .table-wrap.has-more-right {
   box-shadow: inset -14px 0 14px -14px color-mix(in srgb, var(--text) 45%, transparent 55%);
 }
+
+/* ── Страница ученика для родителей ───────────────────────────────────────── */
+/* Группа — заголовок над её таблицами: отделяет группы друг от друга, сами
+   таблицы оформлены как на странице группы. */
+.child-group {
+  margin-top: 1.6rem;
+}
+.child-group-title {
+  margin: 0 0 0.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}

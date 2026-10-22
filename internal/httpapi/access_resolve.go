@@ -111,6 +111,9 @@ func (a *GroupAccess) CanCreateKonduit() bool { return a.Has(domain.PermKonduitC
 // CanManageContests — управление списком контестов группы.
 func (a *GroupAccess) CanManageContests() bool { return a.Has(domain.PermContestsManage) }
 
+// CanViewParentLinks — ссылки на страницы учеников для родителей.
+func (a *GroupAccess) CanViewParentLinks() bool { return a.Has(domain.PermViewParentLinks) }
+
 // CanViewIntake — анкеты, поданные в группу (только чтение).
 func (a *GroupAccess) CanViewIntake() bool { return a.Has(domain.PermIntakeView) }
 

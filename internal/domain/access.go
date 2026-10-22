@@ -25,6 +25,7 @@ const (
 	PermViewParticipants Perm = "view.participants" // статистика участников и профили
 	PermViewExport       Perm = "view.export"       // выгрузка в Excel
 	PermViewJudgeLinks   Perm = "view.judge_links"  // ejudge в режиме судьи
+	PermViewParentLinks  Perm = "view.parent_links" // ссылки на страницы учеников для родителей
 	PermIntakeView       Perm = "intake.view"       // анкеты, поданные в эту группу (только чтение)
 
 	// Оценки.
@@ -83,6 +84,7 @@ func PermCatalog() []PermGroup {
 			{PermViewParticipants, "Статистика участников", "Страница участников, профили учеников, темп курса.", false},
 			{PermViewExport, "Выгрузка в Excel", "Скачивать таблицы книгой Excel.", false},
 			{PermViewJudgeLinks, "Судейские ссылки ejudge", "Задачи ejudge открываются в режиме судьи (new-judge).", false},
+			{PermViewParentLinks, "Ссылки для родителей", "Видеть ссылки на страницы учеников группы с их результатами — чтобы раздать родителям. Ссылка у ученика одна и не меняется.", false},
 			{PermIntakeView, "Анкеты своей группы", "Видеть анкеты, поданные в эту группу: ФИО и аккаунты. Только чтение — ученика заводит администратор.", false},
 		}},
 		{Title: "Состав группы", Perms: []PermInfo{
@@ -357,7 +359,7 @@ func ObserverPerms() []Perm {
 	return []Perm{
 		PermViewUnfrozen, PermViewHidden, PermViewTaskLinks,
 		PermViewParticipants, PermViewExport, PermViewJudgeLinks,
-		PermIntakeView,
+		PermViewParentLinks, PermIntakeView,
 	}
 }
 
@@ -386,7 +388,7 @@ func AdminPerms() []Perm {
 // форма его учитывает, если понадобится глобальный пресет.
 func Presets() []AccessPreset {
 	return []AccessPreset{
-		{ID: "observer", Title: "Наблюдатель", Hint: "Полный просмотр: разморозка, скрытое, участники, экспорт, анкеты группы. Ничего не меняет.", Perms: ObserverPerms()},
+		{ID: "observer", Title: "Наблюдатель", Hint: "Полный просмотр: разморозка, скрытое, участники, экспорт, ссылки для родителей, анкеты группы. Ничего не меняет.", Perms: ObserverPerms()},
 		{ID: "jury", Title: "Жюри", Hint: "Наблюдатель + оценки, кондуиты и разметка флагов.", Perms: JuryPerms()},
 		{ID: "admin", Title: "Админ", Hint: "Жюри + контесты группы и общий список контестов сайта, состав группы, приём анкет и правка учеников.", Perms: AdminPerms()},
 	}

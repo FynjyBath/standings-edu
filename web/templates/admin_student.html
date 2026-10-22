@@ -42,6 +42,7 @@
   <h1>{{if $p.PublicName}}{{$p.PublicName}}{{else}}{{.StudentID}}{{end}} <span class="grade-weight">{{.StudentID}}</span></h1>
   <p class="summary-links">
     <a class="summary-link-btn" href="{{.BackURL}}">{{.BackLabel}}</a>
+    {{if .ParentLink}}<a class="summary-link-btn" href="{{.ParentLink}}" target="_blank" rel="noopener noreferrer" title="Результаты ученика по контестам его групп — без закрытой статистики. Ссылку можно отдать родителям: она не меняется.">👪 Страница для родителей</a>{{end}}
   </p>
   {{if $p.Accounts}}
   <div class="account-chips">

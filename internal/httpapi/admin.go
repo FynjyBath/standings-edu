@@ -159,6 +159,10 @@ type AdminStudentProfilePageData struct {
 	// HasGlobalCourse — хотя бы у одного курса есть глобальный вариант темпа
 	// (когорта шире группы): показываем тумблер «эта группа / все группы».
 	HasGlobalCourse bool
+	// ParentLink — ссылка на страницу ученика для родителей: в админке всегда,
+	// у доступа группы — по праву view.parent_links. Пусто — не показываем
+	// (нет права или ключ ссылок не настроен).
+	ParentLink string
 }
 
 // AdminStudentProfilePage — админский профиль участника: активность, аналитика
@@ -180,6 +184,7 @@ func (h *Handlers) AdminStudentProfilePage(w http.ResponseWriter, r *http.Reques
 		BackURL:        "/standings/admin/students",
 		BackLabel:      "← Ученики",
 		CanReviewFlags: true,
+		ParentLink:     h.studentLinkURL(id),
 	}
 	h.fillStudentProfilePage(&page, id, nil)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {

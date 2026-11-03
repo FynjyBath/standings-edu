@@ -549,6 +549,70 @@
     });
   }
 
+  // ── 8. Копирование ссылок и короткие ссылки ─────────────────────────────
+  // <button class="dir-copy" data-url="…"> кладёт в буфер АБСОЛЮТНЫЙ адрес
+  // (его вставляют в мессенджер), а не путь. Обработчик делегированный:
+  // кнопки рисуются и шаблонами, и скриптами (редактор доступов).
+  // <a class="short-link" href="/s/…"> показывает адрес вместе с сайтом
+  // («сайт/s/Ab3xYz»): так видно, что именно отдаёшь.
+  function copyText(text, onDone, onFail) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(onDone, function () { fallback(); });
+    } else {
+      fallback();
+    }
+    // Без HTTPS clipboard API недоступен — копируем через скрытое поле.
+    function fallback() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) { onDone(); } else { onFail(); }
+      } catch (e) {
+        onFail();
+      }
+    }
+  }
+  window.standingsCopyText = copyText;
+
+  function absoluteURL(href) {
+    try { return new URL(href, location.href).href; } catch (e) { return href; }
+  }
+
+  function initCopyButtons() {
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest(".dir-copy[data-url]") : null;
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation(); // кнопка бывает внутри <summary> — не сворачиваем
+      var url = absoluteURL(btn.getAttribute("data-url") || "");
+      if (!btn.dataset.copyLabel) btn.dataset.copyLabel = btn.textContent;
+      copyText(url, function () {
+        btn.classList.add("dir-copy--done");
+        btn.textContent = "✓ Скопировано";
+        clearTimeout(btn._copyTimer);
+        btn._copyTimer = setTimeout(function () {
+          btn.classList.remove("dir-copy--done");
+          btn.textContent = btn.dataset.copyLabel;
+        }, 1400);
+      }, function () {
+        window.prompt("Скопируйте ссылку:", url);
+      });
+    });
+  }
+
+  function paintShortLinks(scope) {
+    (scope || document).querySelectorAll("a.short-link[href]").forEach(function (a) {
+      try {
+        var u = new URL(a.getAttribute("href"), location.href);
+        a.textContent = u.host + u.pathname;
+      } catch (e) {}
+    });
+  }
+  window.standingsPaintShortLinks = paintShortLinks;
+
   function sel(s) { return s ? document.querySelector(s) : null; }
 
   function init() {
@@ -560,6 +624,8 @@
     initStudentFilter();
     initRememberedDetails();
     initWideTables();
+    initCopyButtons();
+    paintShortLinks(document);
   }
   // Для динамически вставленных фрагментов (ленивые таблицы контестов).
   window.standingsInitScope = function (scope) {

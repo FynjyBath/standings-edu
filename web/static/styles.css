@@ -3139,3 +3139,34 @@ span:not(.flag-review-actions) > .flag-subs-btn {
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--line);
 }
+
+/* ── Короткие ссылки (/s/<код>) ───────────────────────────────────────────── */
+/* Рядом с обычной ссылкой: адрес моноширинным (код иногда перепечатывают —
+   так видно каждый символ) и маленькая кнопка копирования. */
+.short-link-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.4rem;
+  white-space: nowrap;
+}
+.short-link {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent 45%);
+}
+.short-link:hover {
+  color: var(--text);
+}
+.short-link-box .dir-copy {
+  padding: 0.12rem 0.4rem;
+}
+/* Ячейка «Страница» в сетке групп админки: кнопка и короткая ссылка — одной
+   ячейкой, чтобы не ломать колонки сетки. */
+.admin-page-cell {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+}

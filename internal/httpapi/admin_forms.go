@@ -322,6 +322,8 @@ type AdminGroupManagePageData struct {
 	GroupSlug  string
 	GroupTitle string
 	ShortName  string
+	// GroupShort — короткая ссылка на страницу группы (/s/<код>).
+	GroupShort string
 	// FormLink — ссылка на форму регистрации/обновления аккаунтов (form_link).
 	FormLink        string
 	Members         []AdminGroupMember
@@ -671,6 +673,7 @@ func (h *Handlers) buildGroupManageData(slug string) (AdminGroupManagePageData, 
 	// Легаси-поля показываем как обычные доступы: первое же сохранение
 	// перенесёт их в accesses (см. AdminGroupAccessesSave).
 	page.Accesses = h.buildAccessEditor(false, slug, "/api/admin/group/accesses/save", groupFile.EffectiveAccesses())
+	page.GroupShort = h.shortLink(groupPageURL(slug))
 	return page, true, nil
 }
 

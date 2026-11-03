@@ -107,6 +107,11 @@ func main() {
 	if err := handlers.StudentLinksStatus(); err != nil {
 		logger.Printf("WARN %v (%s): ссылки на страницы учеников для родителей выключены", err, handlers.StudentLinksKeyPath())
 	}
+	// Короткие ссылки — всем уже существующим ссылкам на таблицы; новые
+	// получат код при первом показе.
+	if n := handlers.EnsureShortLinks(); n > 0 {
+		logger.Printf("INFO короткие ссылки: заведено новых %d", n)
+	}
 	// Разовая миграция: пароли доступов, заведённые до перехода на хеши,
 	// пересчитываются и перестают лежать на диске открытым текстом.
 	handlers.MigrateAccessPasswords()

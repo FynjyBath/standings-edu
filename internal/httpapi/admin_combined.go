@@ -15,6 +15,7 @@ type AdminCombinedGroup struct {
 	Title   string
 	Members []AdminCombinedMember
 	Token   string // токен первого доступа-ссылки (для ссылки преподавателю)
+	Short   string // короткая ссылка на страницу объединения
 }
 
 type AdminCombinedMember struct {
@@ -31,11 +32,15 @@ type AdminCombinedContest struct {
 }
 
 type AdminCombinedManagePageData struct {
-	PageTitle    string
-	Footer       FooterInfo
-	Slug         string
-	Title        string
-	Token        string
+	PageTitle string
+	Footer    FooterInfo
+	Slug      string
+	Title     string
+	Token     string
+	// GroupShort/TokenShort — короткие версии адреса объединения и ссылки
+	// наблюдателя.
+	GroupShort   string
+	TokenShort   string
 	Members      []AdminCombinedMember
 	Contests     []AdminCombinedContest
 	NotGenerated bool // участницы ещё не сгенерированы — контестов нет
@@ -103,6 +108,10 @@ func (h *Handlers) AdminCombinedManagePage(w http.ResponseWriter, r *http.Reques
 		Members:      members,
 		Contests:     contests,
 		NotGenerated: len(contests) == 0,
+	}
+	page.GroupShort = h.shortLink(groupPageURL(slug))
+	if page.Token != "" {
+		page.TokenShort = h.shortLink(accessEntryURL(domain.AccessEntry{Auth: domain.AccessAuthToken, Token: page.Token}, slug))
 	}
 	if err := h.renderer.Render(w, http.StatusOK, "admin_combined.html", page); err != nil {
 		h.logger.Printf("ERROR render combined manage slug=%s: %v", slug, err)
@@ -280,7 +289,7 @@ func (h *Handlers) listCombinedGroups() (combined []AdminCombinedGroup, selectab
 			}
 			continue
 		}
-		item := AdminCombinedGroup{Slug: link.Slug, Title: link.Title}
+		item := AdminCombinedGroup{Slug: link.Slug, Title: link.Title, Short: link.Short}
 		item.Token = h.anyGroupToken(link.Slug)
 		for _, member := range link.Members {
 			title, ok := titleBySlug[member]

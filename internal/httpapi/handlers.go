@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -65,6 +64,8 @@ type Handlers struct {
 	// studentLinks — секрет и индекс ссылок на страницы учеников для родителей
 	// (см. student_links.go).
 	studentLinks studentLinksState
+	// shortStore — короткие ссылки /s/<код> (см. short_links.go).
+	shortStore shortLinkStore
 }
 
 // ConfigureInformaticsBaseURL задаёт зеркало informatics, под которое
@@ -716,6 +717,7 @@ func (h *Handlers) GroupStudentProfilePage(w http.ResponseWriter, r *http.Reques
 	}
 	if acc.Has(domain.PermViewParentLinks) {
 		page.ParentLink = h.studentLinkURL(id)
+		page.ParentShort = h.shortLink(page.ParentLink)
 	}
 	h.fillStudentProfilePage(&page, id, &slug)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
@@ -1059,7 +1061,7 @@ func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
 		item := DirectoryGroup{
 			Slug:       slug,
 			Title:      title,
-			StudentURL: "/standings/" + slug,
+			StudentURL: groupPageURL(slug),
 			Combined:   len(gf.MemberGroups) > 0,
 			Archived:   gf.Archived(),
 		}
@@ -1073,10 +1075,25 @@ func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
 			}
 			item.Links = append(item.Links, DirectoryLink{
 				Title: linkTitle,
-				URL:   "/standings/" + slug + "?token=" + url.QueryEscape(strings.TrimSpace(e.Token)),
+				URL:   accessEntryURL(e, slug),
 			})
 		}
 		out = append(out, item)
+	}
+	// Короткие версии — одним заходом в хранилище на весь каталог.
+	targets := make([]string, 0, len(out))
+	for _, g := range out {
+		targets = append(targets, g.StudentURL)
+		for _, l := range g.Links {
+			targets = append(targets, l.URL)
+		}
+	}
+	shorts := h.shortLinks(targets...)
+	for i := range out {
+		out[i].StudentShort = shorts[out[i].StudentURL]
+		for j := range out[i].Links {
+			out[i].Links[j].Short = shorts[out[i].Links[j].URL]
+		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title)
@@ -1161,6 +1178,8 @@ type IndexPageData struct {
 type DirectoryLink struct {
 	Title string
 	URL   string
+	// Short — короткая версия ссылки (/s/<код>); пусто — не вышло завести.
+	Short string
 }
 
 type DirectoryGroup struct {
@@ -1169,6 +1188,8 @@ type DirectoryGroup struct {
 	// StudentURL — адрес группы без токена: его рассылают ученикам, и по нему же
 	// вошедший преподаватель попадает в группу под своим доступом.
 	StudentURL string
+	// StudentShort — короткая версия StudentURL.
+	StudentShort string
 	// Links — ссылки с токеном (по доступу на ссылку); пусто — показываем только
 	// обычный адрес.
 	Links    []DirectoryLink

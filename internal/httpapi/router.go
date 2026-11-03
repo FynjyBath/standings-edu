@@ -9,6 +9,8 @@ func NewRouter(handlers *Handlers, staticDir string) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
+	// Короткие ссылки на таблицы (см. short_links.go).
+	mux.HandleFunc("GET /s/{code}", handlers.ShortLinkRedirect)
 	mux.HandleFunc("GET /api/groups", handlers.APIGroups)
 	mux.HandleFunc("GET /api/groups/{group_name}/standings", handlers.APIGroupStandings)
 	mux.HandleFunc("POST /api/rpc", handlers.StandingsRPC)

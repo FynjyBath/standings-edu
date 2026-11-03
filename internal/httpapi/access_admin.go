@@ -53,7 +53,7 @@ func (h *Handlers) buildAccessEditor(global bool, slug, saveURL string, list []d
 		list = []domain.AccessEntry{}
 	}
 	data := AccessEditorData{Global: global, Slug: slug, SaveURL: saveURL}
-	data.AccessesJSON = template.JS(mustJSON(accessFormEntries(list)))
+	data.AccessesJSON = template.JS(mustJSON(h.accessFormEntries(list, slug)))
 	data.CatalogJSON = template.JS(mustJSON(domain.PermCatalog()))
 	data.PresetsJSON = template.JS(mustJSON(domain.Presets()))
 	if global {
@@ -72,18 +72,31 @@ type accessFormEntry struct {
 	Enabled     bool   `json:"enabled"`
 	Preset      string `json:"preset"`
 	HasPassword bool   `json:"has_password"`
+	// ShortURL — короткая версия ссылки доступа (/s/<код>) для его ТЕКУЩЕГО
+	// токена; пусто — вход по паролю. Сменили токен в форме — форма её прячет
+	// до сохранения: у нового токена будет свой код.
+	ShortURL string `json:"short_url,omitempty"`
 }
 
 // accessFormEntries — список доступов в виде, пригодном для показа в форме.
-func accessFormEntries(list []domain.AccessEntry) []accessFormEntry {
+// slug — группа ("" — глобальные доступы, их ссылки ведут в каталог).
+func (h *Handlers) accessFormEntries(list []domain.AccessEntry, slug string) []accessFormEntry {
 	if list == nil {
 		list = []domain.AccessEntry{}
 	}
+	targets := make([]string, 0, len(list))
+	for _, e := range list {
+		if u := accessEntryURL(e, slug); u != "" {
+			targets = append(targets, u)
+		}
+	}
+	shorts := h.shortLinks(targets...)
 	rows := make([]accessFormEntry, 0, len(list))
 	for _, e := range list {
 		row := accessFormEntry{AccessEntry: e, Enabled: e.IsEnabled(), Preset: domain.PresetIDFor(e.Perms)}
 		row.HasPassword = strings.TrimSpace(e.Password) != ""
 		row.Password = ""
+		row.ShortURL = shorts[accessEntryURL(e, slug)]
 		rows = append(rows, row)
 	}
 	return rows
@@ -249,7 +262,7 @@ func (h *Handlers) AdminGroupAccessesSave(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.auditAdmin(r, "accesses.save", slug, fmt.Sprintf("доступов %d", len(list)))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accesses": accessFormEntries(list)})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accesses": h.accessFormEntries(list, slug)})
 }
 
 // AdminGlobalAccessesSave — сохранить глобальные доступы.
@@ -273,7 +286,7 @@ func (h *Handlers) AdminGlobalAccessesSave(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.auditAdmin(r, "global-accesses.save", "", fmt.Sprintf("доступов %d", len(list)))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accesses": accessFormEntries(list)})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "accesses": h.accessFormEntries(list, "")})
 }
 
 // MigrateAccessPasswords пересчитывает пароли доступов в хеши: раньше они

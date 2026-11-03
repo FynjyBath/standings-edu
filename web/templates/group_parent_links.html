@@ -26,7 +26,7 @@
     <input type="search" class="filter-input" placeholder="Поиск по имени…" autocomplete="off" spellcheck="false"
            data-filter-rows="#parent-links-tbody > tr" data-filter-count="#parent-links-count" data-filter-empty="#parent-links-empty" />
     <span class="filter-count" id="parent-links-count"></span>
-    <button type="button" class="admin-btn admin-btn--secondary" id="parent-links-copy-all" title="ФИО и ссылка через табуляцию, по строке на ученика — вставляется в таблицу для рассылки">Скопировать все</button>
+    <button type="button" class="admin-btn admin-btn--secondary" id="parent-links-copy-all" title="ФИО, короткая и полная ссылка через табуляцию, по строке на ученика — вставляется в таблицу для рассылки">Скопировать все</button>
     <span id="parent-links-status" class="admin-editor-status"></span>
   </div>
   <div class="table-wrap">
@@ -36,7 +36,7 @@
           <th class="student-col">Ученик</th>
           <th>ФИО</th>
           <th>Ссылка</th>
-          <th></th>
+          <th>Короткая</th>
         </tr>
       </thead>
       <tbody id="parent-links-tbody">
@@ -44,8 +44,8 @@
         <tr data-filter-text="{{.PublicName}} {{.FullName}}" data-full-name="{{if .FullName}}{{.FullName}}{{else}}{{.PublicName}}{{end}}">
           <td class="student-name">{{.PublicName}}</td>
           <td>{{.FullName}}</td>
-          <td>{{if .URL}}<a class="parent-link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">открыть ↗</a>{{else}}—{{end}}</td>
-          <td>{{if .URL}}<button type="button" class="admin-btn admin-btn--secondary parent-link-copy">Копировать</button>{{end}}</td>
+          <td>{{if .URL}}<a class="parent-link" href="{{.URL}}" target="_blank" rel="noopener noreferrer">открыть ↗</a> <button type="button" class="dir-copy" data-url="{{.URL}}" title="Скопировать полную ссылку">⧉ Копировать</button>{{else}}—{{end}}</td>
+          <td>{{if .Short}}{{template "shortLink" .Short}}{{else}}—{{end}}</td>
         </tr>
         {{end}}
       </tbody>
@@ -60,48 +60,28 @@
 
 <script>
   (function () {
+    // Кнопки «Копировать» у строк — общий обработчик .dir-copy (app.js); здесь
+    // только «Скопировать все» для рассылки.
+    var all = document.getElementById("parent-links-copy-all");
     var status = document.getElementById("parent-links-status");
-    // Ссылки в разметке относительные — копируем полный адрес этого сервера.
-    function absolute(a) { return new URL(a.getAttribute("href"), location.href).href; }
-    function copy(text, okMsg) {
-      function done() { if (status) status.textContent = okMsg; }
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
-      } else {
-        fallback(text);
-        done();
-      }
-    }
-    // Без HTTPS clipboard API недоступен — копируем через скрытое поле.
-    function fallback(text) {
-      var ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); } catch (e) {}
-      document.body.removeChild(ta);
-    }
-    document.querySelectorAll(".parent-link-copy").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var row = btn.closest("tr");
-        var a = row && row.querySelector("a.parent-link");
-        if (a) copy(absolute(a), "Ссылка скопирована: " + row.getAttribute("data-full-name"));
+    if (!all) return;
+    function absolute(href) { return new URL(href, location.href).href; }
+    all.addEventListener("click", function () {
+      var lines = [];
+      document.querySelectorAll("#parent-links-tbody > tr").forEach(function (row) {
+        if (row.classList.contains("filtered-out")) return; // уважаем поиск
+        var full = row.querySelector("a.parent-link");
+        if (!full) return;
+        var short = row.querySelector("a.short-link");
+        lines.push([row.getAttribute("data-full-name"), short ? absolute(short.getAttribute("href")) : "", absolute(full.getAttribute("href"))].join("\t"));
+      });
+      var text = lines.join("\n") + "\n";
+      window.standingsCopyText(text, function () {
+        status.textContent = "Скопировано ссылок: " + lines.length;
+      }, function () {
+        status.textContent = "Не удалось скопировать — выделите ссылки вручную";
       });
     });
-    var all = document.getElementById("parent-links-copy-all");
-    if (all) {
-      all.addEventListener("click", function () {
-        var lines = [];
-        document.querySelectorAll("#parent-links-tbody > tr").forEach(function (row) {
-          if (row.classList.contains("filtered-out")) return; // уважаем поиск
-          var a = row.querySelector("a.parent-link");
-          if (a) lines.push(row.getAttribute("data-full-name") + "\t" + absolute(a));
-        });
-        copy(lines.join("\n") + "\n", "Скопировано ссылок: " + lines.length);
-      });
-    }
   })();
 </script>
 {{end}}

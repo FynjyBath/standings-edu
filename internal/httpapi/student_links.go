@@ -403,6 +403,8 @@ type ParentLinkRow struct {
 	PublicName string
 	FullName   string
 	URL        string
+	// Short — короткая версия ссылки (/s/<код>).
+	Short string
 }
 
 // GroupParentLinksPage — ссылки на страницы учеников группы (право
@@ -464,6 +466,16 @@ func (h *Handlers) renderParentLinksPage(w http.ResponseWriter, r *http.Request,
 			row.URL = h.studentLinkURL(id)
 		}
 		page.Rows = append(page.Rows, row)
+	}
+	targets := make([]string, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		if row.URL != "" {
+			targets = append(targets, row.URL)
+		}
+	}
+	shorts := h.shortLinks(targets...)
+	for i := range page.Rows {
+		page.Rows[i].Short = shorts[page.Rows[i].URL]
 	}
 	sort.SliceStable(page.Rows, func(i, j int) bool {
 		return strings.ToLower(page.Rows[i].PublicName) < strings.ToLower(page.Rows[j].PublicName)

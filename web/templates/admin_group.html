@@ -3,7 +3,7 @@
   <h1>Группа: {{.GroupTitle}} <span class="grade-weight">({{.GroupSlug}})</span></h1>
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/admin">← В админку</a>
-    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}" target="_blank" rel="noopener noreferrer">Страница группы</a>
+    <a class="summary-link-btn" href="/standings/{{.GroupSlug}}" target="_blank" rel="noopener noreferrer">Страница группы</a>{{template "shortLink" .GroupShort}}
     <a class="summary-link-btn" href="/standings/admin/group-accounts?slug={{.GroupSlug}}">Аккаунты</a>
     <a class="summary-link-btn" href="/standings/admin/group-grades?slug={{.GroupSlug}}">Оценки (ручные)</a>
     <a class="summary-link-btn" href="/standings/admin/group-parent-links?slug={{.GroupSlug}}">👪 Ссылки для родителей</a>

@@ -9,11 +9,13 @@
         <div class="dir-card-links">
           <span class="dir-links">
             <a class="summary-link-btn" href="{{.StudentURL}}" target="_blank" rel="noopener noreferrer">Перейти&nbsp;↗</a>
+            {{template "shortLink" .StudentShort}}
           </span>
           {{range .Links}}
           <span class="dir-links">
             <a class="summary-link-btn" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}&nbsp;↗</a>
             <button type="button" class="dir-copy" data-url="{{.URL}}" title="Скопировать секретную ссылку доступа «{{.Title}}»">⧉ Копировать</button>
+            {{template "shortLink" .Short}}
           </span>
           {{end}}
         </div>
@@ -77,7 +79,7 @@
 
 <script>
   (function () {
-    // Фильтр каталога по названию/slug и копирование ссылок в буфер.
+    // Фильтр каталога по названию/slug (копирование ссылок — в app.js).
     var filter = document.getElementById("dir-filter");
     var countNode = document.getElementById("dir-count");
     var emptyNode = document.getElementById("dir-empty");
@@ -120,40 +122,6 @@
     if (filter) filter.addEventListener("input", applyFilter);
     applyFilter();
 
-    document.querySelectorAll(".dir-copy").forEach(function (btn) {
-      var original = btn.textContent;
-      var timer = null;
-      btn.addEventListener("click", function () {
-        var url = btn.getAttribute("data-url") || "";
-        // Копируем абсолютную ссылку (её вставляют в мессенджер), а не путь.
-        try { url = new URL(url, location.href).href; } catch (e) {}
-        function ok() {
-          btn.classList.add("dir-copy--done");
-          btn.textContent = "✓ Скопировано";
-          if (timer) clearTimeout(timer);
-          timer = setTimeout(function () {
-            btn.classList.remove("dir-copy--done");
-            btn.textContent = original;
-          }, 1400);
-        }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(ok, fallback);
-        } else {
-          fallback();
-        }
-        function fallback() {
-          try {
-            var ta = document.createElement("textarea");
-            ta.value = url; ta.style.position = "fixed"; ta.style.opacity = "0";
-            document.body.appendChild(ta); ta.select();
-            document.execCommand("copy"); document.body.removeChild(ta);
-            ok();
-          } catch (e) {
-            btn.textContent = "не вышло — скопируйте вручную";
-          }
-        }
-      });
-    });
   })();
 </script>
 {{else}}

@@ -89,9 +89,11 @@ type AdminPageData struct {
 }
 
 type AdminGroupLink struct {
-	Slug       string
-	Title      string
-	URL        string
+	Slug  string
+	Title string
+	URL   string
+	// Short — короткая версия URL (/s/<код>).
+	Short      string
 	IsCombined bool
 	Members    []string
 	// Archived — группа в архиве (update=false): не пересобирается при генерации,
@@ -163,6 +165,8 @@ type AdminStudentProfilePageData struct {
 	// у доступа группы — по праву view.parent_links. Пусто — не показываем
 	// (нет права или ключ ссылок не настроен).
 	ParentLink string
+	// ParentShort — короткая версия ParentLink.
+	ParentShort string
 }
 
 // AdminStudentProfilePage — админский профиль участника: активность, аналитика
@@ -186,6 +190,7 @@ func (h *Handlers) AdminStudentProfilePage(w http.ResponseWriter, r *http.Reques
 		CanReviewFlags: true,
 		ParentLink:     h.studentLinkURL(id),
 	}
+	page.ParentShort = h.shortLink(page.ParentLink)
 	h.fillStudentProfilePage(&page, id, nil)
 	if err := h.renderer.Render(w, http.StatusOK, "admin_student.html", page); err != nil {
 		h.logger.Printf("ERROR render admin student profile id=%s err=%v", id, err)
@@ -1003,6 +1008,14 @@ func (h *Handlers) listAdminGroupLinks() ([]AdminGroupLink, error) {
 		})
 	}
 
+	targets := make([]string, 0, len(out))
+	for _, g := range out {
+		targets = append(targets, g.URL)
+	}
+	shorts := h.shortLinks(targets...)
+	for i := range out {
+		out[i].Short = shorts[out[i].URL]
+	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Slug < out[j].Slug
 	})

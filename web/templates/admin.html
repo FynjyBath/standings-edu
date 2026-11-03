@@ -96,7 +96,7 @@
     <li data-filter-text="{{.Title}} {{.Slug}}">
       <a class="admin-btn" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
       <span>({{.Slug}})</span>
-      <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+      <span class="admin-page-cell"><a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>{{template "shortLink" .Short}}</span>
       <a class="admin-btn admin-btn--secondary" href="/standings/admin/group-accounts?slug={{.Slug}}">Аккаунты</a>
       <a class="admin-btn admin-btn--secondary" href="/standings/admin/group-grades?slug={{.Slug}}">Оценки</a>
     </li>
@@ -125,7 +125,7 @@
       <li data-filter-text="{{.Title}} {{.Slug}}">
         <a class="admin-btn admin-btn--secondary" href="/standings/admin/group?slug={{.Slug}}">{{.Title}}</a>
         <span>({{.Slug}})</span>
-        <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+        <span class="admin-page-cell"><a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>{{template "shortLink" .Short}}</span>
         <span class="archived-badge">🗄 в архиве</span>
       </li>
       {{end}}
@@ -152,7 +152,7 @@
         <a class="admin-btn combined-item-title" href="/standings/admin/combined?slug={{.Slug}}">{{.Title}}</a>
         <span class="grade-weight">({{.Slug}})</span>
         <span class="combined-item-actions">
-          <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>
+          <a class="admin-btn admin-btn--secondary" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница</a>{{template "shortLink" .Short}}
           <a class="admin-btn admin-btn--secondary" href="/standings/admin/combined?slug={{.Slug}}">Настроить{{if .Token}} 🔑{{end}}</a>
           <button type="button" class="admin-btn admin-btn--secondary combined-edit">Изменить состав</button>
           <button type="button" class="admin-btn admin-btn--secondary combined-delete">Удалить</button>

@@ -3,7 +3,7 @@
   <h1>Объединённая: {{.Title}} <span class="grade-weight">({{.Slug}})</span></h1>
   <p class="summary-links">
     <a class="summary-link-btn" href="/standings/admin">← В админку</a>
-    <a class="summary-link-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница объединения</a>
+    <a class="summary-link-btn" href="/standings/{{.Slug}}" target="_blank" rel="noopener noreferrer">Страница объединения</a>{{template "shortLink" .GroupShort}}
   </p>
   <p class="empty-hint">👥 Составлена из групп: {{range $i, $m := .Members}}{{if $i}} · {{end}}{{if $m.Missing}}<span class="text-warn">{{$m.Slug}}?</span>{{else}}{{$m.Title}}{{end}}{{end}}. Состав групп меняется на главной странице админки.</p>
 </section>
@@ -13,6 +13,7 @@
   {{if .Token}}
   <p>Токен: <code id="jury-token">{{.Token}}</code></p>
   <p>Ссылка наблюдателя: <a id="jury-link" href="/standings/{{.Slug}}?token={{.Token}}" target="_blank" rel="noopener noreferrer"></a></p>
+  {{if .TokenShort}}<p>Короткая: {{template "shortLink" .TokenShort}}</p>{{end}}
   <p class="empty-hint">По ссылке замороженные контесты показываются полностью и доступна статистика участников. Смена или удаление токена действует сразу.</p>
   {{else}}
   <p class="empty-hint">Токен не задан — размороженный просмотр и статистика участников недоступны. Сгенерируйте токен и отдайте ссылку тем, кому нужен только просмотр.</p>

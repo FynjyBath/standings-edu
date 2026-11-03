@@ -33,6 +33,13 @@
       try { return JSON.parse(document.getElementById(id).textContent || "") || fallback; } catch (e) { return fallback; }
     }
     var accesses = readJSON("acc-data", []);
+    // Короткая ссылка (short_url) заведена сервером для токена, с которым
+    // доступ пришёл. Поменяли токен в форме — она к нему уже не относится.
+    function rememberShort(list) { list.forEach(function (e) { e.short_token = e.token || ""; }); }
+    function shortOf(entry) {
+      return entry.short_url && (entry.token || "") === entry.short_token ? entry.short_url : "";
+    }
+    rememberShort(accesses);
     // Карточки свёрнуты; что раскрыто — помним по ключу, чтобы перерисовка
     // (смена входа, пресета, области) не захлопывала открытую карточку.
     var keySeq = 0;
@@ -139,6 +146,14 @@
           }
         });
         tools.appendChild(copy);
+        if (shortOf(entry)) {
+          // Общий обработчик .dir-copy[data-url] (app.js) копирует абсолютный адрес.
+          var copyShort = el("button", "dir-copy", "⧉ Короткую");
+          copyShort.type = "button";
+          copyShort.setAttribute("data-url", shortOf(entry));
+          copyShort.title = "Скопировать короткую ссылку";
+          tools.appendChild(copyShort);
+        }
       }
       var del = el("button", "admin-btn admin-btn--secondary", "Убрать");
       del.type = "button";
@@ -240,13 +255,26 @@
 
       // Готовая ссылка — то, что реально отдают преподавателю.
       var link = el("p", "access-link");
+      var shortLine = el("p", "access-link");
       function linkOut() {
+        shortLine.textContent = "";
         if ((entry.auth || "token") !== "token" || !entry.token) { link.textContent = ""; return; }
         var base = location.origin + (GLOBAL ? "/standings" : "/standings/" + SLUG);
         link.textContent = base + "?token=" + entry.token;
+        var short = shortOf(entry);
+        if (short) {
+          shortLine.appendChild(document.createTextNode("Короткая: "));
+          var a = el("a", "short-link", short);
+          a.href = short; a.target = "_blank"; a.rel = "noopener noreferrer";
+          shortLine.appendChild(a);
+          if (window.standingsPaintShortLinks) window.standingsPaintShortLinks(shortLine);
+        } else {
+          shortLine.textContent = "Короткая ссылка появится после сохранения.";
+        }
       }
       linkOut();
       wrap.appendChild(link);
+      wrap.appendChild(shortLine);
 
       // ── Пресет ──
       var presetRow = el("div", "access-row");
@@ -396,6 +424,7 @@
             e.enabled = e.enabled !== false;
             return e;
           });
+          rememberShort(accesses);
           expanded = {}; // сохранили — можно всё свернуть
           render();
           setStatus("Сохранено", false);

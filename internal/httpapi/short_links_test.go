@@ -134,7 +134,7 @@ func TestEnsureShortLinksCoversExistingLinks(t *testing.T) {
 	writeTestFile(t, filepath.Join(dataDir, "credentials", "global_accesses.json"),
 		`[{"id":"gl","title":"Куратор","auth":"token","token":"GLTOK","scope":"all","perms":["view.directory"]}]`)
 
-	created := h.EnsureShortLinks()
+	created, _ := h.EnsureShortLinks()
 	if created == 0 {
 		t.Fatal("ссылки должны были завестись")
 	}
@@ -160,7 +160,7 @@ func TestEnsureShortLinksCoversExistingLinks(t *testing.T) {
 			t.Errorf("нет короткой ссылки для %s", want)
 		}
 	}
-	if again := h.EnsureShortLinks(); again != 0 {
+	if again, _ := h.EnsureShortLinks(); again != 0 {
 		t.Errorf("повторный старт не должен заводить новых, завёл %d", again)
 	}
 
@@ -253,5 +253,93 @@ func TestRouterBuildsWithShortLinks(t *testing.T) {
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, short, nil))
 	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/standings/g1" {
 		t.Errorf("через роутер: code=%d location=%q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// Короткая ссылка — только у ссылок, по которым нельзя ничего менять. Доступ с
+// хоть одним изменяющим правом (даже выключенный: включат — даст права) её не
+// получает; доступу дали такое право — его короткая ссылка перестаёт работать
+// сразу, а при старте сервера код вычищается из файла.
+func TestShortLinksOnlyForViewOnlyAccesses(t *testing.T) {
+	h, dataDir := childTestSetup(t)
+	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"), `{"title":"Альфа","student_ids":["s1","s2"],
+		"accesses":[
+			{"id":"obs","title":"Наблюдатель","auth":"token","token":"OBSTOK","perms":["view.unfrozen","view.participants","view.parent_links","intake.view"]},
+			{"id":"jury","title":"Жюри","auth":"token","token":"JURYTOK","perms":["view.unfrozen","grades.manual"]},
+			{"id":"off","title":"Выключенный админ","enabled":false,"auth":"token","token":"OFFTOK","perms":["contests.manage"]}]}`)
+	writeTestFile(t, filepath.Join(dataDir, "credentials", "global_accesses.json"), `[
+		{"id":"gv","title":"Куратор","auth":"token","token":"GVIEW","scope":"all","perms":["view.directory","view.participants"]},
+		{"id":"ga","title":"Завуч","auth":"token","token":"GEDIT","scope":"all","perms":["view.directory","members.manage"]}]`)
+
+	if h.shortLink("/standings/g1") == "" || h.shortLink(childLink(t, "s1")) == "" {
+		t.Error("адрес группы и страница ученика только для просмотра — короткие ссылки положены")
+	}
+	if h.shortLink("/standings/g1?token=OBSTOK") == "" || h.shortLink("/standings?token=GVIEW") == "" {
+		t.Error("доступам только на просмотр короткая ссылка положена")
+	}
+	for _, target := range []string{
+		"/standings/g1?token=JURYTOK", // оценки — изменение
+		"/standings/g1?token=OFFTOK",  // выключен, но включат — даст права
+		"/standings?token=GEDIT",      // глобальный, меняет состав
+		"/standings/g1?token=GEDIT",   // тот же глобальный токен по адресу группы
+	} {
+		if got := h.shortLink(target); got != "" {
+			t.Errorf("%s: доступ меняет данные — короткой ссылки быть не должно, получено %q", target, got)
+		}
+	}
+
+	// Интерфейс: в каталоге и редакторе у изменяющих доступов коротких нет.
+	req := httptest.NewRequest(http.MethodGet, "/standings?token=GVIEW", nil)
+	rec := httptest.NewRecorder()
+	h.IndexPage(rec, req)
+	dir := rec.Body.String()
+	if !strings.Contains(dir, `href="`+h.shortLink("/standings/g1?token=OBSTOK")+`"`) {
+		t.Error("в каталоге должна быть короткая ссылка наблюдателя")
+	}
+	if strings.Count(dir, `class="short-link"`) != len(h.allGroupSlugs())+1 {
+		t.Errorf("в каталоге коротких ссылок %d: ждали по одной на группу и одну — наблюдателя",
+			strings.Count(dir, `class="short-link"`))
+	}
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(h.buildAccessEditor(false, "g1", "/x", h.groupAccesses("g1")).AccessesJSON), &entries); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		_, has := e["short_url"]
+		if want := e["token"] == "OBSTOK"; has != want {
+			t.Errorf("редактор: доступ %v — short_url есть=%v, а положено %v", e["title"], has, want)
+		}
+	}
+
+	// Наблюдателю добавили право на изменение: его короткая ссылка сразу 404,
+	// а при старте код удаляется из файла.
+	obsShort := h.shortLink("/standings/g1?token=OBSTOK")
+	if code := shortGet(t, h, obsShort, "", "").Code; code != http.StatusFound {
+		t.Fatalf("до изменения прав: code=%d", code)
+	}
+	writeTestFile(t, filepath.Join(dataDir, "groups", "g1", "group.json"), `{"title":"Альфа","student_ids":["s1","s2"],
+		"accesses":[{"id":"obs","title":"Наблюдатель","auth":"token","token":"OBSTOK","perms":["view.unfrozen","konduit.fill"]}]}`)
+	if code := shortGet(t, h, obsShort, "", "").Code; code != http.StatusNotFound {
+		t.Errorf("после выдачи права на изменение короткая ссылка должна отвечать 404, code=%d", code)
+	}
+	// Пока код ещё в файле (до перезапуска), отказ по нему — не перебор: в
+	// лимит промахов не идёт. После чистки при старте он — обычный неизвестный
+	// код и засчитывается, как любой другой.
+	for i := 0; i < shortMissLimit+5; i++ {
+		shortGet(t, h, obsShort, "192.0.2.9:1", "")
+	}
+	if code := shortGet(t, h, h.shortLink("/standings/g1"), "192.0.2.9:1", "").Code; code != http.StatusFound {
+		t.Errorf("переходы по отозванному коду не должны блокировать адрес, code=%d", code)
+	}
+	_, removed := h.EnsureShortLinks()
+	if removed != 1 {
+		t.Errorf("при старте должен удалиться 1 код, удалено %d", removed)
+	}
+	blob, err := os.ReadFile(filepath.Join(dataDir, "credentials", "short_links.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(blob), "OBSTOK") {
+		t.Error("код доступа, который теперь меняет данные, должен исчезнуть из файла")
 	}
 }

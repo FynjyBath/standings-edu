@@ -36,6 +36,9 @@ type AccessEditorData struct {
 	PresetsJSON template.JS
 	// GroupsJSON — все группы (для области действия «выбранные»).
 	GroupsJSON template.JS
+	// ReadOnlyJSON — права только на просмотр: короткая ссылка положена лишь
+	// доступу, у которого все права отсюда (см. short_links.go).
+	ReadOnlyJSON template.JS
 }
 
 // accessEditorGroup — группа в списке выбора области действия.
@@ -56,6 +59,7 @@ func (h *Handlers) buildAccessEditor(global bool, slug, saveURL string, list []d
 	data.AccessesJSON = template.JS(mustJSON(h.accessFormEntries(list, slug)))
 	data.CatalogJSON = template.JS(mustJSON(domain.PermCatalog()))
 	data.PresetsJSON = template.JS(mustJSON(domain.Presets()))
+	data.ReadOnlyJSON = template.JS(mustJSON(domain.ReadOnlyPermList()))
 	if global {
 		data.GroupsJSON = template.JS(mustJSON(h.accessEditorGroups()))
 	} else {
@@ -73,8 +77,9 @@ type accessFormEntry struct {
 	Preset      string `json:"preset"`
 	HasPassword bool   `json:"has_password"`
 	// ShortURL — короткая версия ссылки доступа (/s/<код>) для его ТЕКУЩЕГО
-	// токена; пусто — вход по паролю. Сменили токен в форме — форма её прячет
-	// до сохранения: у нового токена будет свой код.
+	// токена; пусто — вход по паролю или доступ что-то меняет (таким короткая
+	// ссылка не положена). Сменили токен в форме — форма её прячет до
+	// сохранения: у нового токена будет свой код.
 	ShortURL string `json:"short_url,omitempty"`
 }
 

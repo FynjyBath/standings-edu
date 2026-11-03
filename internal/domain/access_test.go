@@ -162,3 +162,32 @@ func TestPresetPermsAreKnown(t *testing.T) {
 		}
 	}
 }
+
+// Только просмотр — ровно права view.* и intake.view; всё остальное что-то
+// меняет. Новое право по умолчанию считается изменяющим.
+func TestReadOnlyPerms(t *testing.T) {
+	if !ReadOnlyPerms(ObserverPerms()) {
+		t.Error("«Наблюдатель» — только просмотр")
+	}
+	if !ReadOnlyPerms([]Perm{PermViewDirectory}) || !ReadOnlyPerms(nil) {
+		t.Error("каталог и пустой набор — только просмотр")
+	}
+	for _, p := range []Perm{PermGradesManual, PermGradesConfig, PermKonduitFill, PermKonduitCreate,
+		PermMembersManage, PermMembersRegister, PermStudentsEdit, PermIntakeMerge,
+		PermActionsGenerate, PermActionsResetCache, PermFlagsReview,
+		PermContestsManage, PermContestsInline, PermContestsGlobal, Perm("new.unknown")} {
+		if p.ReadOnly() || ReadOnlyPerms([]Perm{PermViewUnfrozen, p}) {
+			t.Errorf("%s меняет данные — не только просмотр", p)
+		}
+	}
+	// Каждое право каталога явно классифицировано: в списке «только просмотр»
+	// ровно view.* и intake.view.
+	for _, g := range PermCatalog() {
+		for _, info := range g.Perms {
+			want := strings.HasPrefix(string(info.Perm), "view.") || info.Perm == PermIntakeView
+			if info.Perm.ReadOnly() != want {
+				t.Errorf("%s: ReadOnly=%v, ожидалось %v", info.Perm, info.Perm.ReadOnly(), want)
+			}
+		}
+	}
+}

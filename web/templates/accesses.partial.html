@@ -24,6 +24,7 @@
 <script id="acc-catalog" type="application/json">{{.CatalogJSON}}</script>
 <script id="acc-presets" type="application/json">{{.PresetsJSON}}</script>
 <script id="acc-groups" type="application/json">{{.GroupsJSON}}</script>
+<script id="acc-readonly" type="application/json">{{.ReadOnlyJSON}}</script>
 <script>
   (function () {
     var GLOBAL = {{.Global}};
@@ -38,6 +39,12 @@
     function rememberShort(list) { list.forEach(function (e) { e.short_token = e.token || ""; }); }
     function shortOf(entry) {
       return entry.short_url && (entry.token || "") === entry.short_token ? entry.short_url : "";
+    }
+    // Короткая ссылка положена только доступу, по которому нельзя ничего
+    // менять: все его права — из списка «только просмотр».
+    var readOnlyPerms = readJSON("acc-readonly", []);
+    function viewOnly(entry) {
+      return (entry.perms || []).every(function (p) { return readOnlyPerms.indexOf(p) >= 0; });
     }
     rememberShort(accesses);
     // Карточки свёрнуты; что раскрыто — помним по ключу, чтобы перерисовка
@@ -268,8 +275,13 @@
           a.href = short; a.target = "_blank"; a.rel = "noopener noreferrer";
           shortLine.appendChild(a);
           if (window.standingsPaintShortLinks) window.standingsPaintShortLinks(shortLine);
-        } else {
+          if (!viewOnly(entry)) {
+            shortLine.appendChild(document.createTextNode(" — после сохранения перестанет работать: доступ сможет менять данные."));
+          }
+        } else if (viewOnly(entry)) {
           shortLine.textContent = "Короткая ссылка появится после сохранения.";
+        } else {
+          shortLine.textContent = "Короткой ссылки нет: доступ может менять данные — давайте только полную.";
         }
       }
       linkOut();
@@ -320,6 +332,7 @@
             entry.perms = perms;
             presetSel.value = presetFor(perms);
             hint.textContent = "";
+            linkOut(); // короткая ссылка зависит от того, меняет ли доступ данные
           });
           lab.appendChild(cb);
           lab.appendChild(el("span", null, info.Title));

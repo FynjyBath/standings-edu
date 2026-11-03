@@ -2,9 +2,16 @@ package httpapi
 
 // Короткие ссылки: /s/<6 символов> → редирект на полную ссылку на таблицы.
 //
-// Короткая ссылка есть у каждой ссылки, которую интерфейс показывает, чтобы её
-// раздали: адрес группы, ссылки доступов с токеном (групповых и глобальных) и
-// страницы учеников для родителей. Код случайный и привязан к ПОЛНОМУ адресу,
+// Короткая ссылка есть у ссылок, которые интерфейс показывает, чтобы их
+// раздали, — но только у тех, по которым НЕЛЬЗЯ НИЧЕГО МЕНЯТЬ: адрес группы,
+// страницы учеников для родителей и ссылки доступов с токеном, чьи права
+// только на просмотр (domain.ReadOnlyPerms). У доступа, который что-то меняет
+// (оценки, кондуиты, состав, контесты…), короткой ссылки нет: шесть символов
+// защищают слабее токена, и такой ключ к правке им не доверяем. Проверка идёт
+// и при переходе: дали доступу права на изменение — его короткая ссылка сразу
+// перестаёт работать, а при старте сервера вычищается из файла.
+//
+// Код случайный и привязан к ПОЛНОМУ адресу,
 // а не к доступу: сменили токен — у нового адреса свой код, а старый ведёт на
 // адрес с отменённым токеном, то есть на публичный вид. Так короткая ссылка
 // никогда не переживает отзыв доступа.
@@ -121,8 +128,9 @@ func (h *Handlers) shortLinks(targets ...string) map[string]string {
 		return out
 	}
 	created := make([]string, 0) // адреса, получившие код в этом вызове
+	allowed := h.newShortTargetChecker()
 	for _, target := range targets {
-		if !validShortTarget(target) {
+		if !validShortTarget(target) || !allowed.check(target) {
 			continue
 		}
 		if code, ok := s.byTarget[target]; ok {
@@ -237,11 +245,61 @@ func accessEntryURL(entry domain.AccessEntry, slug string) string {
 	return base + "?token=" + url.QueryEscape(strings.TrimSpace(entry.Token))
 }
 
+// shortTargetChecker решает, можно ли адресу иметь короткую ссылку: да, если
+// по нему нельзя ничего менять. Адрес без токена (группа, страница ученика) —
+// можно. С токеном — только если КАЖДЫЙ доступ с этим токеном (групповой или
+// глобальный, включённый или выключенный: включат — даст права) только на
+// просмотр. Токен, которого нет ни у одного доступа, ничего не открывает —
+// ссылка ведёт на публичный вид, её можно оставить. Доступы читаются один раз
+// на проверяльщик.
+type shortTargetChecker struct {
+	h            *Handlers
+	groups       map[string][]domain.AccessEntry
+	global       []domain.AccessEntry
+	globalLoaded bool
+}
+
+func (h *Handlers) newShortTargetChecker() *shortTargetChecker {
+	return &shortTargetChecker{h: h, groups: map[string][]domain.AccessEntry{}}
+}
+
+func (c *shortTargetChecker) check(target string) bool {
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	token := strings.TrimSpace(u.Query().Get("token"))
+	if token == "" {
+		return true
+	}
+	if !c.globalLoaded {
+		c.global = c.h.loadGlobalAccesses()
+		c.globalLoaded = true
+	}
+	entries := append([]domain.AccessEntry(nil), c.global...)
+	if slug, ok := strings.CutPrefix(u.Path, "/standings/"); ok && domain.IsValidSlug(slug) {
+		group, cached := c.groups[slug]
+		if !cached {
+			group = c.h.groupAccesses(slug)
+			c.groups[slug] = group
+		}
+		entries = append(entries, group...)
+	}
+	for _, e := range entries {
+		if e.Auth == domain.AccessAuthToken && strings.TrimSpace(e.Token) == token && !domain.ReadOnlyPerms(e.Perms) {
+			return false
+		}
+	}
+	return true
+}
+
 // EnsureShortLinks заводит короткие ссылки всем существующим ссылкам на
-// таблицы: группам, доступам с токеном, страницам учеников для родителей.
+// таблицы, по которым нельзя ничего менять (группам, доступам только на
+// просмотр, страницам учеников для родителей), и вычищает коды ссылок, которым
+// короткая версия больше не положена (доступу дали права на изменение).
 // Вызывается при старте сервера; новые ссылки дальше получают код при первом
-// показе. Возвращает, сколько кодов заведено.
-func (h *Handlers) EnsureShortLinks() int {
+// показе. Возвращает, сколько кодов заведено и сколько удалено.
+func (h *Handlers) EnsureShortLinks() (created, removed int) {
 	targets := make([]string, 0)
 	for _, slug := range h.allGroupSlugs() {
 		targets = append(targets, groupPageURL(slug))
@@ -264,18 +322,49 @@ func (h *Handlers) EnsureShortLinks() int {
 		}
 	}
 
+	removed = h.purgeShortLinks()
+
 	h.shortStore.mu.Lock()
-	if err := h.loadShortLinksLocked(); err != nil {
-		h.shortStore.mu.Unlock()
-		h.logger.Printf("WARN short links: %v", err)
-		return 0
-	}
 	before := len(h.shortStore.byCode)
 	h.shortStore.mu.Unlock()
 	h.shortLinks(targets...)
 	h.shortStore.mu.Lock()
 	defer h.shortStore.mu.Unlock()
-	return len(h.shortStore.byCode) - before
+	return len(h.shortStore.byCode) - before, removed
+}
+
+// purgeShortLinks удаляет из файла коды ссылок, которым короткая версия не
+// положена. Возвращает, сколько удалено.
+func (h *Handlers) purgeShortLinks() int {
+	s := &h.shortStore
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := h.loadShortLinksLocked(); err != nil {
+		h.logger.Printf("WARN short links: %v", err)
+		return 0
+	}
+	allowed := h.newShortTargetChecker()
+	removed := make(map[string]string)
+	for code, target := range s.byCode {
+		if !allowed.check(target) {
+			removed[code] = target
+		}
+	}
+	if len(removed) == 0 {
+		return 0
+	}
+	for code, target := range removed {
+		delete(s.byCode, code)
+		if s.byTarget[target] == code {
+			delete(s.byTarget, target)
+		}
+	}
+	if err := fileutil.WriteJSON(h.shortLinksPath(), s.byCode, 0o600); err != nil {
+		// Файл не переписали — не беда: переход по таким кодам всё равно
+		// закрыт проверкой в ShortLinkRedirect.
+		h.logger.Printf("WARN short links: save after purge: %v", err)
+	}
+	return len(removed)
 }
 
 // ── Переход по короткой ссылке ──────────────────────────────────────────────
@@ -302,6 +391,13 @@ func (h *Handlers) ShortLinkRedirect(w http.ResponseWriter, r *http.Request) {
 			target = s.byCode[code]
 		}
 		s.mu.Unlock()
+	}
+	// Код настоящий, но ссылке короткая версия больше не положена (доступу
+	// дали права на изменение) — как будто кода нет. Это не перебор, в лимит
+	// промахов не засчитываем.
+	if target != "" && !h.newShortTargetChecker().check(target) {
+		http.NotFound(w, r)
+		return
 	}
 	if target == "" {
 		h.recordShortMiss(client)

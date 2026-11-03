@@ -141,6 +141,47 @@ func PermTitle(p Perm) string {
 	return string(p)
 }
 
+// readOnlyPerms — права, по которым ничего нельзя изменить: только смотреть.
+// Список явный, а не «всё, что начинается с view.»: новое право должно попасть
+// сюда осознанно, иначе оно считается изменяющим (безопасная сторона).
+var readOnlyPerms = map[Perm]bool{
+	PermViewUnfrozen:     true,
+	PermViewHidden:       true,
+	PermViewTaskLinks:    true,
+	PermViewParticipants: true,
+	PermViewExport:       true,
+	PermViewJudgeLinks:   true,
+	PermViewParentLinks:  true,
+	PermIntakeView:       true,
+	PermViewDirectory:    true,
+}
+
+// ReadOnly — по праву можно только смотреть, ничего не меняя.
+func (p Perm) ReadOnly() bool { return readOnlyPerms[p] }
+
+// ReadOnlyPerms — набор прав целиком только на просмотр (пустой — тоже).
+func ReadOnlyPerms(perms []Perm) bool {
+	for _, p := range perms {
+		if !p.ReadOnly() {
+			return false
+		}
+	}
+	return true
+}
+
+// ReadOnlyPermList — права только на просмотр, в порядке каталога (для форм).
+func ReadOnlyPermList() []Perm {
+	out := make([]Perm, 0, len(readOnlyPerms))
+	for _, g := range PermCatalog() {
+		for _, info := range g.Perms {
+			if info.Perm.ReadOnly() {
+				out = append(out, info.Perm)
+			}
+		}
+	}
+	return out
+}
+
 // PermSet — набор прав с быстрой проверкой и объединением.
 type PermSet map[Perm]struct{}
 

@@ -38,8 +38,10 @@ type GroupAccess struct {
 	Perms domain.PermSet
 	// Entries — сами записи (для подписи в шапке и журнала).
 	Entries []domain.AccessEntry
-	// Token — токен группы, которым пришли (для ссылок внутри страниц). Пусто —
-	// вошли по сессии или паролю.
+	// Token — токен, которым пришли сами (для ссылок внутри страниц). Пусто —
+	// вошли по сессии или паролю: доступ подтверждает кука, токен не нужен. Чужой
+	// токен сюда подставлять нельзя: он попал бы в разметку страницы и дал бы
+	// вошедшему права того доступа.
 	Token string
 	// SignedIn — доступ подтверждён сессией/паролем (есть кнопка «Выйти»).
 	SignedIn bool
@@ -345,11 +347,6 @@ func (h *Handlers) resolveAccess(slug string, r *http.Request) *GroupAccess {
 		}
 		acc.Perms.Add(entry.Perms)
 		acc.Entries = append(acc.Entries, entry)
-	}
-	// Токен для ссылок внутри страниц: если вошли по паролю, подставим любой
-	// токен-доступ этой группы, чтобы ссылки «поделиться» продолжали работать.
-	if acc.Token == "" && acc.Elevated() {
-		acc.Token = h.anyGroupToken(slug)
 	}
 	return acc
 }

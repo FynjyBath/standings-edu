@@ -268,7 +268,7 @@ func TestShortLinksOnlyForViewOnlyAccesses(t *testing.T) {
 			{"id":"jury","title":"Жюри","auth":"token","token":"JURYTOK","perms":["view.unfrozen","grades.manual"]},
 			{"id":"off","title":"Выключенный админ","enabled":false,"auth":"token","token":"OFFTOK","perms":["contests.manage"]}]}`)
 	writeTestFile(t, filepath.Join(dataDir, "credentials", "global_accesses.json"), `[
-		{"id":"gv","title":"Куратор","auth":"token","token":"GVIEW","scope":"all","perms":["view.directory","view.participants"]},
+		{"id":"gv","title":"Куратор","auth":"token","token":"GVIEW","scope":"all","perms":["view.directory","view.unfrozen","view.participants","view.parent_links","intake.view"]},
 		{"id":"ga","title":"Завуч","auth":"token","token":"GEDIT","scope":"all","perms":["view.directory","members.manage"]}]`)
 
 	if h.shortLink("/standings/g1") == "" || h.shortLink(childLink(t, "s1")) == "" {

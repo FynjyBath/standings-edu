@@ -976,6 +976,9 @@ func (h *Handlers) IndexPage(w http.ResponseWriter, r *http.Request) {
 //
 // «Остальные» — все прочие группы сайта; их добавляет право view.directory.
 // Оно не про свои группы, а именно про чужие: увидеть, что ещё есть на сайте.
+//
+// Заодно собираются права пришедшего по каждой группе: ссылки с токеном в
+// карточке показываются только те, что не шире этих прав (см. buildDirectory).
 func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup, signedIn bool) {
 	creds := h.readRequestCredentials(r)
 	// Предъявить нечего — подтвердить нельзя ничего, и перебирать доступы всех
@@ -985,6 +988,14 @@ func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup,
 	}
 	ownSlugs := make(map[string]struct{})
 	seeAll := false
+	perms := make(map[string]domain.PermSet)
+	grant := func(slug string, entry domain.AccessEntry) {
+		ownSlugs[slug] = struct{}{}
+		if perms[slug] == nil {
+			perms[slug] = domain.PermSet{}
+		}
+		perms[slug].Add(entry.Perms)
+	}
 
 	// Глобальные доступы: область действия записи и есть её «свои» группы.
 	for _, entry := range h.loadGlobalAccesses() {
@@ -1002,7 +1013,7 @@ func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup,
 			seeAll = true
 		}
 		for _, slug := range h.accessGroupsFor(&entry) {
-			ownSlugs[slug] = struct{}{}
+			grant(slug, entry)
 		}
 	}
 
@@ -1010,9 +1021,6 @@ func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup,
 	// группа своя, даже если глобального доступа нет вовсе.
 	allSlugs := h.allGroupSlugs()
 	for _, slug := range allSlugs {
-		if _, dup := ownSlugs[slug]; dup {
-			continue
-		}
 		for _, entry := range h.groupAccesses(slug) {
 			if !entry.IsEnabled() {
 				continue
@@ -1024,8 +1032,7 @@ func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup,
 			if match != matchToken {
 				signedIn = true
 			}
-			ownSlugs[slug] = struct{}{}
-			break
+			grant(slug, entry)
 		}
 	}
 
@@ -1040,14 +1047,16 @@ func (h *Handlers) directoryLists(r *http.Request) (own, other []DirectoryGroup,
 	}
 	sort.Strings(ownList)
 	sort.Strings(otherList)
-	return h.buildDirectory(ownList), h.buildDirectory(otherList), signedIn
+	return h.buildDirectory(ownList, perms), h.buildDirectory(otherList, perms), signedIn
 }
 
 // buildDirectory собирает каталог по списку слагов. У каждой группы: обычный
 // адрес (его дают ученикам, а вошедшему преподавателю он открывается сразу с
 // его правами — они уже подтверждены сессией) и ссылки с токеном, по одной на
-// каждый включённый токен-доступ.
-func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
+// каждый включённый токен-доступ, права которого не шире прав смотрящего в этой
+// группе (perms). Иначе карточка раздавала бы повышение: вход с правом на
+// выгрузку увидел бы здесь ссылку «Админ» и получил бы её права.
+func (h *Handlers) buildDirectory(slugs []string, perms map[string]domain.PermSet) []DirectoryGroup {
 	out := make([]DirectoryGroup, 0, len(slugs))
 	for _, slug := range slugs {
 		gf, ok := h.readSourceGroupFile(slug)
@@ -1066,7 +1075,7 @@ func (h *Handlers) buildDirectory(slugs []string) []DirectoryGroup {
 			Archived:   gf.Archived(),
 		}
 		for _, e := range gf.EffectiveAccesses() {
-			if !e.IsEnabled() || !e.UsesToken() {
+			if !e.IsEnabled() || !e.UsesToken() || !perms[slug].Covers(e.Perms) {
 				continue
 			}
 			linkTitle := strings.TrimSpace(e.Title)
@@ -1190,8 +1199,8 @@ type DirectoryGroup struct {
 	StudentURL string
 	// StudentShort — короткая версия StudentURL.
 	StudentShort string
-	// Links — ссылки с токеном (по доступу на ссылку); пусто — показываем только
-	// обычный адрес.
+	// Links — ссылки с токеном, не шире прав смотрящего в этой группе; пусто —
+	// показываем только обычный адрес.
 	Links    []DirectoryLink
 	Combined bool
 	Archived bool // группа в архиве (update=false): в каталоге — в свёрнутом блоке

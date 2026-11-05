@@ -125,8 +125,9 @@ func TestIndexDirectoryByGlobalAccess(t *testing.T) {
 	if !strings.Contains(body, "Остальные группы сайта") {
 		t.Error("чужие группы должны идти отдельным блоком")
 	}
-	if !strings.Contains(body, "token=tok1") || !strings.Contains(body, "token=tok2") {
-		t.Error("нужны ссылки с токенами доступов групп")
+	// Само право каталога ссылок с токеном не открывает: их права шире его.
+	if strings.Contains(body, "token=tok1") || strings.Contains(body, "token=tok2") {
+		t.Error("ссылки с токеном шире прав смотрящего показывать нельзя")
 	}
 	// И обычный адрес группы: его рассылают ученикам, а вошедшему преподавателю
 	// он открывает группу под его правами.
